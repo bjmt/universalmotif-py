@@ -1,0 +1,34 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "pyumotif"
+version = "0.1.0"
+description = "Sequence motif manipulation and analysis, a Python port of universalmotif"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Benjamin Jean-Marie Tremblay" }]
+keywords = ["bioinformatics", "motif", "pwm", "genomics"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = ["numpy>=1.24", "polars>=1.0"]
+
+[project.optional-dependencies]
+pandas = ["pandas>=2.0", "pyarrow>=14"]
+
+[dependency-groups]
+dev = ["maturin>=1.9,<2", "pytest>=8"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "pyumotif._umotif"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
