@@ -1,7 +1,34 @@
 # Possible extensions
 
-Ideas for connecting the package to the rest of the Python ecosystem, to
-revisit once the performance work is done. None of these are started.
+Ideas for connecting the package to the rest of the Python ecosystem. None
+of these are started; the plan is to begin once the documentation pass is
+finished.
+
+## Plan
+
+In order:
+
+1. Motif databases and Biopython conversion.
+2. Jupyter display with an inline logo, and logomaker export.
+3. A sparse motif-by-peak matrix for single-cell ATAC analyses.
+4. Deep-learning interoperability, and a check of `compare_motifs()`
+   against TOMTOM.
+5. Indexed genomes and bigWig covariates.
+6. Genomic interval libraries.
+
+A command line is left out, since yamtk already covers that ground.
+
+Every extension stays optional, so the core dependencies remain numpy and
+polars. Anything that needs another package becomes an extra, imported only
+inside the functions that use it and raising a clear error when it is
+missing, as plotting does with matplotlib. Several need no new package at
+all: databases can be fetched with the standard library, logos can be drawn
+as SVG from the glyph outlines the package already computes, filters can be
+exchanged as numpy arrays, and FASTA indexes and 2bit files are simple
+enough to read in the Rust crate. Biopython, scipy (with AnnData as a
+further option) and pyBigWig would be extras. Each optional function says
+so in its docstring, its tests skip when the extra is missing, and one CI
+job installs every extra.
 
 ## Motif databases and Biopython
 
