@@ -126,9 +126,8 @@ fn matrix_to_numpy<'py>(py: Python<'py>, m: &Matrix) -> PyResult<Bound<'py, PyAr
 
 /// A sequence motif.
 ///
-/// Motifs are immutable. Use the functions in universalmotif (such as
-/// `convert_type` or `trim_motifs`) to derive new motifs, or `replace()` to
-/// change metadata.
+/// Motifs are immutable. Use functions such as `convert_type` or
+/// `trim_motifs` to derive new motifs, or `replace()` to change metadata.
 #[pyclass(name = "Motif", module = "universalmotif", frozen)]
 #[derive(Clone)]
 pub struct PyMotif {

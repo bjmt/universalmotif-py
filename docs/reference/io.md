@@ -1,6 +1,6 @@
 # Reading and writing
 
-Readers and writers for motif files, and for FASTA files of sequences. Readers always return a list of motifs, even when the file holds just one. Gzipped FASTA files are read as they are (bgzip included).
+Readers and writers for motif files, and for FASTA files of sequences. Readers always return a list of motifs, even when the file holds just one. Gzipped FASTA files, bgzip included, are read as they are.
 
 ::: universalmotif.read_meme
 

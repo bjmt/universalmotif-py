@@ -31,12 +31,11 @@ def motif_pvalue(
     Give either ``score`` or ``pvalue``. A motif's P-value for a score is the
     probability that a random site, drawn from the background, scores at
     least that much; it is computed exactly from the motif's score
-    distribution (universalmotif's ``method = "dynamic"``). Going the other
-    way gives the lowest score reached with at most that probability, or
-    infinity if no score is that unlikely.
+    distribution. Going the other way gives the lowest score reached with at
+    most that probability, or infinity if no score is that unlikely.
 
-    Scores are on the integer grid the R package uses (PWM entries times
-    1000, truncated), so they are exact to 0.001.
+    Scores are computed on an integer grid, with PWM entries multiplied by
+    1000 and truncated, so they are exact to 0.001.
 
     Parameters
     ----------
@@ -46,12 +45,12 @@ def motif_pvalue(
         first.
     score, pvalue
         For a single motif, a number or a sequence of numbers. For a list of
-        motifs, a number (used for every motif), one number per motif, or a
-        list of sequences (one per motif, or a single one for all).
+        motifs, a number used for every motif, one number per motif, or a
+        list of sequences with either one per motif or a single one for all.
     bkg_probs
-        Background frequencies, either one set for all motifs (a sequence in
-        alphabet order or a mapping from letters) or a list with one per
-        motif. Each motif's own background by default.
+        Background frequencies, either one set for all motifs or a list with
+        one per motif, where a set is a sequence in alphabet order or a
+        mapping from letters. Each motif's own background by default.
     nthreads
         Threads to use; 0 means all available.
 
@@ -105,7 +104,8 @@ def motif_pvalue(
 
 
 def _make_unique(names: list[str]) -> list[str]:
-    """R's make.unique(): later duplicates get ".1", ".2" and so on."""
+    """Make names unique: the first of each is kept as it is, and later
+    duplicates get ".1", ".2" and so on."""
     seen: set[str] = set()
     out = []
     for name in names:
@@ -157,50 +157,55 @@ def scan_sequences(
 ) -> pl.DataFrame:
     """Scan sequences for motif hits.
 
-    This is the port of universalmotif's ``scan_sequences_lite()``, extended
-    to any alphabet. Each motif's score threshold comes from the ``pvalue``
-    cutoff, and every window scoring at least that much is reported with its
-    P-value. Only DNA and RNA have a reverse strand (``rc``).
+    Motifs and sequences of any alphabet can be scanned. Each motif's score
+    threshold comes from the ``pvalue`` cutoff, and every window scoring at
+    least that much is reported with its P-value. Only DNA and RNA have a
+    reverse strand, which is scanned with ``rc``.
 
     Parameters
     ----------
     sequences
         A sequence, a list of sequences, or a mapping from names to
-        sequences (such as the result of [`read_fasta()`][universalmotif.read_fasta]). DNA, RNA and
-        protein letters are matched case-insensitively and custom alphabets
-        exactly; anything else (such as ``N`` or ``X``) never forms part of
-        a hit. [`PackedSequences`][universalmotif.PackedSequences] are scanned without decoding them,
-        and a FASTA file given as a path (such as a ``pathlib.Path``),
-        gzipped or not, is read and scanned a batch at a time, so a genome
-        can be scanned in a few hundred MB.
+        sequences such as the result of
+        [`read_fasta()`][universalmotif.read_fasta]. DNA, RNA and protein
+        letters are matched case-insensitively and custom alphabets exactly;
+        anything else, such as ``N`` or ``X``, never forms part of a hit.
+        [`PackedSequences`][universalmotif.PackedSequences] are scanned
+        without decoding them, and a gzipped or plain FASTA file given as a
+        path object such as a ``pathlib.Path`` is read and scanned a batch at
+        a time, so a genome can be scanned in a few hundred MB.
     rc
         Also scan the reverse strand.
     no_overlaps
-        Remove overlapping hits with [`dedup_hits()`][universalmotif.dedup_hits], keeping the best
-        by ``no_overlaps_by`` (``"pvalue"`` or ``"score"``).
+        Remove overlapping hits with
+        [`dedup_hits()`][universalmotif.dedup_hits], keeping the best by
+        ``no_overlaps_by``, which is ``"pvalue"`` or ``"score"``.
         ``no_overlaps_by_strand`` and ``no_overlaps_by_motif`` also compare
         hits across strands and across motifs.
     nthreads
         Threads to use; 0 means all available.
     use_gaps
-        Scan gapped motifs (see [`add_gap()`][universalmotif.add_gap]) with every combination of
+        Scan gapped motifs, such as those made with
+        [`add_gap()`][universalmotif.add_gap], with every combination of
         their gap sizes; otherwise their gaps are ignored. A gapped hit's
         ``match`` shows the gap as dots, and its P-value is that of its score
-        under the motif without the gap, as in the R package. Unlike the R
-        package, both strands are scanned.
+        under the motif without the gap. Gapped motifs are scanned on both
+        strands like any other.
     correct_gaps
         Bonferroni-correct gapped motifs' P-values for the number of
         combinations of gap sizes tried: hits must reach ``pvalue`` divided
-        by that number, and their P-values are multiplied by it (up to 1).
+        by that number, and their P-values are multiplied by it and capped
+        at 1.
 
     Returns
     -------
     polars.DataFrame
-        A DataFrame with one row per hit: ``motif``, ``motif_i``, ``sequence``,
-        ``sequence_i``, ``start``, ``end``, ``strand``, ``score``,
-        ``score_pct`` (percentage of the motif's maximum score), ``match`` (the
-        matched sequence, reverse complemented on the ``-`` strand) and
-        ``pvalue``. ``motif_i`` and ``sequence_i`` are 0-based indices into the
+        A DataFrame with one row per hit and the columns ``motif``,
+        ``motif_i``, ``sequence``, ``sequence_i``, ``start``, ``end``,
+        ``strand``, ``score``, ``score_pct``, ``match`` and ``pvalue``.
+        ``score_pct`` is the score as a percentage of the motif's maximum, and
+        ``match`` is the matched sequence, reverse complemented on the ``-``
+        strand. ``motif_i`` and ``sequence_i`` are 0-based indices into the
         inputs; ``start`` and ``end`` are 1-based, inclusive and on the forward
         strand. Rows are ordered by motif, sequence and start.
     """
@@ -230,13 +235,13 @@ def dedup_hits(
 ) -> pl.DataFrame:
     """Remove overlapping hits.
 
-    Hits are grouped by sequence, motif and strand. Within a group,
-    overlapping hits are taken in order of the ``by`` column (lower is
-    better for columns whose name starts with ``pval``, higher otherwise;
-    ``reverse`` flips this, and ties go to the earlier row) and each is kept
-    unless it overlaps one already kept. ``ignore_strand`` and
-    ``ignore_motif`` compare hits across strands and motifs. ``start`` and
-    ``end`` columns are required and are inclusive.
+    Hits are grouped by sequence, motif and strand. Within a group, overlapping
+    hits are taken in order of the ``by`` column and each is kept unless it
+    overlaps one already kept. Lower values come first for columns whose name
+    starts with ``pval`` and higher values otherwise; ``reverse`` flips this,
+    and ties go to the earlier row. ``ignore_strand`` and ``ignore_motif``
+    compare hits across strands and motifs. ``start`` and ``end`` columns are
+    required and are inclusive.
     """
     for col in (seq, motif, strand, "start", "end", by):
         if col not in hits.columns:

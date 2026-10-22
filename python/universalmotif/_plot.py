@@ -92,11 +92,11 @@ def view_logo(
     """Draw a logo from any numeric matrix.
 
     ``x`` is a (rows, positions) array with ``letters`` naming the rows, a
-    mapping from row names to values, or a motif (drawn as its matrix is).
-    Row names may be several characters long, columns can have any height,
-    and negative values are stacked below zero (upside down with
-    ``flip_neg``). Letters are coloured by ``colour_scheme`` (a mapping from
-    single characters to colours) or all filled with ``fill``.
+    mapping from row names to values, or a motif, which is drawn as its
+    matrix is. Row names may be several characters long, columns can have
+    any height, and negative values are stacked below zero, upside down with
+    ``flip_neg``. Letters are coloured by ``colour_scheme``, a mapping from
+    single characters to colours, or all filled with ``fill``.
 
     Letters shorter than ``min_height`` are left out, ``x_spacer`` and
     ``y_spacer`` set the gaps between letters, ``sort_positions`` stacks
@@ -121,8 +121,8 @@ def view_logo(
 
 
 def _default_colours(alphabet: str, letters: Sequence[str] = ()) -> dict[str, str]:
-    """The R package's colours for DNA, RNA and amino acids, and a
-    categorical palette for other alphabets."""
+    """The fixed colours for DNA, RNA and amino acids, and a categorical
+    palette for other alphabets."""
     known = {"DNA": DNA_COLOURS, "RNA": RNA_COLOURS, "AA": AA_COLOURS}.get(alphabet)
     if known is not None:
         return known
@@ -204,7 +204,7 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
 
 
 def _y_axis(mats: list[np.ndarray], use_type: str):
-    """Tick positions and limits for a logo panel (as the R package)."""
+    """Tick positions and limits for a logo panel."""
     nrow = mats[0].shape[0]
     if use_type == "PPM":
         return [0, 0.5, 1], (0.0, 1.0)
@@ -234,8 +234,8 @@ def _panel_glyphs(m, rows, use_type, min_height, x_spacer, y_spacer, sort_positi
 
 def _style_axes(ax, ylabel, ticks, ylim, n, show_positions, labels=None, text_size=12):
     ax.set_xlim(*_x_limits(n))
-    # Ticks outside the limits are dropped, as ggplot2 drops them (matplotlib
-    # would otherwise widen the axis to show them).
+    # Ticks outside the limits are dropped (matplotlib would otherwise widen
+    # the axis to show them).
     ax.set_yticks([t for t in ticks if ylim[0] - 1e-9 <= t <= ylim[1] + 1e-9])
     ax.set_ylim(*ylim)
     ax.set_xticks(range(1, n + 1))
@@ -277,30 +277,34 @@ def view_motifs(
 ):
     """Draw motifs as sequence logos.
 
-    This is the port of universalmotif's ``view_motifs_lite()``, extended to
-    any alphabet. Several motifs are aligned to the one with the highest
-    information content (as [`compare_motifs()`][universalmotif.compare_motifs] aligns them, trying
-    reverse complements of DNA and RNA motifs with ``rc``), reverse
-    complemented where that aligns better (their names get ``rc_text``),
-    padded into a common frame and drawn one above the other.
+    Motifs of any alphabet can be drawn. Several motifs are aligned to the
+    one with the highest information content in the same way as
+    [`compare_motifs()`][universalmotif.compare_motifs] aligns them, trying
+    reverse complements of DNA and RNA motifs with ``rc``. Motifs that align
+    better as reverse complements are flipped and get ``rc_text`` added to
+    their names, and all of them are padded into a common frame and drawn
+    one above the other.
 
     Parameters
     ----------
     use_type
-        Matrix type to draw: ``"ICM"`` (bits), ``"PPM"``, ``"PWM"``,
-        ``"PCM"``, or ``"CWM"`` (only for motifs that are CWMs). Motifs
-        without ``nsites`` count as 100 sites.
+        Matrix type to draw, one of ``"ICM"``, ``"PPM"``, ``"PWM"``,
+        ``"PCM"``, or ``"CWM"`` for motifs that are CWMs. ICMs are drawn in
+        bits, and motifs without ``nsites`` count as 100 sites.
     sort_by
-        Display order: ``"none"`` (input order), ``"ic"`` (decreasing
-        information content) or ``"similarity"`` (clustered by correlation).
+        Display order, which is the input order with ``"none"``, decreasing
+        information content with ``"ic"``, or clusters by correlation with
+        ``"similarity"``.
     show_names, names_pos
-        Name each logo, above it (``"top"``) or beside it (``"right"``).
+        Name each logo, either above it with ``"top"`` or beside it with
+        ``"right"``.
     show_positions, show_positions_once
-        Number the positions, once under the last logo or under every logo
-        (counting each motif's own positions).
+        Number the positions, either once under the last logo or under
+        every logo with each motif counting its own positions.
     colour_scheme
-        Letter colours. DNA, RNA and amino acids default to the R package's
-        colours, other alphabets to a categorical palette.
+        Letter colours. DNA and RNA default to green A, blue C, yellow G and
+        red T or U, amino acids to colours grouped by side-chain chemistry,
+        and other alphabets to a categorical palette.
     min_height, x_spacer, y_spacer, sort_positions, sort_positions_decreasing, fit_to_height, flip_neg
         Letter layout, as in [`view_logo()`][universalmotif.view_logo]. Letters are sorted by height
         except for PCMs and PPMs, and PPM positions are scaled to a height of
@@ -379,7 +383,7 @@ def plot_motif_peaks(
 ) -> Figure:
     """Draw the positions of motif hits found by [`motif_peaks()`][universalmotif.motif_peaks].
 
-    One panel per motif (or per motif named in ``motifs``) shows a
+    One panel per motif, or per motif named in ``motifs``, shows a
     histogram of the hit centres, with the most enriched window shaded and
     the P-value and enrichment in the title.
     """
@@ -427,8 +431,8 @@ def plot_motif_peaks(
 
 
 def _tree_coords(tree: MotifTree, branch_length: bool):
-    """x (distance from the root) and y of every node: leaves are 0..n-1,
-    merge i is node n + i."""
+    """x, the distance from the root, and y of every node, where leaves are
+    0..n-1 and merge i is node n + i."""
     n = len(tree.labels)
     merge = np.asarray(tree.merge, dtype=int)
     m = merge.shape[0]
@@ -652,7 +656,7 @@ def plot_motif_proximity(
     """Draw each motif's distances to the nearest anchor, from
     [`motif_proximity()`][universalmotif.motif_proximity], with the most enriched zone shaded.
 
-    Distances are signed (negative upstream of stranded anchors); with
+    Distances are signed and negative upstream of stranded anchors. With
     ``log_x`` the absolute distances plus one are drawn on a log scale.
     """
     if "dist_to_nearest" not in proximity.columns:
@@ -695,8 +699,10 @@ def plot_motif_proximity(
 
 
 def _density(x: np.ndarray, n: int = 512) -> tuple[np.ndarray, np.ndarray]:
-    """Gaussian kernel density over the range of x, with R's bw.nrd0
-    bandwidth (as ggplot2's geom_density)."""
+    """Gaussian kernel density over the range of x, with Silverman's
+    rule-of-thumb bandwidth, which is 0.9 times the smaller of the standard
+    deviation and the interquartile range over 1.34, times n to the power
+    -1/5."""
     x = np.asarray(x, dtype=float)
     if x.size < 2 or np.ptp(x) == 0:
         return np.array([x.mean() if x.size else 0.0]), np.array([0.0])
@@ -719,9 +725,9 @@ def plot_match_bkg(
     """Compare the composition of targets and their matched background
     from [`match_bkg()`][universalmotif.match_bkg], as overlaid densities.
 
-    Give the targets and the background (GC fraction and length are drawn),
-    or the ``indices`` table from ``match_bkg(..., return_indices=True)``
-    to also see any covariates. ``by`` picks the axes to draw.
+    Give the targets and the background to draw their GC fraction and length,
+    or the ``indices`` table from ``match_bkg(..., return_indices=True)`` to
+    also see any covariates. ``by`` picks the axes to draw.
     """
     labels = {"gc": "GC fraction", "length": "Sequence length"}
     panels: list[tuple[str, np.ndarray, np.ndarray]] = []

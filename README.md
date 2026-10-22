@@ -3,24 +3,24 @@
 This is the Python version of universalmotif, a package for working with
 sequence motifs. It is a port of the
 [universalmotif](https://bioconductor.org/packages/universalmotif/)
-R/Bioconductor package, built on the Rust version
-([universalmotif-rs](../universalmotif-rs)), and it uses numpy arrays for motif
+R/Bioconductor package, built on the Rust version,
+[universalmotif-rs](../universalmotif-rs), and it uses numpy arrays for motif
 matrices and polars DataFrames for tables.
 
 The package is at an early stage. Creating motifs, converting between motif
 types, reverse complementing, trimming and summarising are available, as are
-reading and writing motif files (MEME, JASPAR, HOMER, TRANSFAC, CIS-BP,
-UniPROBE, plain matrices and FASTA), exact P-values, scanning sequences for
+reading and writing MEME, JASPAR, HOMER, TRANSFAC, CIS-BP, UniPROBE, plain
+matrix and FASTA files, exact P-values, scanning sequences for
 hits, comparing, merging and clustering motifs, k-let backgrounds,
 sequence complexity, shuffling, random sequences, implanting sites and
 *de novo* motif discovery, enrichment testing, co-occurrence, positional
 enrichment, proximity to genomic anchors and composition-matched
 backgrounds, along with sequence logos, motif trees and motif
-peak plots drawn with matplotlib (install with `pip install
-universalmotif[plot]`). Scanning, comparison, merging, clustering,
+peak plots drawn with matplotlib, which is installed with `pip install
+universalmotif[plot]`. Scanning, comparison, merging, clustering,
 enrichment and logos work for amino acid and custom alphabets as well as
-DNA and RNA, and scanning handles gapped motifs. For genome-sized inputs, `scan_sequences` can scan a FASTA file
-(gzipped or not) given as a path a batch at a time, and `read_fasta(..., packed=True)` keeps
+DNA and RNA, and scanning handles gapped motifs. For genome-sized inputs, `scan_sequences` can scan a gzipped or
+plain FASTA file given as a path a batch at a time, and `read_fasta(..., packed=True)` keeps
 sequences packed at two bits per base for repeated use.
 
 ## Example
@@ -81,8 +81,8 @@ MEME site tables come back as polars DataFrames.
 
 Building needs a Rust toolchain and [uv](https://docs.astral.sh/uv/), and a
 checkout of [universalmotif-rs](https://github.com/bjmt/universalmotif-rs)
-next to this one (the package builds against it, and the tests read the R
-reference values kept there).
+next to this one, since the package builds against it and the tests read
+the R reference values kept there.
 
 ```sh
 uv sync --group dev --no-install-project
@@ -104,6 +104,6 @@ uv run --no-sync mkdocs serve
 
 ## License
 
-MIT. The letter shapes used in logos are outlines of the Roboto font
-(Apache License 2.0), taken from the R package's `fontDFroboto`
-(`scripts/make_font.R` exports them).
+MIT. The letter shapes used in logos are outlines of the Roboto font,
+released under the Apache License 2.0, and were exported from the R
+package's `fontDFroboto` with `scripts/make_font.R`.

@@ -54,8 +54,9 @@ def _write_text(file: PathLike, text: str, overwrite: bool, append: bool) -> Non
 def read_jaspar(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read JASPAR count matrices.
 
-    Rows may be labelled (``A [ 1 2 3 ]``) or bare numbers, which are read as
-    DNA (four rows) or amino acids (twenty rows). Motifs are returned as PCMs
+    Rows may be labelled, as in ``A [ 1 2 3 ]``, or bare numbers, which are
+    read as DNA when there are four rows and as amino acids when there are
+    twenty. Motifs are returned as PCMs
     with ``nsites`` set to the largest column sum. ``skip`` drops lines from
     the start of the file.
     """
@@ -75,9 +76,9 @@ def read_homer(file: PathLike, skip: int = 0) -> list[Motif]:
 def read_transfac(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read TRANSFAC matrices, returned as PCMs.
 
-    The accession (``AC``) is used as the name if there is one, with the
-    identifier (``ID``) or factor name (``NA``) as the alternate name; ``HC``
-    and ``OS`` give the family and organism.
+    The accession in ``AC`` is used as the name if there is one, with the
+    identifier in ``ID`` or the factor name in ``NA`` as the alternate name;
+    ``HC`` and ``OS`` give the family and organism.
     """
     return _core._read_transfac(_read_text(file, skip))
 
@@ -89,8 +90,8 @@ def read_cisbp(file: PathLike, skip: int = 0) -> list[Motif]:
 
 
 def read_uniprobe(file: PathLike, skip: int = 0) -> list[Motif]:
-    """Read UniPROBE motifs from full output (keeping the enrichment score in
-    ``extrainfo``) or from minimal files."""
+    """Read UniPROBE motifs from minimal files or from full output, whose
+    enrichment scores are kept in ``extrainfo``."""
     return _core._read_uniprobe(_read_text(file, skip))
 
 
@@ -112,8 +113,8 @@ def read_meme(
         Also read the per-site P-value tables and the combined block
         diagrams of MEME output.
     cwm
-        Read the matrices as contribution weight matrices (as written by
-        TF-MoDISco) instead of probabilities.
+        Read the matrices as contribution weight matrices, as TF-MoDISco
+        writes them, instead of probabilities.
 
     Returns
     -------
@@ -185,14 +186,15 @@ def read_matrix(
     positions
         Whether positions are ``"columns"`` or ``"rows"``.
     alphabet
-        Alphabet of the motifs; rows (or columns) are read in its order.
+        Alphabet of the motifs; the letters' rows or columns are read in its
+        order.
     sep
         Line separating motifs; ``""`` means blank lines and ``None`` means
         motifs are only separated by headers.
     headers
         ``True`` if the first line of each motif is its name, ``False`` for
-        no names, or a string marking header lines (each header starts a new
-        motif, and the name is the line with the string removed).
+        no names, or a string marking header lines. Each header line starts
+        a new motif, and the name is the line with the string removed.
     rownames
         Whether the values come with letter labels, which are skipped.
     comment
@@ -217,7 +219,7 @@ def write_meme(
 
     Motifs are converted to PPMs, unless ``cwm=True``, in which case every
     motif must be a CWM and is written as is. ``bkg`` gives the background in
-    the order letters are written (A, C, G, T for DNA); by default the
+    the order letters are written, which for DNA is A, C, G, T; by default the
     motifs' shared background is used, or a uniform one if they differ.
     ``strand`` overrides the ``strands:`` line. When appending to an existing
     file only the motifs are written. Equal signs in names become periods and
@@ -256,8 +258,8 @@ def write_homer(
     written in the file, floored at 0.001. With ``threshold_type="logodds"``
     it is ``threshold`` times the motif's maximum score, with
     ``"logodds_abs"`` it is ``threshold`` itself, and with ``"pvalue"`` it is
-    a score random sites (from a uniform background) reach with at most that
-    probability. Give one value or one per motif.
+    a score that random sites from a uniform background reach with at most
+    that probability. Give one value or one per motif.
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "HOMER")
@@ -286,8 +288,8 @@ def write_cisbp(
     """Write DNA or RNA motifs in CIS-BP format, as probability matrices.
 
     The name, alternate name, family and organism go in the ``TF``,
-    ``TF Name``, ``Family`` and ``Species`` fields. The R package has no
-    CIS-BP writer; files written here can be read by its [`read_cisbp()`][universalmotif.read_cisbp].
+    ``TF Name``, ``Family`` and ``Species`` fields. Files written here can be
+    read back with [`read_cisbp()`][universalmotif.read_cisbp].
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "CIS-BP")
@@ -300,8 +302,8 @@ def write_uniprobe(
     """Write DNA motifs in the minimal UniPROBE format: a name line followed
     by ``A:``, ``C:``, ``G:`` and ``T:`` rows of probabilities.
 
-    The R package has no UniPROBE writer; files written here can be read by
-    its [`read_uniprobe()`][universalmotif.read_uniprobe].
+    Files written here can be read back with
+    [`read_uniprobe()`][universalmotif.read_uniprobe].
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "UniPROBE")
@@ -311,16 +313,17 @@ def write_uniprobe(
 def read_fasta(
     file: PathLike, skip: int = 0, packed: bool = False, alphabet: str = "DNA"
 ) -> dict[str, str] | PackedSequences:
-    """Read a FASTA file into a dict from names (the whole header line after
-    ``>``) to sequences. The file is read line by line, so a genome needs
-    little more memory than its sequences, and the first ``skip`` lines are
-    ignored. Gzipped files (bgzip included) are recognised from their first
-    bytes and decompressed as they are read.
+    """Read a FASTA file into a dict from names to sequences, where each name
+    is the whole header line after ``>``. The file is read line by line, so a
+    genome needs little more memory than its sequences, and the first
+    ``skip`` lines are ignored. Gzipped files, bgzip included, are recognised
+    from their first bytes and decompressed as they are read.
 
     With ``packed``, the sequences are packed for scanning as they are read
-    and returned as [`PackedSequences`][universalmotif.PackedSequences] for ``alphabet`` (``"DNA"``,
-    ``"RNA"``, ``"AA"`` or the letters of a custom alphabet), which hold a
-    genome in a quarter of the memory; names must then be unique. To scan a
+    and returned as [`PackedSequences`][universalmotif.PackedSequences] for
+    ``alphabet``, which is ``"DNA"``, ``"RNA"``, ``"AA"`` or the letters of a
+    custom alphabet. Packed sequences hold a genome in a quarter of the
+    memory, and names must then be unique. To scan a
     file just once, pass its path to [`scan_sequences()`][universalmotif.scan_sequences] instead.
     """
     if skip < 0:
@@ -338,8 +341,8 @@ def write_fasta(
     append: bool = False,
 ) -> None:
     """Write sequences to a FASTA file, wrapping lines at ``width``
-    characters (0 for no wrapping). Unnamed sequences are called ``seq1``,
-    ``seq2`` and so on."""
+    characters, or not at all when it is 0. Unnamed sequences are called
+    ``seq1``, ``seq2`` and so on."""
     if isinstance(sequences, Mapping):
         records = [(str(k), str(v)) for k, v in sequences.items()]
     else:
@@ -361,10 +364,10 @@ def write_matrix(
 ) -> None:
     """Write motifs as plain matrices of numbers.
 
-    ``headers`` writes the name on its own line (``True``), prefixed with a
-    string, or not at all (``False``). ``sep`` is written after each motif
-    (``None`` for nothing), ``type`` converts the motifs first, and
-    ``digits`` sets the number of decimal places.
+    ``headers`` writes the name on its own line when ``True``, prefixed with a
+    string when given one, or not at all when ``False``. ``sep`` is written
+    after each motif unless it is ``None``, ``type`` converts the motifs first,
+    and ``digits`` sets the number of decimal places.
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "Raw matrix")

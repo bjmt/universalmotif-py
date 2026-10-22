@@ -6,8 +6,8 @@ and writing them in the common file formats, and using them to scan,
 compare and test sequences. It is a port of the
 [universalmotif](https://bioconductor.org/packages/universalmotif/)
 R/Bioconductor package, built on a Rust crate of the same name that does the
-heavy lifting (so most of what it does is quite fast, and can use several
-threads).
+heavy lifting, so most of what it does is quite fast and can use several
+threads.
 
 Motifs are stored as [`Motif`][universalmotif.Motif] objects, numeric matrices come back as numpy
 arrays, and tables come back as [polars](https://pola.rs/) DataFrames.
@@ -38,7 +38,7 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
   contribution matrices; trim, round, merge, reverse complement and filter
   them.
 - **Files:** MEME, JASPAR, HOMER, TRANSFAC, CIS-BP, UniPROBE and plain
-  matrices, plus FASTA (gzipped or not) for sequences.
+  matrices, plus gzipped or plain FASTA for sequences.
 - **Scanning:** exact P-value thresholds, both strands, any alphabet, gapped
   motifs, and whole genomes scanned straight from a FASTA file in a few
   hundred MB.
@@ -49,8 +49,7 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
   novo* motif discovery.
 - **Sequences:** shuffling that keeps k-let counts, random sequences, k-let
   backgrounds, complexity, masking and sliding windows.
-- **Plots:** sequence logos (drawn exactly as the R package draws them),
-  motif trees, and plots of the results above.
+- **Plots:** sequence logos, motif trees, and plots of the results above.
 
 ## Where to go next
 
@@ -59,10 +58,8 @@ set up, and the [getting started](guides/getting-started.ipynb) guide walks
 through the basics. Every function is described in the
 [API reference](reference/index.md).
 
-If you already know the R package, function names will be familiar:
-they follow the R package, with dotted argument names written with
-underscores (`min.ic` becomes `min_ic`). Where the R package has both a full
-and a `_lite` version of a function, this package provides the lite one
-under the plain name. The few places where the results differ on purpose
-(usually because a bug in the R package was fixed here) are listed in
+If you already know the R package, the function names will be familiar,
+with dotted argument names written with underscores (`min.ic` becomes
+`min_ic`) and the `_lite` versions of functions provided under their plain
+names. The few places where the results differ on purpose are listed in
 [differences from the R package](differences.md).

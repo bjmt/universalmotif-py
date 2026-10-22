@@ -1,7 +1,7 @@
 """universalmotif: sequence motif manipulation and analysis.
 
-A Python port of the universalmotif R/Bioconductor package, built on its
-Rust counterpart.
+Motif classes, file formats, scanning, comparison and statistics, built on
+a Rust crate of the same name.
 """
 
 from importlib.metadata import PackageNotFoundError, version

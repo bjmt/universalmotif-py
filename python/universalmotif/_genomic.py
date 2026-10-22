@@ -19,9 +19,9 @@ _CHROM_COLUMNS = ("chrom", "seqnames", "sequence", "chr", "chromosome")
 
 def _range_table(x, what: str) -> pl.DataFrame:
     """Ranges as a DataFrame with chrom, start, end and strand columns, from
-    a DataFrame (with a chromosome column named chrom, seqnames, sequence,
-    chr or chromosome, start, and end or width) or (chrom, start, end[,
-    strand]) tuples."""
+    either a DataFrame or (chrom, start, end[, strand]) tuples. A DataFrame
+    needs a chromosome column named chrom, seqnames, sequence, chr or
+    chromosome, a start column, and an end or width column."""
     if isinstance(x, pl.DataFrame):
         chrom = next((c for c in _CHROM_COLUMNS if c in x.columns), None)
         if chrom is None or "start" not in x.columns:
@@ -108,48 +108,51 @@ def motif_proximity(
     """Test whether motif hits sit closer to genomic anchors than chance.
 
     The genome-wide counterpart of [`motif_peaks()`][universalmotif.motif_peaks]. Each hit counts at
-    its middle position. For each distance ``d`` in ``dist_thresholds`` (by
-    default 10, 25, 50, 100 and so on, up to half the smallest universe
-    region), the near zone is every scanned position within ``d`` of an
-    anchor. Three nulls are available:
+    its middle position. For each distance ``d`` in ``dist_thresholds``, the
+    near zone is every scanned position within ``d`` of an anchor; the
+    default distances are 10, 25, 50, 100 and so on, up to half the smallest
+    universe region. Three nulls are available:
 
     ``"binomial"``
         Hits uniform over the universe, so the number in the near zone is
         binomial; the best distance is Bonferroni-corrected for the
         distances tried. Fast, but blind to composition bias.
     ``"permutation"``
-        Anchors placed at random in the universe ``n_perm`` times (on their
-        own chromosomes with ``perm_per_chrom``), which absorbs composition
-        and mappability bias. Reproducible with ``seed``.
+        Anchors are placed at random in the universe ``n_perm`` times,
+        keeping each on its own chromosome with ``perm_per_chrom``. This
+        absorbs composition and mappability bias, and is reproducible with
+        ``seed``.
     ``"ks"``
         A one-sided Kolmogorov-Smirnov test of each hit's distance to the
-        nearest anchor (undirected zones and ``count="hits"`` only).
+        nearest anchor, for undirected zones and ``count="hits"`` only.
 
     Parameters
     ----------
     hits
-        Hits from [`scan_sequences()`][universalmotif.scan_sequences] (``sequence`` holds the chromosome
-        names), with ``motif``, ``score``, ``start``, ``end`` and
-        ``strand``. Give this, or ``motifs`` and ``sequences`` (a mapping
-        from chromosome names to sequences) to scan with ``scan_pvalue`` and
-        ``rc``; only chromosomes with anchors are scanned.
+        Hits from [`scan_sequences()`][universalmotif.scan_sequences], with
+        ``motif``, ``score``, ``start``, ``end`` and ``strand`` columns and
+        the chromosome names in ``sequence``. Give this, or give ``motifs``
+        and ``sequences`` as a mapping from chromosome names to sequences to
+        scan them with ``scan_pvalue`` and ``rc``; only chromosomes with
+        anchors are scanned.
     anchors
         The anchor coordinates, as a DataFrame with ``chrom``, ``start``,
-        ``end`` (or ``width``) and optionally ``strand`` columns, or as
+        ``end`` or ``width``, and optionally ``strand`` columns, or as
         (chrom, start, end[, strand]) tuples. Use 1 bp anchors for point
         hypotheses: wide anchors widen every zone.
     universe
-        The regions scanned: a mapping from chromosome names to lengths
-        (whole chromosomes) or a range table. Required with ``hits``; by
+        The regions scanned, as a range table or as a mapping from
+        chromosome names to lengths for whole chromosomes. Required with
+        ``hits``; by
         default the whole of ``sequences``. Zones are clipped at chromosome
         ends when lengths are known. Only chromosomes carrying anchors are
         used.
     count
-        ``"hits"`` counts hits in the zone (overlapping hits of a motif
-        count once, keeping the best score; across strands unless
-        ``ignore_strand`` is false); ``"anchors"`` counts anchors with a
-        hit nearby (its binomial null is a Poisson approximation, so the
-        permutation test is preferred).
+        ``"hits"`` counts hits in the zone, where overlapping hits of a
+        motif count once with the best score kept, across strands unless
+        ``ignore_strand`` is false. ``"anchors"`` counts anchors with a hit
+        nearby; its binomial null is a Poisson approximation, so the
+        permutation test is preferred.
     orientation
         ``"undirected"``, or ``"upstream"``/``"downstream"`` of stranded
         anchors.
@@ -158,13 +161,14 @@ def motif_proximity(
     -------
     polars.DataFrame
         A DataFrame of motifs with q-values up to ``qvalue``, in order of
-        P-value: ``motif``, ``motif_i`` (0-based rank of the name), ``method``,
+        P-value, with the columns ``motif``, ``motif_i``, ``method``,
         ``count``, ``orientation``, ``nhits``, ``best_dist``, ``hits_near``,
         ``hits_far``, ``frac_near``, ``expected_near``, ``enrichment``,
         ``log2_enrichment``, ``pvalue``, ``qvalue``, ``ks_d`` and
-        ``dist_to_nearest`` (the number of positions from each hit's middle to
-        its nearest anchor, 0 inside it and negative upstream in the anchor's
-        orientation).
+        ``dist_to_nearest``. ``motif_i`` is the 0-based rank of the name,
+        and ``dist_to_nearest`` holds the number of positions from each
+        hit's middle to its nearest anchor, which is 0 inside it and
+        negative upstream in the anchor's orientation.
     """
     if method not in ("binomial", "permutation", "ks"):
         raise ValueError("method must be 'binomial', 'permutation' or 'ks'")
@@ -301,11 +305,12 @@ def match_bkg(
 ):
     """Draw background sequences matched to targets on GC content and length.
 
-    HOMER-style matching: the universe is binned by GC fraction
-    (``n_bins_gc`` equal-width bins), length (``n_bins_length`` quantile
-    bins) and any ``covariates``, and each target draws ``n_per_target``
-    sequences from its own bin. When the bin runs short, neighbouring bins
-    are searched ring by ring (up to two rings, or one per axis); after that
+    HOMER-style matching: the universe is binned by GC fraction into
+    ``n_bins_gc`` equal-width bins, by length into ``n_bins_length``
+    quantile bins and by any ``covariates``, and each target draws
+    ``n_per_target`` sequences from its own bin. When the bin runs short,
+    neighbouring bins are searched ring by ring, up to two rings or one per
+    axis; after that
     the remaining draws repeat sequences from the bins searched, with a
     warning. With ``unique``, each universe sequence is otherwise drawn at
     most once.
@@ -316,27 +321,30 @@ def match_bkg(
         Candidate background sequences, as a list or a mapping from names.
     genome
         Instead of ``universe``, a mapping from chromosome names to
-        sequences (such as [`read_fasta()`][universalmotif.read_fasta] of a genome) to draw
-        ``n_candidates`` random windows from (by default
-        ``max(10000, 10 * len(sequences))``), with widths taken from the
-        targets, on ``chromosomes`` (all by default) and avoiding
-        ``exclude`` (a range table such as the target peaks).
+        sequences, such as a genome read with
+        [`read_fasta()`][universalmotif.read_fasta], to draw
+        ``n_candidates`` random windows from. The windows take their widths
+        from the targets, lie on ``chromosomes``, which defaults to all of
+        them, and avoid ``exclude``, a range table such as the target peaks.
+        ``n_candidates`` defaults to ``max(10000, 10 * len(sequences))``.
     covariates, universe_covariates
         Extra values to match on, one row per target and per universe
         sequence: DataFrames or mappings with the same columns, or arrays.
-        ``n_bins_covariates`` and ``bin_type_covariates`` (``"quantile"``
-        or ``"equalwidth"``) apply to all of them or are given per name.
+        ``n_bins_covariates`` and ``bin_type_covariates``, which is
+        ``"quantile"`` or ``"equalwidth"``, apply to all of them or are given
+        per name.
     return_indices
-        Return a DataFrame of the matches instead: ``target_i`` and
-        ``universe_i`` (0-based), the GC fraction and length of each, any
+        Return a DataFrame of the matches instead, with 0-based ``target_i``
+        and ``universe_i``, the GC fraction and length of each, any
         covariates, and ``universe_name`` when the universe has names.
 
     Returns
     -------
     list[str] | dict[str, str]
-        The matched sequences, ``n_per_target`` per target in target order: a
-        list, or a dict when the universe has names (repeats get ``.1``,
-        ``.2`` and so on; genome windows are named ``chrom:start-end``).
+        The matched sequences, ``n_per_target`` per target in target order,
+        as a list or as a dict when the universe has names. In a dict,
+        repeats get ``.1``, ``.2`` and so on, and genome windows are named
+        ``chrom:start-end``.
     """
     _, seqs = _sequence_pairs(sequences)
     if not seqs:

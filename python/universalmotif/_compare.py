@@ -43,29 +43,29 @@ def compare_motifs(
 ):
     """Compare motifs.
 
-    This is the port of universalmotif's ``compare_motifs_lite()``,
-    extended to any alphabet. Each target is slid along the query (and, for
-    DNA and RNA, its reverse complement, with ``rc``) and the alignment with
-    the highest sum of column correlations is kept, among those overlapping
-    at least ``min_overlap`` columns. Column correlations are Pearson
-    correlations of the probabilities. Each P-value comes from the exact
-    distribution of that sum under a null model of columns
-    (``"empirical"``: the columns of all the motifs given; ``"parametric"``,
-    DNA and RNA only: a Dirichlet grid around ``bkg``), Bonferroni-corrected
-    for the alignments tried. Q-values are Benjamini-Hochberg adjusted
-    within each query.
+    Motifs of any alphabet can be compared. Each target is slid along the
+    query, and with ``rc`` along the reverse complement of a DNA or RNA
+    query too, and the alignment with the highest sum of column correlations
+    is kept, among those overlapping at least ``min_overlap`` columns. Column
+    correlations are Pearson correlations of the probabilities. Each P-value
+    comes from the exact distribution of that sum under a null model of
+    columns, Bonferroni-corrected for the alignments tried. The
+    ``"empirical"`` null uses the columns of all the motifs given, while the
+    ``"parametric"`` null, for DNA and RNA only, uses a Dirichlet grid around
+    ``bkg``. Q-values are Benjamini-Hochberg adjusted within each query.
 
     Returns
     -------
     numpy.ndarray | polars.DataFrame
-        Without ``compare_to``, an all-against-all numpy array (rows are
-        queries, columns targets) of the mean column correlation, P-value or
-        q-value (``matrix_out``). With ``compare_to`` (motif indices, 0-based,
-        or names), a DataFrame with one row per significant (``qvalue``) match:
+        Without ``compare_to``, an all-against-all numpy array with queries
+        as rows and targets as columns, holding the mean column correlation,
+        P-value or q-value as chosen by ``matrix_out``. With ``compare_to``,
+        given as 0-based motif indices or as names, a DataFrame ordered by
+        q-value with one row per match passing ``qvalue`` and the columns
         ``subject``, ``subject_i``, ``target``, ``target_i``, ``offset``,
-        ``strand``, ``overlap``, ``score`` (mean column correlation),
-        ``subject_consensus``, ``target_consensus``, ``pvalue`` and ``qvalue``,
-        ordered by q-value.
+        ``strand``, ``overlap``, ``score``, ``subject_consensus``,
+        ``target_consensus``, ``pvalue`` and ``qvalue``, where ``score`` is
+        the mean column correlation.
     """
     ms = _motif_list(motifs)
     names = _make_unique([m.name for m in ms])
@@ -109,11 +109,10 @@ def merge_motifs(
 ) -> Motif:
     """Merge motifs into one PPM.
 
-    This is the port of universalmotif's ``merge_motifs_lite()``, extended to
-    any alphabet. The motif with the highest total IC is the anchor; the
-    others are aligned to it (DNA and RNA motifs reverse complemented if that
-    fits better, with ``rc``) and the aligned
-    probabilities averaged, weighted by ``nsites`` if ``weighted``. Motifs
+    Motifs of any alphabet can be merged. The motif with the highest total
+    IC is the anchor. The others are aligned to it, with DNA and RNA motifs
+    reverse complemented under ``rc`` where that fits better, and the aligned
+    probabilities are averaged, weighted by ``nsites`` if ``weighted``. Motifs
     that cannot overlap the anchor by ``min_overlap`` columns are left out.
     The default name joins the merged motifs' names.
     """
@@ -133,14 +132,14 @@ def merge_similar(
 ):
     """Cluster similar motifs and merge each cluster.
 
-    This is the port of universalmotif's ``merge_similar_lite()``. Motifs
-    are linked when [`compare_motifs()`][universalmotif.compare_motifs] gives them a q-value of at most
-    ``qvalue`` in either direction, clusters are the connected groups, and
-    each cluster of several motifs is merged with [`merge_motifs()`][universalmotif.merge_motifs].
+    Motifs are linked when [`compare_motifs()`][universalmotif.compare_motifs]
+    gives them a q-value of at most ``qvalue`` in either direction, clusters
+    are the connected groups, and each cluster of several motifs is merged with
+    [`merge_motifs()`][universalmotif.merge_motifs].
 
     Returns one motif per cluster, or with ``return_clusters`` a summary
-    DataFrame of the input motifs with ``motif_i`` and ``cluster`` columns
-    (both 0-based).
+    DataFrame of the input motifs with 0-based ``motif_i`` and ``cluster``
+    columns.
     """
     ms = _motif_list(motifs)
     clusters, merged = _core._merge_similar(
@@ -165,17 +164,21 @@ class MotifTree:
     labels
         Tip labels, in input order.
     merge
-        Merge steps as in R's ``hclust``: row ``i`` joins two items, where
-        ``-k`` is input ``k`` (1-based) and ``k`` the cluster from row ``k``.
+        Merge steps, one per row. Row ``i`` joins two items, where ``-k`` is
+        the ``k``-th input and ``k`` is the cluster formed in row ``k``, both
+        counting from 1.
     height
         Height of each merge.
     order
-        Input indices (0-based) in dendrogram order.
+        0-based input indices in dendrogram order.
     linkage
-        The same tree as a SciPy linkage matrix, for
-        ``scipy.cluster.hierarchy`` (``dendrogram``, ``fcluster`` and so on).
+        The same tree as a SciPy linkage matrix, for use with
+        ``scipy.cluster.hierarchy`` functions such as ``dendrogram`` and
+        ``fcluster``.
     newick
-        The tree in Newick format, as R's ape package writes it.
+        The tree in Newick format. Branch lengths are half the differences in
+        merge height, written with up to 10 significant digits, and whitespace
+        in tip labels becomes ``_`` while Newick punctuation becomes ``-``.
     method
         Agglomeration method.
     motifs
@@ -200,8 +203,7 @@ class MotifTree:
         return len(self.labels)
 
     def cutree(self, k: int | None = None, h: float | None = None) -> np.ndarray:
-        """Cut the tree into ``k`` groups, or at height ``h``, as R's
-        ``cutree()``.
+        """Cut the tree into ``k`` groups, or at height ``h``.
 
         Returns one group per motif, numbered from 0 in the order the groups
         first appear among the motifs. Cutting by height needs increasing
@@ -230,14 +232,13 @@ class MotifTree:
         text_size: float = 10,
         ax=None,
     ):
-        """Draw the tree with matplotlib (as universalmotif's
-        ``motif_tree_lite()`` draws it with ggtree).
+        """Draw the tree with matplotlib.
 
         Parameters
         ----------
         layout
-            ``"rectangular"``, ``"slanted"``, ``"circular"`` or ``"fan"`` (a
-            circle with an ``open_angle`` gap, in degrees).
+            ``"rectangular"``, ``"slanted"``, ``"circular"`` or ``"fan"``,
+            which is a circle with a gap of ``open_angle`` degrees.
         labels
             Label the tips with ``self.labels``.
         groups
@@ -246,17 +247,18 @@ class MotifTree:
             colour when every motif below it is in that group; ``colours``
             maps groups to colours.
         tip_size
-            Size the tips by a motif attribute (``"icscore"``, or
-            ``"pval"``, ``"qval"`` and ``"eval"`` as their -log10) or by one
-            number per motif.
+            Size the tips by one number per motif or by a motif attribute,
+            either ``"icscore"`` or one of ``"pval"``, ``"qval"`` and
+            ``"eval"``, which are taken as their -log10.
         tip_logos
             Draw each motif's logo at its tip, aligned as in
-            [`view_motifs()`][universalmotif.view_motifs] (rectangular and slanted layouts only).
+            [`view_motifs()`][universalmotif.view_motifs], in the rectangular
+            and slanted layouts only.
             ``tip_logo_width`` is the width of one position in tree units
             and ``tip_logo_height`` the logo height in tip spacings.
         branch_length
-            Draw branch lengths (half the merge heights, as the Newick
-            string); by default tips are aligned, as a cladogram.
+            Draw branch lengths, which are half the merge heights as in the
+            Newick string; by default tips are aligned, as a cladogram.
         ax
             Axes to draw on; a new figure by default.
 
@@ -293,17 +295,19 @@ def motif_tree(
 ) -> MotifTree:
     """Cluster motifs into a tree.
 
-    This builds the tree that universalmotif's ``motif_tree_lite()`` draws:
     Motifs are compared with [`compare_motifs()`][universalmotif.compare_motifs], mean column
     correlations become distances as ``(1 - score) / 2``, and the distances
-    are clustered with R's ``hclust`` algorithm (``method`` is any of its
-    methods: ``"complete"``, ``"average"``, ``"single"``, ``"ward.D"``,
-    ``"ward.D2"``, ``"mcquitty"``, ``"median"`` or ``"centroid"``).
+    are clustered hierarchically. The agglomeration ``method`` is one of
+    ``"complete"``, ``"average"``, ``"single"``, ``"ward.D"``, ``"ward.D2"``,
+    ``"mcquitty"``, ``"median"`` or ``"centroid"``; ``"ward.D"`` applies
+    Ward's criterion to the distances as they are and ``"ward.D2"`` to the
+    squared distances.
 
-    ``motifs`` can also be a square distance matrix (only the lower triangle
-    is used). ``labels`` is a motif attribute to label tips with (such as
-    ``"name"``, ``"altname"`` or ``"family"``), or a list of labels.
-    Duplicate motif names get ``.1``, ``.2`` and so on, as in R.
+    ``motifs`` can also be a square distance matrix, of which only the lower
+    triangle is used. ``labels`` is either a list of labels or a motif
+    attribute to label tips with, such as ``"name"``, ``"altname"`` or
+    ``"family"``. Duplicate motif names get ``.1``, ``.2`` and so on, while
+    the first of each is left as it is.
     """
     if isinstance(motifs, np.ndarray) or (
         isinstance(motifs, Sequence) and motifs and not isinstance(motifs[0], Motif)

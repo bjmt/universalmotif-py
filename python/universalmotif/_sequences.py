@@ -43,8 +43,8 @@ def _restore(sequences, names: list[str], seqs: list[str]):
 
 
 def get_klets(letters: str | Sequence[str], k: int = 1) -> list[str]:
-    """All k-lets of some letters, in order (the first position varies
-    slowest). The letters are used in the order given."""
+    """All k-lets of some letters, in order, with the first position varying
+    slowest. The letters are used in the order given."""
     if k < 1:
         raise ValueError("k must be at least 1")
     letters = "".join(letters)
@@ -54,8 +54,8 @@ def get_klets(letters: str | Sequence[str], k: int = 1) -> list[str]:
 def count_klets(string: str, k: int = 1, alph: str | Sequence[str] | None = None) -> pl.DataFrame:
     """Count the k-lets in a string.
 
-    Every k-let of ``alph`` (by default the letters in the string) gets a
-    row, in sorted order; k-lets with letters outside ``alph`` are not
+    Every k-let of ``alph``, which defaults to the letters in the string,
+    gets a row in sorted order; k-lets with letters outside ``alph`` are not
     counted. Returns a DataFrame with columns ``klets`` and ``counts``.
     """
     if k < 1:
@@ -72,8 +72,8 @@ def count_klets(string: str, k: int = 1, alph: str | Sequence[str] | None = None
 
 
 def calc_windows(n: int, window: int = 1, overlap: int = 0, return_incomp: bool = True) -> pl.DataFrame:
-    """Start and stop coordinates (1-based, inclusive) of sliding windows
-    over a sequence of length ``n``.
+    """Start and stop coordinates of sliding windows over a sequence of
+    length ``n``, 1-based and inclusive.
 
     The last window may be shorter than the others unless ``return_incomp``
     is false. A window wider than ``n`` shrinks to ``n``.
@@ -97,7 +97,8 @@ def calc_windows(n: int, window: int = 1, overlap: int = 0, return_incomp: bool 
 
 
 def window_string(string: str, window: int = 1, overlap: int = 0, return_incomp: bool = True) -> list[str]:
-    """Split a string into sliding windows (see [`calc_windows()`][universalmotif.calc_windows])."""
+    """Split a string into sliding windows, as laid out by
+    [`calc_windows()`][universalmotif.calc_windows]."""
     if not string:
         raise ValueError("string cannot be empty")
     w = calc_windows(len(string), window, overlap, return_incomp)
@@ -115,11 +116,12 @@ def calc_complexity(
 ):
     """Sequence complexity.
 
-    ``complexity_method`` is one of ``"WoottonFederhen"`` (Wootton and
-    Federhen 1993), ``"WoottonFederhenFast"`` (its approximation),
-    ``"Trifonov"`` (Trifonov 1990), ``"TrifonovFast"`` or ``"DUST"`` (Morgulis
-    et al. 2006, where lower values mean higher complexity). ``alph`` gives
-    the possible letters, by default those in the string. Returns a float for
+    ``complexity_method`` is one of ``"WoottonFederhen"``, its approximation
+    ``"WoottonFederhenFast"``, ``"Trifonov"``, ``"TrifonovFast"`` or
+    ``"DUST"``. The methods come from Wootton and Federhen 1993, Trifonov
+    1990 and Morgulis et al. 2006, and lower DUST values mean higher
+    complexity. ``alph`` gives the possible letters, by default those in the
+    string. Returns a float for
     one string and a numpy array for several.
     """
     if complexity_method not in _COMPLEXITY_METHODS:
@@ -144,8 +146,8 @@ def sequence_complexity(
     """Complexity in sliding windows along sequences.
 
     ``window_size`` below 1 is a fraction of each sequence's length, and so
-    is ``window_overlap`` between 0 and 1 (by default half the window,
-    rounded). A window longer than a sequence shrinks to it. See
+    is ``window_overlap`` between 0 and 1, which defaults to half the
+    window, rounded. A window longer than a sequence shrinks to it. See
     [`calc_complexity()`][universalmotif.calc_complexity] for the methods. Returns a DataFrame with
     columns ``sequence``, ``start``, ``stop`` and ``complexity``.
     """
@@ -207,9 +209,10 @@ def get_bkg(
     pseudocount
         Added to every count.
     alphabet
-        Letters to count. By default A, C, G and T for DNA, A, C, G and U for
-        RNA (sequences made of those letters and N), and otherwise the letters
-        in the sequences.
+        Letters to count. Sequences made only of A, C, G, T and N count as
+        DNA and those made of A, C, G, U and N as RNA, with their four
+        letters as the default; otherwise the default is the letters in the
+        sequences.
     rc
         Also count the reverse complements.
     merge
@@ -222,15 +225,19 @@ def get_bkg(
     to_meme
         A path or text file to write a MEME background file to instead of
         returning the counts. This needs ``k`` to run from 1 upwards, merged
-        counts without windows, and no frequencies of exactly 0 or 1 (use a
-        pseudocount).
+        counts without windows, and no frequencies of exactly 0 or 1, which
+        a pseudocount avoids.
 
     Returns
     -------
     polars.DataFrame
         A DataFrame with columns ``klet``, ``count`` and ``probability``, plus
         ``sequence`` for per-sequence counts and ``start`` and ``stop`` for
-        windows. Rows are ordered as by the R package.
+        windows. Without windows, rows are sorted by k-let size and then
+        alphabetically, and per-sequence counts list every sequence in turn
+        under each k-let. With windows, k-lets are sorted alphabetically
+        whatever their size and each k-let's windows follow one another,
+        with per-sequence counts grouped by sequence first.
     """
     names, seqs = _sequence_pairs(sequences)
     ks = [int(k)] if isinstance(k, (int, np.integer)) else [int(x) for x in k]
@@ -274,20 +281,19 @@ def shuffle_sequences(
 ):
     """Shuffle sequences while preserving their k-let composition.
 
-    ``method`` is ``"euler"`` (the default, which keeps k-let counts
-    exactly, along with the first and last k-1 letters), ``"linear"``
-    (shuffles non-overlapping blocks of k letters, keeping only those
-    blocks' counts) or ``"markov"`` (draws a new sequence from the k-let
-    frequencies, keeping them only approximately). With ``window``, each
+    The default ``method``, ``"euler"``, keeps k-let counts exactly, along
+    with the first and last k-1 letters. ``"linear"`` shuffles
+    non-overlapping blocks of k letters, keeping only those blocks' counts,
+    and ``"markov"`` draws a new sequence from the k-let frequencies,
+    keeping them only approximately. With ``window``, each
     sliding window is shuffled in turn; ``window_size`` below 1 and
     ``window_overlap`` between 0 and 1 are fractions of each sequence's
     length.
 
-    Results depend on ``seed`` but not on ``nthreads``. They differ from the
-    R package's for the same seed.
+    Results depend on ``seed`` but not on ``nthreads``.
 
-    Returns new sequences in the same form as the input (a string, a list,
-    or a dict with the same keys).
+    Returns new sequences in the same form as the input, whether a string, a
+    list or a dict with the same keys.
     """
     if method not in _SHUFFLE_METHODS:
         raise ValueError("method must be 'euler', 'markov' or 'linear'")
@@ -310,10 +316,11 @@ def create_sequences(
     """Random sequences.
 
     ``alphabet`` is ``"DNA"``, ``"RNA"``, ``"AA"`` or a string of letters.
-    ``freqs`` gives the frequency of every k-let of the alphabet (letters
-    sorted, as from [`get_klets()`][universalmotif.get_klets]), either in that order or as a mapping
-    from k-lets; their number sets k, and sequences are drawn from the
-    Markov model of order k-1 they define. Letters are uniform by default.
+    ``freqs`` gives the frequency of every k-let of the alphabet, either as a
+    mapping from k-lets or in the sorted order that
+    [`get_klets()`][universalmotif.get_klets] gives; their number sets k, and
+    sequences are drawn from the Markov model of order k-1 they define. Letters
+    are uniform by default.
     """
     letters = _ALPHABETS.get(alphabet, None) or _letters(alphabet)
     if len(letters) < 1:
@@ -339,7 +346,7 @@ def shuffle_motifs(motifs: Motif | Iterable[Motif], k: int = 2, seed: int | None
 
     The new motifs keep the original widths and types, with ``" [shuffled]"``
     added to their names. With ``k`` above 1, columns move in blocks of
-    ``k`` and leftover columns stay at the ends (R's ``method = "linear"``).
+    ``k`` and leftover columns stay at the ends.
     """
     single = isinstance(motifs, Motif)
     ms = [motifs] if single else [_check_motif(m) for m in motifs]
@@ -384,7 +391,8 @@ def implant_motifs(
 
     Each sequence gets ``n_per_seq`` sites, a Poisson number with mean
     ``rate`` times its length if ``rate`` is given, or one site at each of
-    its ``positions`` (1-based starts, one list per sequence). Every site
+    its ``positions``, given as 1-based starts with one list per sequence.
+    Every site
     comes from a motif chosen at random, on a random strand unless
     ``strand="+"``, and overwrites the sequence where it lands.
 
@@ -394,9 +402,10 @@ def implant_motifs(
     in ``max_retries`` attempts is skipped with a warning.
 
     Returns the new sequences in the same form as the input, and with
-    ``return_indices`` also a DataFrame of the sites: ``sequence_i`` and
-    ``motif_i`` (0-based), ``start`` (1-based), ``width``, ``strand`` and
-    ``planted`` (the site as it reads on the forward strand).
+    ``return_indices`` also a DataFrame of the sites with the columns
+    ``sequence_i``, ``motif_i``, ``start``, ``width``, ``strand`` and
+    ``planted``. The indices are 0-based, ``start`` is 1-based, and
+    ``planted`` is the site as it reads on the forward strand.
     """
     if strand not in ("both", "+"):
         raise ValueError("strand must be 'both' or '+'")
@@ -454,27 +463,29 @@ def motif_finder(
     """Discover motifs enriched in DNA or RNA sequences.
 
     A minimal STREME-like search (Bailey 2021). At each width from
-    ``min_width`` to ``max_width`` (at most 30), k-mers present in more
-    positive than background sequences (by a one-sided Fisher's exact test)
-    seed PPMs built from their Hamming-1 neighbours, which are refined over
-    two rescans. A motif whose hits (sites scoring with a P-value below
-    ``hit_pvalue``) are enriched with a P-value of at most ``stop_pvalue``
-    is kept and its sites masked, up to ``nmotifs`` per width. Motifs from
-    different widths sharing more than ``dedup_overlap`` of their sites are
-    deduplicated, Benjamini-Hochberg q-values are computed, low-information
-    flanks are trimmed, and motifs with q-values above ``qvalue`` are
-    dropped.
+    ``min_width`` to ``max_width``, which is at most 30, k-mers that a
+    one-sided Fisher's exact test finds in more positive than background
+    sequences seed PPMs built from their Hamming-1 neighbours, which are
+    refined over two rescans. A motif whose hits, the sites scoring with a
+    P-value below ``hit_pvalue``, are enriched with a P-value of at most
+    ``stop_pvalue`` is kept and its sites masked, up to ``nmotifs`` per width.
+    Motifs from different widths sharing more than ``dedup_overlap`` of their
+    sites are deduplicated, Benjamini-Hochberg q-values are computed,
+    low-information flanks are trimmed, and motifs with q-values above
+    ``qvalue`` are dropped.
 
     Without ``bkg_sequences``, the background is the positives shuffled
-    with [`shuffle_sequences()`][universalmotif.shuffle_sequences] (Euler method, ``k=shuffle_k``,
-    ``seed``). Parallelism is across widths.
+    with [`shuffle_sequences()`][universalmotif.shuffle_sequences] using the
+    Euler method with ``k=shuffle_k`` and ``seed``. Parallelism is across
+    widths.
 
-    Returns a DataFrame in order of P-value, with the motifs (PPMs named
-    ``motif_1``, ``motif_2`` and so on, with their q-values as E-values) in
-    an object column ``motif``, alongside ``name``, ``consensus``, ``rank``,
-    ``width``, ``nsites``, ``seqs_pos`` and ``seqs_neg`` (sequences with a
-    hit), ``sites_pos`` and ``sites_neg`` (hits), ``n_pos``, ``n_neg``,
-    ``pvalue`` and ``qvalue``.
+    Returns a DataFrame in order of P-value, with the motifs in an object
+    column ``motif`` alongside ``name``, ``consensus``, ``rank``, ``width``,
+    ``nsites``, ``seqs_pos``, ``seqs_neg``, ``sites_pos``, ``sites_neg``,
+    ``n_pos``, ``n_neg``, ``pvalue`` and ``qvalue``. The motifs are PPMs
+    named ``motif_1``, ``motif_2`` and so on, with their q-values as
+    E-values. ``seqs_pos`` and ``seqs_neg`` count sequences with a hit, and
+    ``sites_pos`` and ``sites_neg`` count hits.
     """
     if min_width < 3 or max_width > 30 or min_width > max_width:
         raise ValueError("widths must satisfy 3 <= min_width <= max_width <= 30")

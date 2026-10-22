@@ -1,9 +1,9 @@
 # Installation
 
 The package is not on PyPI yet. Until it is, it has to be built from source,
-which needs a Rust toolchain as well as Python 3.10 or later. (Once it is on
+which needs a Rust toolchain as well as Python 3.10 or later. Once it is on
 PyPI, `pip install universalmotif` will fetch a prebuilt wheel and none of
-this will be needed.)
+this will be needed.
 
 ## From source
 
@@ -17,8 +17,8 @@ this will be needed.)
     git clone git@github.com:bjmt/universalmotif-py.git
     ```
 
-3. Install the package with pip (the plotting functions also need
-   matplotlib, which the `plot` extra brings in):
+3. Install the package with pip, adding the `plot` extra to bring in
+   matplotlib for the plotting functions:
 
     ```sh
     pip install "./universalmotif-py[plot]"
@@ -30,8 +30,9 @@ optimisations.
 ## Optional dependencies
 
 - `plot`: matplotlib, for logos and the other plotting functions.
-- `pandas`: pandas and pyarrow, for anyone who prefers pandas DataFrames
-  (call `.to_pandas()` on any table the package returns).
+- `pandas`: pandas and pyarrow, for anyone who prefers pandas DataFrames,
+  so that any table the package returns can be converted with
+  `.to_pandas()`.
 
 ## For development
 
@@ -45,7 +46,6 @@ uv run --no-sync maturin develop --release
 uv run --no-sync pytest
 ```
 
-Many of the tests compare the package against reference values exported
-from the R package, which live with the Rust crate (and so also need it
-checked out next door). To build this documentation, use the `docs` group
+Many of the tests compare the package against reference values that live
+with the Rust crate, so they also need it checked out next door. To build this documentation, use the `docs` group
 instead and run `uv run --no-sync mkdocs serve`.

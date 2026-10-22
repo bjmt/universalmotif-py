@@ -1,9 +1,7 @@
 """Letter polygons for sequence logos.
 
-A port of the polygon layout in universalmotif's [`view_motifs()`][universalmotif.view_motifs]: letters
-are drawn from outlines of the Roboto Medium font (the R package's
-``fontDFroboto``), stacked by height within each position, with negative
-values stacked below zero.
+Letters are drawn from outlines of the Roboto Medium font, stacked by
+height within each position, with negative values stacked below zero.
 """
 
 from __future__ import annotations
@@ -67,7 +65,7 @@ def _stable_sort(names: list[str], values: np.ndarray, decreasing: bool) -> tupl
 
 
 def _flip_negative(glyphs: list[Glyph], sort_positions: bool, decreasing: bool, flip: bool) -> list[Glyph]:
-    """Turn a stack of (positive) letters into one hanging below zero."""
+    """Turn a stack of positive letters into one hanging below zero."""
     key = [re.sub(r"[.]\d+$", "", g.letter_id) for g in glyphs]
     lets = list(dict.fromkeys(key))
     for name in lets:
@@ -165,8 +163,8 @@ def matrix_glyphs(
     fit_to_width: float = 1.0,
     flip_neg: bool = False,
 ) -> list[Glyph]:
-    """Letters for every position of a (letters, positions) matrix; position
-    ``i`` (1-based) is centred on x = i."""
+    """Letters for every position of a (letters, positions) matrix, with
+    position ``i``, counted from 1, centred on x = i."""
     out: list[Glyph] = []
     matrix = np.asarray(matrix, dtype=float)
     for j in range(matrix.shape[1]):
@@ -192,8 +190,7 @@ def motif_glyphs(
     flip_neg: bool = False,
 ) -> list[Glyph]:
     """Letters for a motif matrix of the given type, with the minimum height
-    and vertical spacing scaled to the type's range (R's
-    ``prep_single_motif_plot_data()``)."""
+    and vertical spacing scaled to the type's range."""
     m = np.array(matrix, dtype=float)
     nrow = m.shape[0]
     if use_type == "PPM":

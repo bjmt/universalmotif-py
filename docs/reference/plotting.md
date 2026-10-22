@@ -1,6 +1,6 @@
 # Plotting
 
-Sequence logos and plots of analysis results, drawn with matplotlib (install it with `pip install universalmotif[plot]`). Each function returns the matplotlib figure or axes, so that plots can be adjusted before they are saved.
+Sequence logos and plots of analysis results, drawn with matplotlib, which is installed with `pip install universalmotif[plot]`. Each function returns the matplotlib figure or axes, so that plots can be adjusted before they are saved.
 
 ::: universalmotif.view_motifs
 

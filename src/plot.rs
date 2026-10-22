@@ -8,8 +8,8 @@ use universalmotif::{Motif, MotifType};
 use crate::{PyMotif, err};
 
 /// The matrix a motif is drawn with, as the columns of its PPM converted to
-/// `use_type` (universalmotif's `convert_mat_type_from_ppm()`): empty
-/// columns stay empty, and a missing or single `nsites` counts as 100.
+/// `use_type`. Empty columns stay empty, and a missing or single `nsites`
+/// counts as 100.
 #[pyfunction]
 fn _display_matrix(
     motif: PyRef<'_, PyMotif>,

@@ -18,9 +18,9 @@ class PackedSequences(Mapping[str, str]):
 
     They are also a read-only mapping from names to sequences, so they can
     go wherever a dict of sequences can. Each sequence is then decoded when
-    it is looked up, with the alphabet's letters in upper case (custom
-    alphabets as they were) and any other letters, such as ``N``, as they
-    were; soft-masking (lower case) is lost.
+    it is looked up. DNA, RNA and protein letters come back in upper case,
+    so soft-masking is lost, while the letters of custom alphabets and any
+    other letters, such as ``N``, come back as they were.
     """
 
     __slots__ = ("_inner",)
@@ -44,8 +44,8 @@ class PackedSequences(Mapping[str, str]):
         return isinstance(name, str) and self._inner.index(name) is not None
 
     def subseq(self, name: str, start: int, end: int) -> str:
-        """Positions ``start`` to ``end`` (1-based, inclusive) of the
-        sequence called ``name``, decoding only those."""
+        """Positions ``start`` to ``end`` of the sequence called ``name``,
+        counted from 1 and inclusive, decoding only those."""
         i = self._inner.index(name)
         if i is None:
             raise KeyError(name)
@@ -81,7 +81,7 @@ def pack_sequences(
     alphabet: str = "DNA",
     nthreads: int = 1,
 ) -> PackedSequences:
-    """Pack sequences for scanning (see [`PackedSequences`][universalmotif.PackedSequences]).
+    """Pack sequences for scanning as [`PackedSequences`][universalmotif.PackedSequences].
 
     ``alphabet`` is ``"DNA"``, ``"RNA"``, ``"AA"`` or the letters of a custom
     alphabet, and must match the motifs the sequences will be scanned with.

@@ -23,8 +23,7 @@ The functions are grouped by what they do:
   anchors.
 - [Plotting](plotting.md): logos, trees and plots of results.
 
-Most functions that do a lot of work take an `nthreads` argument (1 by
-default, or 0 to use every core). Functions that use random numbers take a
-`seed`; without one they draw a fresh seed each time. (Note that seeds do
-not reproduce the R package's results, since the two use different random
-number generators.)
+Most functions that do a lot of work take an `nthreads` argument, which is
+1 by default or 0 to use every core. Functions that use random numbers take a
+`seed`, and the same seed gives the same results again; without one they
+draw a fresh seed each time.

@@ -66,16 +66,16 @@ def create_motif(
     input
         What to build the motif from:
 
-        - ``None`` or an integer: a random motif of that width (10 by
-          default). Each column is drawn from a Dirichlet distribution
+        - ``None`` or an integer: a random motif of that width, 10 by
+          default. Each column is drawn from a Dirichlet distribution
           parameterised by the background.
         - A string: a consensus sequence. IUPAC ambiguity codes are allowed
           for DNA and amino acids.
         - A sequence of equal-length strings: aligned sites, which are
           counted. ``nsites`` then defaults to the number of strings.
         - A 2-D array of shape (letters, positions). Give the row letters
-          with ``letters`` (they are sorted, with the rows reordered to
-          match), or give ``alphabet`` and supply the rows in alphabet order.
+          with ``letters``, which are sorted with the rows reordered to
+          match, or give ``alphabet`` and supply the rows in alphabet order.
           The type is detected from the values.
     alphabet
         ``"DNA"``, ``"RNA"``, ``"AA"``, or a string of letters for a custom
@@ -89,8 +89,8 @@ def create_motif(
     pseudocount
         Pseudocount used when converting between types.
     bkg
-        Background frequencies, either one value per letter (in alphabet
-        order) or a mapping from letters to values. Uniform by default.
+        Background frequencies, either one value per letter in alphabet
+        order or a mapping from letters to values. Uniform by default.
     seed
         Random seed, for random motifs only.
     """
@@ -158,11 +158,10 @@ def convert_type(motifs, type, pseudocount=None, relative_entropy=False):
         A motif or an iterable of motifs.
     type
         ``"PCM"``, ``"PPM"``, ``"PWM"`` or ``"ICM"``. Probability-based
-        motifs cannot be turned into contribution weight matrices
-        (``"CWM"``), so asking for that is an error unless the motif already
-        is one.
+        motifs cannot be turned into ``"CWM"`` contribution weight matrices,
+        so asking for that is an error unless the motif already is one.
     pseudocount
-        Overrides (and replaces) each motif's pseudocount.
+        Replaces each motif's own pseudocount.
     relative_entropy
         For ICMs, compute heights as relative entropy against the background
         instead of Shannon information content.
@@ -170,8 +169,7 @@ def convert_type(motifs, type, pseudocount=None, relative_entropy=False):
     Notes
     -----
     A motif without ``nsites`` is treated as having 100 sites when counts are
-    needed. As in the R package, the consensus and total IC are kept from
-    the input motif.
+    needed. The consensus and total IC are kept from the input motif.
     """
     return _apply(
         motifs, lambda m: _core._convert_type(m, type, pseudocount, relative_entropy)
@@ -237,8 +235,9 @@ def trim_cwm(
 def round_motif(motifs, pct_tolerance: float | str = 0.05):
     """Set small probabilities to zero.
 
-    Probabilities below ``pct_tolerance`` (a fraction, or a string such as
-    ``"5%"``) are set to zero and each column is renormalised. The motif is
+    Probabilities below ``pct_tolerance``, given as a fraction or as a
+    string such as ``"5%"``, are set to zero and each column is
+    renormalised. The motif is
     returned in its original type.
     """
     if isinstance(pct_tolerance, str):
@@ -279,7 +278,8 @@ def get_consensus(
     type: MotifType = "PPM",
     pseudocount: float = 1.0,
 ) -> str:
-    """IUPAC consensus letter of a DNA or RNA column (A, C, G, T/U order)."""
+    """IUPAC consensus letter of a DNA or RNA column, with its values in A,
+    C, G and T or U order."""
     if alphabet not in ("DNA", "RNA"):
         raise ValueError("alphabet must be one of DNA, RNA")
     return _core._get_consensus(

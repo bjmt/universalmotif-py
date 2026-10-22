@@ -49,24 +49,25 @@ def enrich_motifs(
 ) -> pl.DataFrame:
     """Test motifs for enrichment in target sequences.
 
-    This is the port of universalmotif's ``enrich_motifs_lite()``, extended
-    to any alphabet. Target
-    and background sequences are scanned with [`scan_sequences()`][universalmotif.scan_sequences] (hits
-    have P-values below ``pvalue``), and each motif gets a one-sided
-    Fisher's exact test, with ``pseudocount`` added to every cell, on either
-    the number of sequences with a hit (``test="seqs"``) or the number of
-    hits out of all the positions the motif could occupy (``test="sites"``).
+    Target and background sequences of any alphabet are scanned with
+    [`scan_sequences()`][universalmotif.scan_sequences], keeping hits with
+    P-values below ``pvalue``, and each motif gets a one-sided Fisher's exact
+    test with ``pseudocount`` added to every cell. With ``test="seqs"`` it
+    tests the number of sequences with a hit, and with ``test="sites"`` the
+    number of hits out of all the positions the motif could occupy.
     Q-values are Benjamini-Hochberg adjusted across all motifs.
 
     Without ``bkg_sequences``, the background is the targets shuffled with
-    [`shuffle_sequences()`][universalmotif.shuffle_sequences] (Euler method, ``k=shuffle_k``, ``seed``).
+    [`shuffle_sequences()`][universalmotif.shuffle_sequences] using the
+    Euler method with ``k=shuffle_k`` and ``seed``.
 
     Returns a DataFrame of the motifs with q-values up to ``qvalue``, in
-    order of P-value: ``motif``, ``motif_i`` (0-based), ``consensus``,
-    ``target_seq_n``, ``target_seq_hits``, ``target_site_hits``,
-    ``bkg_seq_n``, ``bkg_seq_hits``, ``bkg_site_hits``, ``enrichment`` (the
-    ratio of hit rates, with a floor of half a hit on the background rate),
-    ``log2_enrichment``, ``pvalue`` and ``qvalue``.
+    order of P-value, with the columns ``motif``, ``motif_i``,
+    ``consensus``, ``target_seq_n``, ``target_seq_hits``,
+    ``target_site_hits``, ``bkg_seq_n``, ``bkg_seq_hits``, ``bkg_site_hits``,
+    ``enrichment``, ``log2_enrichment``, ``pvalue`` and ``qvalue``.
+    ``motif_i`` is 0-based, and ``enrichment`` is the ratio of hit rates,
+    with a floor of half a hit on the background rate.
     """
     if test not in ("seqs", "sites"):
         raise ValueError("test must be 'seqs' or 'sites'")
@@ -144,27 +145,30 @@ def motif_coocc(
     """Find motif pairs that share sequences more often than expected.
 
     Every pair of motifs gets a one-sided Fisher's exact test on the 2x2
-    table of sequences with hits from one motif, the other, both or neither
-    (with ``pseudocount`` added to every cell). Pairs sharing fewer than
+    table of sequences with hits from one motif, the other, both or neither,
+    with ``pseudocount`` added to every cell. Pairs sharing fewer than
     ``min_coocc`` sequences are not tested. Q-values are Benjamini-Hochberg
     adjusted across the tested pairs.
 
-    Give either ``sequences``, which are scanned with [`scan_sequences()`][universalmotif.scan_sequences]
-    (``pvalue``, ``rc``, and with ``no_overlaps`` overlapping hits of the
-    same motif removed), or a ``hits`` table with ``sequence_i`` (0-based)
-    and either ``motif_i`` (0-based) or ``motif`` (names) columns, plus
-    ``n_sequences``. Hits tables work for any alphabet.
+    Give either ``sequences`` or a ``hits`` table plus ``n_sequences``.
+    Sequences are scanned with
+    [`scan_sequences()`][universalmotif.scan_sequences] using ``pvalue`` and
+    ``rc``, and ``no_overlaps`` removes overlapping hits of the same motif. A
+    hits table, which works for any alphabet, needs a 0-based
+    ``sequence_i`` column and either a 0-based ``motif_i`` column or a
+    ``motif`` column of names.
 
-    With ``max_distance``, two descriptive columns are added (they do not
-    affect the test): ``both_clustered``, the number of shared sequences
-    whose nearest pair of hits (comparing start positions) is within
+    With ``max_distance``, two descriptive columns that do not affect the
+    test are added: ``both_clustered``, the number of shared sequences whose
+    nearest pair of hits by start position is within
     ``max_distance``, and ``median_distance``, the median of those nearest
     distances. ``self_pairs`` also pairs each motif with itself.
     ``nthreads`` applies to the scan and to testing the pairs.
 
-    Returns a DataFrame sorted by q-value then P-value, with untested pairs
-    (null P-values) last: ``motif_a``, ``motif_b``, ``a_only``, ``b_only``,
-    ``both``, ``neither``, ``odds_ratio``, ``pvalue`` and ``qvalue``.
+    Returns a DataFrame with the columns ``motif_a``, ``motif_b``,
+    ``a_only``, ``b_only``, ``both``, ``neither``, ``odds_ratio``,
+    ``pvalue`` and ``qvalue``, sorted by q-value then P-value, with untested
+    pairs and their null P-values last.
     """
     if (sequences is None) == (hits is None):
         raise ValueError("give exactly one of sequences and hits")
@@ -231,38 +235,39 @@ def motif_peaks(
     """Test whether motif hits cluster along sequences of equal length.
 
     A CentriMo-style test (Bailey and Machanick 2012). Only each motif's
-    highest-scoring hit per sequence is used, at its centre
-    ``(start + end) / 2``. If centres were uniform along the sequences, the
-    number falling in a window of width ``w`` would be binomial with
-    probability ``w / seq_length``. Windows from ``min_window`` to
-    ``max_window`` (by default half the sequence length) in steps of
-    ``window_step`` are tested, centred on the middle of the sequences
-    (``mode="central"``) or every ``position_step`` along them
-    (``mode="local"``). The best window's P-value is Bonferroni-corrected
-    for the number of windows tested, and q-values are Benjamini-Hochberg
-    adjusted across motifs.
+    highest-scoring hit per sequence is used, at its centre ``(start + end) /
+    2``. If centres were uniform along the sequences, the number falling in a
+    window of width ``w`` would be binomial with probability ``w /
+    seq_length``. Windows from ``min_window`` to ``max_window`` in steps of
+    ``window_step`` are tested, centred on the middle of the sequences with
+    ``mode="central"`` or every ``position_step`` along them with
+    ``mode="local"``, and ``max_window`` defaults to half the sequence length.
+    The best window's P-value is Bonferroni-corrected for the number of windows
+    tested, and q-values are Benjamini-Hochberg adjusted across motifs.
 
     Parameters
     ----------
     hits
-        A hit table such as from [`scan_sequences()`][universalmotif.scan_sequences], with ``motif``,
-        ``score``, ``start``, ``end`` (or ``stop``) and ``sequence`` (or
-        ``sequence_i``) columns.
+        A hit table such as from
+        [`scan_sequences()`][universalmotif.scan_sequences], with ``motif``,
+        ``score``, ``start``, ``end`` or ``stop``, and ``sequence`` or
+        ``sequence_i`` columns.
     seq_strand
         A mapping from the values in the sequence column to ``"+"`` or
-        ``"-"``. Centres on ``-`` sequences are reflected
-        (``seq_length + 1 - centre``) so they read in the feature's
+        ``"-"``. Centres on ``-`` sequences are reflected to
+        ``seq_length + 1 - centre`` so they read in the feature's
         orientation, which matters only for local mode.
 
     Returns
     -------
     polars.DataFrame
         A DataFrame of the motifs with q-values up to ``qvalue``, in order of
-        P-value: ``motif``, ``motif_i`` (0-based rank of the name among those
-        in ``hits``), ``mode``, ``seq_length``, ``nhits``, ``best_window``,
-        ``best_center``, ``hits_in``, ``hits_out``, ``expected_in``,
-        ``enrichment``, ``log2_enrichment``, ``pvalue``, ``qvalue`` and
-        ``centers`` (the rounded hit centres used).
+        P-value, with the columns ``motif``, ``motif_i``, ``mode``,
+        ``seq_length``, ``nhits``, ``best_window``, ``best_center``,
+        ``hits_in``, ``hits_out``, ``expected_in``, ``enrichment``,
+        ``log2_enrichment``, ``pvalue``, ``qvalue`` and ``centers``.
+        ``motif_i`` is the 0-based rank of the name among those in ``hits``,
+        and ``centers`` holds the rounded hit centres used.
     """
     if mode not in ("central", "local"):
         raise ValueError("mode must be 'central' or 'local'")

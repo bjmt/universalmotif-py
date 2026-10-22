@@ -1,6 +1,6 @@
 # Motifs
 
-The [`Motif`][universalmotif.Motif] class, and the functions for creating, converting and modifying motifs. Motifs are immutable, so every function here returns new motifs rather than changing the ones it is given (most also accept a list of motifs and return a list). The column functions at the end work on a single position of a motif, as a list or array of numbers.
+The [`Motif`][universalmotif.Motif] class, and the functions for creating, converting and modifying motifs. Motifs are immutable, so every function here returns new motifs rather than changing the ones it is given, and most also accept a list of motifs and return a list. The column functions at the end work on a single position of a motif, as a list or array of numbers.
 
 ::: universalmotif.Motif
 

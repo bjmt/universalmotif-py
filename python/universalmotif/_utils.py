@@ -48,8 +48,8 @@ def ppm_to_pwm(
     nsites: float = 100.0,
     smooth: bool = True,
 ) -> npt.NDArray[np.float64]:
-    """Convert a column of probabilities to log2 odds against ``bkg``
-    (uniform by default). With ``smooth``, the pseudocount is first applied
+    """Convert a column of probabilities to log2 odds against ``bkg``, which
+    is uniform by default. With ``smooth``, the pseudocount is first applied
     by converting to ``nsites`` counts and back."""
     return np.array(_core._ppm_to_pwm(_floats(position), _bkg(bkg), pseudocount if smooth else 0.0,
                                       nsites))
@@ -113,8 +113,8 @@ def motif_score(
 def score_match(
     motif: Motif, match: str | Sequence[str], allow_nonfinite: bool = False
 ) -> float | npt.NDArray[np.float64]:
-    """The score of each word (as long as the motif), with each PWM entry and
-    the total truncated to three decimals."""
+    """The score of each word, which must be as long as the motif, with each
+    PWM entry and the total truncated to three decimals."""
     words = [match] if isinstance(match, str) else list(match)
     out = np.array(_core._score_match(_one_motif(motif), words, allow_nonfinite))
     return float(out[0]) if isinstance(match, str) else out
@@ -128,8 +128,9 @@ def get_scores(motif: Motif, allow_nonfinite: bool = False) -> npt.NDArray[np.fl
 
 
 def get_matches(motif: Motif, score: float, allow_nonfinite: bool = False) -> list[str]:
-    """Every word scoring at least ``score``. A score of ``inf`` (as
-    [`motif_pvalue()`][universalmotif.motif_pvalue] gives for an unreachable P-value) has no matches."""
+    """Every word scoring at least ``score``. A score of ``inf``, which
+    [`motif_pvalue()`][universalmotif.motif_pvalue] gives for an
+    unreachable P-value, has no matches."""
     return _core._get_matches(_one_motif(motif), float(score), allow_nonfinite)
 
 
@@ -166,11 +167,11 @@ def compare_columns(
     nsites1: float = 100.0,
     nsites2: float = 100.0,
 ) -> float:
-    """Compare two columns with one of the R package's metrics: ``"PCC"``,
+    """Compare two columns with one of the comparison metrics: ``"PCC"``,
     ``"EUCL"``, ``"SW"``, ``"KL"``, ``"WEUCL"``, ``"ALLR"``, ``"BHAT"``,
     ``"HELL"``, ``"WPCC"``, ``"SEUCL"``, ``"MAN"`` or ``"ALLR_LL"``. The
-    backgrounds (uniform by default) are used by the weighted metrics and
-    ALLR, which also uses the site counts."""
+    backgrounds are uniform by default and are used by the weighted metrics
+    and ALLR, which also uses the site counts."""
     if method not in _COMPARE_METRICS:
         raise ValueError(f"method must be one of {', '.join(_COMPARE_METRICS)}")
     xs, ys = _floats(x), _floats(y)
@@ -180,9 +181,10 @@ def compare_columns(
 
 
 def average_ic(motifs: Motif | Iterable[Motif], average: str = "a.mean") -> float | npt.NDArray[np.float64]:
-    """The average information content of the motifs' positions:
-    ``"a.mean"`` (arithmetic mean), ``"g.mean"`` (geometric mean),
-    ``"median"`` or ``"fzt"`` (Fisher z-transform)."""
+    """The average information content of the motifs' positions, taken as
+    the arithmetic mean with ``"a.mean"``, the geometric mean with
+    ``"g.mean"``, the median with ``"median"`` or the Fisher z-transform
+    with ``"fzt"``."""
     if isinstance(motifs, Motif):
         return float(_core._average_ic([motifs], average)[0])
     return np.array(_core._average_ic([_check_motif(m) for m in motifs], average))
@@ -197,9 +199,9 @@ def _ints(x: int | Sequence[int], what: str) -> list[int]:
 
 def add_gap(motifs, gaploc: int | Sequence[int] | None = None, mingap: int | Sequence[int] = 1,
             maxgap: int | Sequence[int] = 5):
-    """Add gaps to motifs. Gap ``i`` follows position ``gaploc[i]`` (counting
-    from 1; by default the middle of the motif) and spans ``mingap[i]`` to
-    ``maxgap[i]`` positions; shorter lists are recycled."""
+    """Add gaps to motifs. Gap ``i`` follows position ``gaploc[i]``, counting
+    from 1 and defaulting to the middle of the motif, and spans ``mingap[i]``
+    to ``maxgap[i]`` positions; shorter lists are recycled."""
     loc = None if gaploc is None else _ints(gaploc, "gaploc")
     lo, hi = _ints(mingap, "mingap"), _ints(maxgap, "maxgap")
     return _apply(motifs, lambda m: _core._add_gap(m, loc, lo, hi))
@@ -278,9 +280,9 @@ def _reshape(sequences, values: list[str]):
 def mask_seqs(sequences, pattern: str, rc: bool = False, letter: str = "-", alphabet: str = "DNA"):
     """Replace every occurrence of ``pattern`` in the sequences with
     ``letter``. Overlapping occurrences are all masked and letters match in
-    either case; with ``rc`` (DNA and RNA only), occurrences of the reverse
-    complement are masked as well. The sequences come back in the form they
-    were given (a string, a list or a dict)."""
+    either case. With ``rc``, occurrences of the reverse complement of DNA
+    and RNA patterns are masked as well. The sequences come back in the form
+    they were given, whether a string, a list or a dict."""
     if len(letter) != 1:
         raise ValueError("letter must be a single character")
     from ._analysis import _sequence_pairs
@@ -292,8 +294,8 @@ def mask_seqs(sequences, pattern: str, rc: bool = False, letter: str = "-", alph
 def mask_ranges(sequences: Mapping[str, str], ranges, letter: str = "-") -> dict[str, str]:
     """Replace the positions in ``ranges`` with ``letter``.
 
-    ``sequences`` maps names to sequences and ``ranges`` names positions on
-    them (1-based and inclusive), as a DataFrame with ``chrom``, ``start``
+    ``sequences`` maps names to sequences and ``ranges`` names 1-based,
+    inclusive positions on them, as a DataFrame with ``chrom``, ``start``
     and ``end`` columns or as ``(chrom, start, end)`` tuples. Ranges may
     overlap; ranges on unknown sequences or past their ends are errors.
     """
@@ -313,8 +315,8 @@ def mask_ranges(sequences: Mapping[str, str], ranges, letter: str = "-") -> dict
 
 
 def shuffle_string(string: str, k: int = 1, method: str = "euler", seed: int | None = None) -> str:
-    """Shuffle one string while keeping its k-let counts (see
-    [`shuffle_sequences()`][universalmotif.shuffle_sequences])."""
+    """Shuffle one string while keeping its k-let counts, as
+    [`shuffle_sequences()`][universalmotif.shuffle_sequences] does."""
     from ._sequences import shuffle_sequences
 
     if not isinstance(string, str):
@@ -324,9 +326,10 @@ def shuffle_string(string: str, k: int = 1, method: str = "euler", seed: int | N
 
 def slide_fun(string: str, fun: Callable[[str], Any], window: int = 1, overlap: int = 0,
               return_incomp: bool = True) -> list[Any]:
-    """Apply ``fun`` to each sliding window of ``string`` (see
-    [`window_string()`][universalmotif.window_string]). A window longer than the string is shortened to
-    it when ``return_incomp`` is set and is an error otherwise."""
+    """Apply ``fun`` to each sliding window of ``string``, as made by
+    [`window_string()`][universalmotif.window_string]. A window longer than the
+    string is shortened to it when ``return_incomp`` is set and is an error
+    otherwise."""
     from ._sequences import window_string
 
     if not string:
@@ -363,8 +366,8 @@ def meme_alph(
     complements, if it has any. ``ambiguity`` maps ambiguous letters to the
     core letters they stand for, ``like`` is ``"DNA"``, ``"RNA"`` or
     ``"PROTEIN"`` for alphabets that extend one, and ``letter_names`` and
-    ``colours`` (hexadecimal RGB) describe each letter. The definition is
-    returned as text, or written to ``file`` if one is given.
+    ``colours`` describe each letter, with colours as hexadecimal RGB. The
+    definition is returned as text, or written to ``file`` if one is given.
     """
     def pairs(m: Mapping[str, str] | None) -> list[tuple[str, str]]:
         return [] if m is None else [(str(k), str(v)) for k, v in m.items()]
