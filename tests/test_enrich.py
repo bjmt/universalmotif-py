@@ -59,7 +59,7 @@ def test_enrich_shuffled_background():
     assert a.equals(b)
     assert set(a["motif"][:2]) == {"creb", "sp1"}
     with pytest.raises(ValueError):
-        um.enrich_motifs(um.create_motif("MKVL", alphabet="AA"), ["MKVLLL"])
+        um.enrich_motifs([um.create_motif("MKVL", alphabet="AA"), ms[0]], tgt)
 
 
 def _check_coocc(got, t, ctx):

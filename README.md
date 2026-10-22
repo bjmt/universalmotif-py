@@ -17,7 +17,9 @@ sequence complexity, shuffling, random sequences, implanting sites and
 enrichment, proximity to genomic anchors and composition-matched
 backgrounds, along with sequence logos, motif trees and motif
 peak plots drawn with matplotlib (install with `pip install
-universalmotif[plot]`).
+universalmotif[plot]`). Scanning, comparison, merging, clustering,
+enrichment and logos work for amino acid and custom alphabets as well as
+DNA and RNA.
 
 ## Example
 

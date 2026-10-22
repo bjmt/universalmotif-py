@@ -23,6 +23,13 @@ if TYPE_CHECKING:
 
 DNA_COLOURS = {"A": "#109648", "C": "#255C99", "G": "#F7B32B", "T": "#D62839"}
 RNA_COLOURS = {"A": "#109648", "C": "#255C99", "G": "#F7B32B", "U": "#D62839"}
+AA_COLOURS = {
+    **dict.fromkeys("GSTYC", "#058644"),
+    **dict.fromkeys("QN", "#720091"),
+    **dict.fromkeys("KRH", "#0046C5"),
+    **dict.fromkeys("DE", "#C5003E"),
+    **dict.fromkeys("AVLIPWFM", "#2E2E2E"),
+}
 _MISSING_COLOUR = "#7F7F7F"
 _YLABELS = {"PPM": "probability", "ICM": "bits", "PWM": "logodds", "PCM": "counts", "CWM": "contribution"}
 
@@ -113,8 +120,16 @@ def view_logo(
     return ax
 
 
-def _default_colours(alphabet: str) -> dict[str, str] | None:
-    return {"DNA": DNA_COLOURS, "RNA": RNA_COLOURS}.get(alphabet)
+def _default_colours(alphabet: str, letters: Sequence[str] = ()) -> dict[str, str]:
+    """The R package's colours for DNA, RNA and amino acids, and a
+    categorical palette for other alphabets."""
+    known = {"DNA": DNA_COLOURS, "RNA": RNA_COLOURS, "AA": AA_COLOURS}.get(alphabet)
+    if known is not None:
+        return known
+    import matplotlib
+
+    palette = matplotlib.colormaps["tab20"].colors
+    return {letter: matplotlib.colors.to_hex(palette[i % len(palette)]) for i, letter in enumerate(letters)}
 
 
 def _rc_matrix(m: np.ndarray) -> np.ndarray:
@@ -141,8 +156,6 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
     alphabet = ms[0].alphabet
     if any(m.alphabet != alphabet for m in ms):
         raise ValueError("all motifs must share the same alphabet")
-    if alphabet not in ("DNA", "RNA"):
-        raise ValueError("view_motifs() supports DNA and RNA motifs only; use view_logo() for others")
     if use_type == "CWM" and any(m.type != "CWM" for m in ms):
         raise ValueError('use_type="CWM" needs every motif to be a CWM')
 
@@ -262,13 +275,14 @@ def view_motifs(
     return_raw: bool = False,
     nthreads: int = 1,
 ):
-    """Draw DNA or RNA motifs as sequence logos.
+    """Draw motifs as sequence logos.
 
-    This is the port of universalmotif's ``view_motifs_lite()``. Several
-    motifs are aligned to the one with the highest information content (as
-    :func:`compare_motifs` aligns them, trying reverse complements with
-    ``rc``), reverse complemented where that aligns better (their names get
-    ``rc_text``), padded into a common frame and drawn one above the other.
+    This is the port of universalmotif's ``view_motifs_lite()``, extended to
+    any alphabet. Several motifs are aligned to the one with the highest
+    information content (as :func:`compare_motifs` aligns them, trying
+    reverse complements of DNA and RNA motifs with ``rc``), reverse
+    complemented where that aligns better (their names get ``rc_text``),
+    padded into a common frame and drawn one above the other.
 
     Parameters
     ----------
@@ -285,7 +299,8 @@ def view_motifs(
         Number the positions, once under the last logo or under every logo
         (counting each motif's own positions).
     colour_scheme
-        Letter colours; DNA and RNA have defaults.
+        Letter colours. DNA, RNA and amino acids default to the R package's
+        colours, other alphabets to a categorical palette.
     min_height, x_spacer, y_spacer, sort_positions, sort_positions_decreasing, fit_to_height, flip_neg
         Letter layout, as in :func:`view_logo`. Letters are sorted by height
         except for PCMs and PPMs, and PPM positions are scaled to a height of
@@ -309,6 +324,7 @@ def view_motifs(
 
         warnings.warn('fit_to_height is ignored for use_type "ICM" and "PWM"', stacklevel=2)
         fit_to_height = None
+    motifs = [motifs] if isinstance(motifs, Motif) else list(motifs)
     names, mats, offsets, widths, alphabet = _prepare_motifs(
         motifs, use_type, rc, min_overlap, relative_entropy, sort_by, rc_text, nthreads
     )
@@ -316,8 +332,8 @@ def view_motifs(
         return dict(zip(names, mats))
     if use_type == "PWM" and any(not np.isfinite(m).all() for m in mats):
         raise ValueError("found non-finite values in a motif")
-    rows = list("ACGT" if alphabet == "DNA" else "ACGU")
-    colours = colour_scheme if colour_scheme is not None else _default_colours(alphabet)
+    rows = list(motifs[0].letters)
+    colours = colour_scheme if colour_scheme is not None else _default_colours(alphabet, rows)
     if colour_scheme is not None:
         missing = set(colour_scheme) - set(rows)
         if missing:
@@ -560,12 +576,12 @@ def plot_tree(
         mats = list(logos.values())
         frame = mats[0].shape[1]
         alph = tree.motifs[0].alphabet
-        rows = list("ACGT" if alph == "DNA" else "ACGU")
+        rows = list(tree.motifs[0].letters)
         pos_width = tip_logo_width if tip_logo_width is not None else 0.6 * xrange / frame
         x0 = xmax + 0.08 * xrange
         for i, m in enumerate(mats):
             glyphs = motif_glyphs(m, rows, "ICM", 0.01, 0.04, 0.01, True, True, None, False)
-            _draw_glyphs(ax, glyphs, _default_colours(alph), x0=x0 - 0.5 * pos_width, y0=tip_y[i] - tip_logo_height / 2,
+            _draw_glyphs(ax, glyphs, _default_colours(alph, rows), x0=x0 - 0.5 * pos_width, y0=tip_y[i] - tip_logo_height / 2,
                          xscale=pos_width, yscale=tip_logo_height / 2)
         label_x = x0 + frame * pos_width + 0.02 * xrange
 
@@ -754,6 +770,7 @@ def plot_match_bkg(
 
 
 __all__ = [
+    "AA_COLOURS",
     "DNA_COLOURS",
     "RNA_COLOURS",
     "plot_match_bkg",

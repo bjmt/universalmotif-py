@@ -42,8 +42,11 @@ def test_compare_motifs_reference():
             assert got["target_i"].to_list() == [int(x) - 1 for x in nums(w["target_i"])], ctx
             assert got["offset"].to_list() == [int(x) for x in nums(w["offset"])], ctx
             assert got["strand"].to_list() == list(np.atleast_1d(w["strand"])), ctx
-            assert got["subject_consensus"].to_list() == list(np.atleast_1d(w["subject_consensus"])), ctx
-            assert got["target_consensus"].to_list() == list(np.atleast_1d(w["target_consensus"])), ctx
+            # The R package writes T in RNA consensus strings; the port
+            # writes U (see DIVERGENCES.md).
+            fix = (lambda s: s.replace("T", "U")) if case["set"] == "rna" else str
+            for col in ("subject_consensus", "target_consensus"):
+                assert got[col].to_list() == [fix(s) for s in np.atleast_1d(w[col])], ctx
             for col in ("score", "pvalue", "qvalue"):
                 np.testing.assert_allclose(got[col].to_numpy(), nums(w[col]), rtol=1e-12,
                                            err_msg=f"{ctx}: {col}")
@@ -117,7 +120,9 @@ def test_compare_errors():
     motifs = _set("dna")
     with pytest.raises(ValueError, match="no motif named"):
         um.compare_motifs(motifs, compare_to="nope")
-    with pytest.raises(ValueError, match="DNA and RNA"):
-        um.compare_motifs([um.create_motif("ACDEF"), um.create_motif("ACDEG")])
+    with pytest.raises(ValueError, match="parametric null"):
+        um.compare_motifs([um.create_motif("ACDEF"), um.create_motif("ACDEG")], compare_to=0, null="parametric")
+    with pytest.raises(ValueError, match="same alphabet"):
+        um.compare_motifs([um.create_motif("ACDEF"), um.create_motif("ACGT")])
     with pytest.warns(UserWarning, match="qvalue"):
         um.compare_motifs(motifs[:3], qvalue=0.5)

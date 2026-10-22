@@ -123,8 +123,8 @@ def test_view_motifs_draws():
     assert len(fig.axes) == 1 and fig.axes[0].get_ylabel() == "probability"
     colours = {tuple(c) for c in fig.axes[0].collections[0].get_facecolors().round(3)}
     assert len(colours) == 4
-    with pytest.raises(ValueError):
-        um.view_motifs(um.create_motif("MKVL", alphabet="AA"))
+    with pytest.raises(ValueError, match="same alphabet"):
+        um.view_motifs([um.create_motif("MKVL", alphabet="AA"), ms[0]])
 
 
 def test_view_logo_draws():

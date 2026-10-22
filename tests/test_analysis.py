@@ -102,8 +102,10 @@ def test_scan_inputs():
     as_dict = um.scan_sequences(m, {"short": "ACG", "s2": "AATTGACTAA"}, pvalue=0.01)
     assert set(as_dict["sequence"].to_list()) == {"s2"}
     assert um.scan_sequences(m, ["GGGG"], pvalue=0.01).height == 0
-    with pytest.raises(ValueError, match="DNA and RNA"):
-        um.scan_sequences(um.create_motif("ACDEF"), "ACDEFG")
+    # Protein motifs scan the forward strand only.
+    aa = um.scan_sequences(um.create_motif("ACDEF", alphabet="AA"), "xxacdefgg", pvalue=0.01)
+    assert aa["match"].to_list() == ["ACDEF"]
+    assert aa["strand"].to_list() == ["+"]
 
 
 def test_fasta_round_trip(tmp_path):

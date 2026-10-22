@@ -47,9 +47,10 @@ def enrich_motifs(
     pseudocount: int = 1,
     nthreads: int = 1,
 ) -> pl.DataFrame:
-    """Test DNA or RNA motifs for enrichment in target sequences.
+    """Test motifs for enrichment in target sequences.
 
-    This is the port of universalmotif's ``enrich_motifs_lite()``. Target
+    This is the port of universalmotif's ``enrich_motifs_lite()``, extended
+    to any alphabet. Target
     and background sequences are scanned with :func:`scan_sequences` (hits
     have P-values below ``pvalue``), and each motif gets a one-sided
     Fisher's exact test, with ``pseudocount`` added to every cell, on either

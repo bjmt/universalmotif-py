@@ -150,19 +150,21 @@ def scan_sequences(
     no_overlaps_by_strand: bool = False,
     no_overlaps_by_motif: bool = False,
 ) -> pl.DataFrame:
-    """Scan DNA or RNA sequences for motif hits.
+    """Scan sequences for motif hits.
 
-    This is the port of universalmotif's ``scan_sequences_lite()``. Each
-    motif's score threshold comes from the ``pvalue`` cutoff, and every
-    window scoring at least that much is reported with its P-value.
+    This is the port of universalmotif's ``scan_sequences_lite()``, extended
+    to any alphabet. Each motif's score threshold comes from the ``pvalue``
+    cutoff, and every window scoring at least that much is reported with its
+    P-value. Only DNA and RNA have a reverse strand (``rc``).
 
     Parameters
     ----------
     sequences
         A sequence, a list of sequences, or a mapping from names to
-        sequences (such as the result of :func:`read_fasta`). Letters are
-        matched case-insensitively; anything else (such as ``N``) never
-        forms part of a hit.
+        sequences (such as the result of :func:`read_fasta`). DNA, RNA and
+        protein letters are matched case-insensitively and custom alphabets
+        exactly; anything else (such as ``N`` or ``X``) never forms part of
+        a hit.
     rc
         Also scan the reverse strand.
     no_overlaps

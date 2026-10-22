@@ -41,15 +41,17 @@ def compare_motifs(
     matrix_out: str = "score",
     nthreads: int = 1,
 ):
-    """Compare DNA or RNA motifs.
+    """Compare motifs.
 
-    This is the port of universalmotif's ``compare_motifs_lite()``. Each
-    target is slid along the query (and its reverse complement, with
-    ``rc``) and the alignment with the highest sum of column correlations
-    is kept, among those overlapping at least ``min_overlap`` columns.
-    Its P-value comes from the exact distribution of that sum under a null
-    model of columns (``"empirical"``: the columns of all the motifs given;
-    ``"parametric"``: a Dirichlet grid around ``bkg``), Bonferroni-corrected
+    This is the port of universalmotif's ``compare_motifs_lite()``,
+    extended to any alphabet. Each target is slid along the query (and, for
+    DNA and RNA, its reverse complement, with ``rc``) and the alignment with
+    the highest sum of column correlations is kept, among those overlapping
+    at least ``min_overlap`` columns. Column correlations are Pearson
+    correlations of the probabilities. Each P-value comes from the exact
+    distribution of that sum under a null model of columns
+    (``"empirical"``: the columns of all the motifs given; ``"parametric"``,
+    DNA and RNA only: a Dirichlet grid around ``bkg``), Bonferroni-corrected
     for the alignments tried. Q-values are Benjamini-Hochberg adjusted
     within each query.
 
@@ -104,11 +106,12 @@ def merge_motifs(
     weighted: bool = False,
     nthreads: int = 1,
 ) -> Motif:
-    """Merge DNA or RNA motifs into one PPM.
+    """Merge motifs into one PPM.
 
-    This is the port of universalmotif's ``merge_motifs_lite()``. The motif
-    with the highest total IC is the anchor; the others are aligned to it
-    (reverse complemented if that fits better, with ``rc``) and the aligned
+    This is the port of universalmotif's ``merge_motifs_lite()``, extended to
+    any alphabet. The motif with the highest total IC is the anchor; the
+    others are aligned to it (DNA and RNA motifs reverse complemented if that
+    fits better, with ``rc``) and the aligned
     probabilities averaged, weighted by ``nsites`` if ``weighted``. Motifs
     that cannot overlap the anchor by ``min_overlap`` columns are left out.
     The default name joins the merged motifs' names.
@@ -127,7 +130,7 @@ def merge_similar(
     return_clusters: bool = False,
     nthreads: int = 1,
 ):
-    """Cluster similar DNA or RNA motifs and merge each cluster.
+    """Cluster similar motifs and merge each cluster.
 
     This is the port of universalmotif's ``merge_similar_lite()``. Motifs
     are linked when :func:`compare_motifs` gives them a q-value of at most
@@ -290,7 +293,7 @@ def motif_tree(
     """Cluster motifs into a tree.
 
     This builds the tree that universalmotif's ``motif_tree_lite()`` draws:
-    DNA or RNA motifs are compared with :func:`compare_motifs`, mean column
+    Motifs are compared with :func:`compare_motifs`, mean column
     correlations become distances as ``(1 - score) / 2``, and the distances
     are clustered with R's ``hclust`` algorithm (``method`` is any of its
     methods: ``"complete"``, ``"average"``, ``"single"``, ``"ward.D"``,
