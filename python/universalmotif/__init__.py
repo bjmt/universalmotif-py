@@ -7,6 +7,7 @@ Rust counterpart.
 from importlib.metadata import PackageNotFoundError, version
 
 from ._analysis import dedup_hits, motif_pvalue, scan_sequences
+from ._compare import MotifTree, compare_motifs, merge_motifs, merge_similar, motif_tree
 from ._api import (
     consensus_to_ppm,
     consensus_to_ppm_aa,
@@ -49,6 +50,11 @@ except PackageNotFoundError:  # pragma: no cover
 
 __all__ = [
     "Motif",
+    "MotifTree",
+    "compare_motifs",
+    "merge_motifs",
+    "merge_similar",
+    "motif_tree",
     "consensus_to_ppm",
     "consensus_to_ppm_aa",
     "convert_type",

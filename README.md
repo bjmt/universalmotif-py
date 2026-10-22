@@ -10,8 +10,9 @@ matrices and polars DataFrames for tables.
 The package is at an early stage. Creating motifs, converting between motif
 types, reverse complementing, trimming and summarising are available, as are
 reading and writing motif files (MEME, JASPAR, HOMER, TRANSFAC, CIS-BP,
-UniPROBE, plain matrices and FASTA), exact P-values and scanning sequences
-for hits. Comparison, shuffling and motif discovery will follow.
+UniPROBE, plain matrices and FASTA), exact P-values, scanning sequences for
+hits, and comparing, merging and clustering motifs. Shuffling, enrichment,
+motif discovery and plotting will follow.
 
 ## Example
 
@@ -31,6 +32,10 @@ motifs = um.read_meme("motifs.meme")
 
 sequences = um.read_fasta("promoters.fa")
 hits = um.scan_sequences(motifs, sequences, pvalue=1e-4)
+
+similarity = um.compare_motifs(motifs)        # all-against-all matrix
+tree = um.motif_tree(motifs)                  # tree.newick, tree.linkage
+merged = um.merge_similar(motifs, qvalue=0.01)
 ```
 
 Function names follow the R package, with dotted R argument names written

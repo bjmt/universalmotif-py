@@ -181,3 +181,40 @@ def _dedup(
     ignore_strand: bool,
     ignore_motif: bool,
 ) -> list[bool]: ...
+def _compare(
+    motifs: list[Motif],
+    queries: list[int] | None,
+    min_overlap: int,
+    rc: bool,
+    null: str,
+    bkg: list[float] | None,
+    need_pvalues: bool,
+    nthreads: int,
+) -> dict[str, Any]: ...
+def _merge_motifs(
+    motifs: list[Motif],
+    min_overlap: int,
+    rc: bool,
+    name: str | None,
+    weighted: bool,
+    nthreads: int,
+) -> Motif: ...
+def _merge_similar(
+    motifs: list[Motif],
+    qvalue: float,
+    null: str,
+    min_overlap: int,
+    rc: bool,
+    bkg: list[float] | None,
+    weighted: bool,
+    nthreads: int,
+) -> tuple[list[int], list[Motif]]: ...
+def _hclust(dist: list[list[float]], method: str, labels: list[str]) -> dict[str, Any]: ...
+def _motif_tree(
+    motifs: list[Motif],
+    min_overlap: int,
+    rc: bool,
+    method: str,
+    labels: list[str],
+    nthreads: int,
+) -> dict[str, Any]: ...
