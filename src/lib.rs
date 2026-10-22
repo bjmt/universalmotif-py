@@ -16,6 +16,7 @@ use universalmotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, St
 mod analysis;
 mod enrichment;
 mod io;
+mod plot;
 mod sequences;
 
 pub(crate) fn err(e: universalmotif::Error) -> PyErr {
@@ -665,5 +666,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     analysis::register(m)?;
     sequences::register(m)?;
     enrichment::register(m)?;
+    plot::register(m)?;
     Ok(())
 }

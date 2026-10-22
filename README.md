@@ -14,7 +14,9 @@ UniPROBE, plain matrices and FASTA), exact P-values, scanning sequences for
 hits, comparing, merging and clustering motifs, k-let backgrounds,
 sequence complexity, shuffling, random sequences, implanting sites and
 *de novo* motif discovery, enrichment testing, co-occurrence and
-positional enrichment. Plotting will follow.
+positional enrichment, along with sequence logos, motif trees and motif
+peak plots drawn with matplotlib (install with `pip install
+universalmotif[plot]`).
 
 ## Example
 
@@ -47,6 +49,10 @@ enriched = um.enrich_motifs(motifs, sequences, background, qvalue=0.05)
 pairs = um.motif_coocc(motifs, sequences, max_distance=50)
 peaks = um.motif_peaks(hits, seq_length=500)  # equal-length, centred sequences
 groups = tree.cutree(k=5)
+
+um.view_motifs(motifs[:4]).savefig("logos.png")  # aligned logos
+tree.plot(groups="family", tip_logos=True)        # matplotlib axes
+um.plot_motif_peaks(peaks)
 ```
 
 Functions that use random numbers take a `seed`; without one they draw a
@@ -72,4 +78,6 @@ uv run pytest
 
 ## License
 
-MIT
+MIT. The letter shapes used in logos are outlines of the Roboto font
+(Apache License 2.0), taken from the R package's `fontDFroboto`
+(`scripts/make_font.R` exports them).

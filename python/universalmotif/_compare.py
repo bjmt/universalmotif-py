@@ -182,6 +182,8 @@ class MotifTree:
         The tree in Newick format, as R's ape package writes it.
     method
         Agglomeration method.
+    motifs
+        The motifs at the tips, for trees made from motifs.
     """
 
     labels: list[str]
@@ -191,6 +193,7 @@ class MotifTree:
     linkage: np.ndarray = field(repr=False)
     newick: str = field(repr=False)
     method: str = "complete"
+    motifs: list[Motif] | None = field(default=None, repr=False)
 
     def write_newick(self, file) -> None:
         """Write the Newick string to a file."""
@@ -215,8 +218,63 @@ class MotifTree:
         ids = _core._cutree(merge, [float(x) for x in self.height], k, None if h is None else float(h))
         return np.array(ids, dtype=np.int64)
 
+    def plot(
+        self,
+        layout: str = "rectangular",
+        labels: bool = True,
+        groups=None,
+        tip_size=None,
+        tip_logos: bool = False,
+        branch_length: bool = False,
+        legend: bool = True,
+        colours=None,
+        open_angle: float = 90,
+        tip_logo_width: float | None = None,
+        tip_logo_height: float = 0.9,
+        text_size: float = 10,
+        ax=None,
+    ):
+        """Draw the tree with matplotlib (as universalmotif's
+        ``motif_tree_lite()`` draws it with ggtree).
 
-def _tree(d: dict, labels: list[str], method: str) -> MotifTree:
+        Parameters
+        ----------
+        layout
+            ``"rectangular"``, ``"slanted"``, ``"circular"`` or ``"fan"`` (a
+            circle with an ``open_angle`` gap, in degrees).
+        labels
+            Label the tips with ``self.labels``.
+        groups
+            Colour branches by group: a motif attribute such as
+            ``"family"``, or one value per motif. A branch takes a group's
+            colour when every motif below it is in that group; ``colours``
+            maps groups to colours.
+        tip_size
+            Size the tips by a motif attribute (``"icscore"``, or
+            ``"pval"``, ``"qval"`` and ``"eval"`` as their -log10) or by one
+            number per motif.
+        tip_logos
+            Draw each motif's logo at its tip, aligned as in
+            :func:`view_motifs` (rectangular and slanted layouts only).
+            ``tip_logo_width`` is the width of one position in tree units
+            and ``tip_logo_height`` the logo height in tip spacings.
+        branch_length
+            Draw branch lengths (half the merge heights, as the Newick
+            string); by default tips are aligned, as a cladogram.
+        ax
+            Axes to draw on; a new figure by default.
+
+        Returns
+        -------
+        The matplotlib axes.
+        """
+        from ._plot import plot_tree
+
+        return plot_tree(self, layout, labels, groups, tip_size, tip_logos, branch_length, legend,
+                         colours, open_angle, tip_logo_width, tip_logo_height, text_size, ax)
+
+
+def _tree(d: dict, labels: list[str], method: str, motifs: list[Motif] | None = None) -> MotifTree:
     return MotifTree(
         labels=labels,
         merge=np.array(d["merge"], dtype=np.int64).reshape(-1, 2),
@@ -225,6 +283,7 @@ def _tree(d: dict, labels: list[str], method: str) -> MotifTree:
         linkage=np.array(d["linkage"], dtype=float).reshape(-1, 4),
         newick=d["newick"],
         method=method,
+        motifs=motifs,
     )
 
 
@@ -273,7 +332,7 @@ def motif_tree(
     if len(labs) != len(ms):
         raise ValueError("give one label per motif")
     d = _core._motif_tree(ms, min_overlap, rc, method, labs, nthreads)
-    return _tree(d, labs, method)
+    return _tree(d, labs, method, ms)
 
 
 __all__ = ["MotifTree", "compare_motifs", "merge_motifs", "merge_similar", "motif_tree"]

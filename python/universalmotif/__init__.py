@@ -43,6 +43,7 @@ from ._io import (
 )
 from ._core import Motif
 from ._enrich import enrich_motifs, motif_coocc, motif_peaks
+from ._plot import plot_motif_peaks, view_logo, view_motifs
 from ._sequences import (
     calc_complexity,
     calc_windows,
@@ -92,6 +93,7 @@ __all__ = [
     "motif_rc",
     "motif_tree",
     "normalize",
+    "plot_motif_peaks",
     "position_icscore",
     "read_cisbp",
     "read_fasta",
@@ -110,6 +112,8 @@ __all__ = [
     "summarise_motifs",
     "trim_cwm",
     "trim_motifs",
+    "view_logo",
+    "view_motifs",
     "window_string",
     "write_cisbp",
     "write_fasta",
