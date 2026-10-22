@@ -21,6 +21,22 @@ from ._api import (
     trim_cwm,
     trim_motifs,
 )
+from ._io import (
+    read_cisbp,
+    read_homer,
+    read_jaspar,
+    read_matrix,
+    read_meme,
+    read_transfac,
+    read_uniprobe,
+    write_cisbp,
+    write_homer,
+    write_jaspar,
+    write_matrix,
+    write_meme,
+    write_transfac,
+    write_uniprobe,
+)
 from ._umotif import Motif
 
 try:
@@ -39,8 +55,22 @@ __all__ = [
     "motif_rc",
     "normalize",
     "position_icscore",
+    "read_cisbp",
+    "read_homer",
+    "read_jaspar",
+    "read_matrix",
+    "read_meme",
+    "read_transfac",
+    "read_uniprobe",
     "round_motif",
     "summarise_motifs",
     "trim_cwm",
     "trim_motifs",
+    "write_cisbp",
+    "write_homer",
+    "write_jaspar",
+    "write_matrix",
+    "write_meme",
+    "write_transfac",
+    "write_uniprobe",
 ]

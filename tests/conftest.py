@@ -14,11 +14,20 @@ from pyumotif import _umotif
 REFERENCE_DIR = Path(__file__).resolve().parents[2] / "motifkit" / "tests" / "reference"
 
 
-def load_reference(name):
+def load_reference(name, key="cases"):
     path = REFERENCE_DIR / name
     if not path.exists():
         pytest.skip(f"reference values not found at {path}")
-    return json.loads(path.read_text())["cases"]
+    return json.loads(path.read_text())[key]
+
+
+def reference_file(name):
+    return REFERENCE_DIR / "files" / name
+
+
+def args(v):
+    """Function arguments recorded by R; an empty R list() is written as []."""
+    return v if isinstance(v, dict) else {}
 
 
 def num(x):
@@ -71,11 +80,17 @@ def motif_from_record(r):
 def assert_motif_matches(got, record, ctx="", skip_nsites=False):
     want = motif_from_record(record)
     for field in ("name", "altname", "family", "organism", "alphabet", "type",
-                  "consensus", "strand", "bkgsites", "pval", "qval", "eval",
-                  "extrainfo", "isgapped", "gaploc", "mingap", "maxgap"):
+                  "consensus", "strand", "extrainfo", "isgapped", "gaploc",
+                  "mingap", "maxgap"):
         assert getattr(got, field) == getattr(want, field), f"{ctx}: {field}"
-    if not skip_nsites:
-        assert got.nsites == want.nsites, f"{ctx}: nsites"
+    # Numbers read from files can differ from R in the last bit, because R's
+    # parser is not always correctly rounded.
+    for field in ("bkgsites", "pval", "qval", "eval") + (() if skip_nsites else ("nsites",)):
+        g, w = getattr(got, field), getattr(want, field)
+        if g is None or w is None:
+            assert g == w, f"{ctx}: {field}"
+        else:
+            assert math.isclose(g, w, rel_tol=1e-12), f"{ctx}: {field}"
     assert math.isclose(got.icscore, want.icscore, rel_tol=1e-12, abs_tol=1e-12), ctx
     assert math.isclose(got.pseudocount, want.pseudocount), ctx
     np.testing.assert_allclose(list(got.bkg.values()), list(want.bkg.values()),

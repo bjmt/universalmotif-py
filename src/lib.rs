@@ -12,15 +12,17 @@ use umotif::create::{self, CreateOptions};
 use umotif::ops::{self, TrimFrom};
 use umotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, Strand, convert};
 
-fn err(e: umotif::Error) -> PyErr {
+mod io;
+
+pub(crate) fn err(e: umotif::Error) -> PyErr {
     PyValueError::new_err(e.to_string())
 }
 
-fn parse_type(s: &str) -> PyResult<MotifType> {
+pub(crate) fn parse_type(s: &str) -> PyResult<MotifType> {
     MotifType::parse(s).map_err(err)
 }
 
-fn parse_alphabet(s: &str) -> PyResult<Alphabet> {
+pub(crate) fn parse_alphabet(s: &str) -> PyResult<Alphabet> {
     Alphabet::parse(s).map_err(err)
 }
 
@@ -121,7 +123,7 @@ fn matrix_to_numpy<'py>(py: Python<'py>, m: &Matrix) -> PyResult<Bound<'py, PyAr
 #[pyclass(name = "Motif", module = "pyumotif", frozen)]
 #[derive(Clone)]
 pub struct PyMotif {
-    inner: Motif,
+    pub(crate) inner: Motif,
 }
 
 impl From<Motif> for PyMotif {
@@ -655,5 +657,6 @@ fn _umotif(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_consensus_to_ppm, m)?)?;
     m.add_function(wrap_pyfunction!(_consensus_to_ppm_aa, m)?)?;
     m.add_function(wrap_pyfunction!(_summarise, m)?)?;
+    io::register(m)?;
     Ok(())
 }

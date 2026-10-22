@@ -7,9 +7,10 @@ R/Bioconductor package, built on the
 matrices and polars DataFrames for tables.
 
 The package is at an early stage. Creating motifs, converting between motif
-types, reverse complementing, trimming and summarising are available; reading
-and writing motif files, P-values, scanning, comparison, shuffling and motif
-discovery will follow.
+types, reverse complementing, trimming and summarising are available, as is
+reading and writing MEME, JASPAR, HOMER, TRANSFAC, CIS-BP, UniPROBE and plain
+matrix files. P-values, scanning, comparison, shuffling and motif discovery
+will follow.
 
 ## Example
 
@@ -23,12 +24,16 @@ print(pwm.matrix)
 
 sites = um.create_motif(["AAGT", "ACGT", "ACCT", "TCGT"], type="PCM")
 print(um.summarise_motifs([motif, sites]))
+
+um.write_meme([motif, sites], "motifs.meme")
+motifs = um.read_meme("motifs.meme")
 ```
 
 Function names follow universalmotif, with dotted R argument names written
 with underscores (`min.ic` becomes `min_ic`). Where universalmotif has both a
 full and a `_lite` version of a function, pyumotif will provide the lite
-version under the plain name.
+version under the plain name. Readers always return a list of motifs, and
+MEME site tables come back as polars DataFrames.
 
 ## Development
 
