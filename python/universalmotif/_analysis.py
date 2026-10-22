@@ -59,6 +59,21 @@ def motif_pvalue(
     float | numpy.ndarray | list[numpy.ndarray]
         A float for one motif and one value, a numpy array when values pair up
         with motifs, or a list of arrays when each motif gets several values.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()
+    >>> wbox = motifs[5]
+    >>> round(um.motif_pvalue(wbox, score=10), 6)
+    0.000168
+    >>> um.motif_pvalue(wbox, score=[5, 8, 10]).round(6).tolist()
+    [0.002483, 0.000492, 0.000168]
+
+    Score thresholds for a P-value of 1e-4, one per motif:
+
+    >>> um.motif_pvalue(motifs[:3], pvalue=1e-4).round(3).tolist()
+    [10.252, 10.419, 10.806]
     """
     if (score is None) == (pvalue is None):
         raise ValueError("give exactly one of score and pvalue")
@@ -208,6 +223,18 @@ def scan_sequences(
         strand. ``motif_i`` and ``sequence_i`` are 0-based indices into the
         inputs; ``start`` and ``end`` are 1-based, inclusive and on the forward
         strand. Rows are ordered by motif, sequence and start.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> wbox = um.example_motifs()[5]
+    >>> hits = um.scan_sequences(wbox, um.example_sequences())
+    >>> hits.shape
+    (30, 11)
+    >>> hits.select("sequence", "start", "end", "strand", "match").row(0)
+    ('target_004', 449, 457, '-', 'GTTTGACCG')
+    >>> round(hits["pvalue"][0], 7)
+    3.43e-05
     """
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
     overlaps = (no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif) if no_overlaps else None
@@ -242,6 +269,18 @@ def dedup_hits(
     and ties go to the earlier row. ``ignore_strand`` and ``ignore_motif``
     compare hits across strands and motifs. ``start`` and ``end`` columns are
     required and are inclusive.
+
+    Examples
+    --------
+    A palindromic G-box site matches on both strands at the same place:
+
+    >>> import universalmotif as um
+    >>> gbox = um.example_motifs()[3]
+    >>> hits = um.scan_sequences(gbox, "TTACACGTGTTAAACCACGTGGTT", pvalue=1e-3)
+    >>> hits.select("start", "end", "strand").rows()
+    [(3, 10, '+'), (3, 10, '-'), (15, 22, '+'), (15, 22, '-')]
+    >>> um.dedup_hits(hits, ignore_strand=True).select("start", "end", "strand").rows()
+    [(3, 10, '+'), (15, 22, '+')]
     """
     for col in (seq, motif, strand, "start", "end", by):
         if col not in hits.columns:

@@ -68,6 +68,21 @@ def enrich_motifs(
     ``enrichment``, ``log2_enrichment``, ``pvalue`` and ``qvalue``.
     ``motif_i`` is 0-based, and ``enrichment`` is the ratio of hit rates,
     with a floor of half a hit on the background rate.
+
+    Examples
+    --------
+    The G-box and W-box planted in the example targets are found enriched
+    over the controls, while the TATA-box is not:
+
+    >>> import universalmotif as um
+    >>> motifs = [um.example_motifs()[i] for i in (0, 3, 5)]
+    >>> targets = um.example_sequences("targets")
+    >>> controls = um.example_sequences("controls")
+    >>> res = um.enrich_motifs(motifs, targets, controls, nthreads=1)
+    >>> res.select("motif", "target_seq_hits", "bkg_seq_hits").rows()
+    [('G-box', 21, 3), ('W-box', 30, 9)]
+    >>> res["log2_enrichment"].round(1).to_list()
+    [2.8, 1.7]
     """
     if test not in ("seqs", "sites"):
         raise ValueError("test must be 'seqs' or 'sites'")
@@ -169,6 +184,17 @@ def motif_coocc(
     ``a_only``, ``b_only``, ``both``, ``neither``, ``odds_ratio``,
     ``pvalue`` and ``qvalue``, sorted by q-value then P-value, with untested
     pairs and their null P-values last.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motifs = [um.example_motifs()[i] for i in (3, 5)]
+    >>> targets = um.example_sequences("targets")
+    >>> res = um.motif_coocc(motifs, targets, nthreads=1)
+    >>> res.select("motif_a", "motif_b", "a_only", "b_only", "both", "neither").row(0)
+    ('G-box', 'W-box', 13, 22, 8, 57)
+    >>> round(res["pvalue"][0], 3)
+    0.256
     """
     if (sequences is None) == (hits is None):
         raise ValueError("give exactly one of sequences and hits")
@@ -268,6 +294,20 @@ def motif_peaks(
         ``log2_enrichment``, ``pvalue``, ``qvalue`` and ``centers``.
         ``motif_i`` is the 0-based rank of the name among those in ``hits``,
         and ``centers`` holds the rounded hit centres used.
+
+    Examples
+    --------
+    W-box sites planted towards the middle of the example targets give a
+    central peak:
+
+    >>> import universalmotif as um
+    >>> wbox = um.example_motifs()[5]
+    >>> hits = um.scan_sequences(wbox, um.example_sequences("targets"), nthreads=1)
+    >>> peaks = um.motif_peaks(hits, seq_length=1000, nthreads=1)
+    >>> peaks.select("motif", "nhits", "best_window", "best_center", "hits_in").row(0)
+    ('W-box', 30, 490, 500.0, 27)
+    >>> f"{peaks['pvalue'][0]:.1e}"
+    '1.3e-04'
     """
     if mode not in ("central", "local"):
         raise ValueError("mode must be 'central' or 'local'")

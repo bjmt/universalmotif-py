@@ -59,6 +59,15 @@ def read_jaspar(file: PathLike, skip: int = 0) -> list[Motif]:
     twenty. Motifs are returned as PCMs
     with ``nsites`` set to the largest column sum. ``skip`` drops lines from
     the start of the file.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motifs = um.read_jaspar(um.example_file("jaspar"))
+    >>> [m.name for m in motifs]
+    ['TATA-box', 'AP-1', 'CRE', 'G-box']
+    >>> motifs[0].type, motifs[0].nsites, motifs[0].consensus
+    ('PCM', 23.0, 'KTATAWAWRN')
     """
     return _core._read_jaspar(_read_text(file, skip))
 
@@ -69,6 +78,15 @@ def read_homer(file: PathLike, skip: int = 0) -> list[Motif]:
     The log-odds detection threshold is kept in ``extrainfo`` as
     ``"logodds.threshold"``, and site counts and P-values are read from
     HOMER's statistics column when present.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motifs = um.read_homer(um.example_file("homer"))
+    >>> [(m.name, m.type) for m in motifs[:2]]
+    [('TATA-box', 'PPM'), ('AP-1', 'PPM')]
+    >>> round(float(motifs[0].extrainfo["logodds.threshold"]), 2)
+    7.46
     """
     return _core._read_homer(_read_text(file, skip))
 
@@ -79,19 +97,46 @@ def read_transfac(file: PathLike, skip: int = 0) -> list[Motif]:
     The accession in ``AC`` is used as the name if there is one, with the
     identifier in ``ID`` or the factor name in ``NA`` as the alternate name;
     ``HC`` and ``OS`` give the family and organism.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motifs = um.read_transfac(um.example_file("transfac"))
+    >>> [(m.name, m.family) for m in motifs]
+    [('TATA-box', 'TBP'), ('AP-1', 'bZIP'), ('CRE', 'bZIP'), ('G-box', 'bZIP')]
+    >>> motifs[0].type, motifs[0].organism
+    ('PCM', 'synthetic')
     """
     return _core._read_transfac(_read_text(file, skip))
 
 
 def read_cisbp(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read CIS-BP motifs, using the ``TF``, ``TF Name``, ``Family`` and
-    ``Species`` fields as the name, alternate name, family and organism."""
+    ``Species`` fields as the name, alternate name, family and organism.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motifs = um.read_cisbp(um.example_file("cisbp"))
+    >>> [m.name for m in motifs]
+    ['TATA-box', 'AP-1', 'CRE', 'G-box']
+    >>> motifs[0].type, motifs[0].family, motifs[0].organism
+    ('PPM', 'TBP', 'synthetic')
+    """
     return _core._read_cisbp(_read_text(file, skip))
 
 
 def read_uniprobe(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read UniPROBE motifs from minimal files or from full output, whose
-    enrichment scores are kept in ``extrainfo``."""
+    enrichment scores are kept in ``extrainfo``.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motifs = um.read_uniprobe(um.example_file("uniprobe"))
+    >>> [(m.name, m.consensus) for m in motifs[:2]]
+    [('TATA-box', 'KTATAWAWRN'), ('AP-1', 'NTGASTCAN')]
+    """
     return _core._read_uniprobe(_read_text(file, skip))
 
 
@@ -128,6 +173,15 @@ def read_meme(
             ``strand``, ``position``, ``pvalue`` and ``site``.
         - ``"sites_meta_combined"``: a DataFrame of ``sequence``, ``pvalue``
             and ``diagram``.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motifs = um.read_meme(um.example_file("meme"))
+    >>> [m.name for m in motifs]
+    ['TATA-box', 'AP-1', 'CRE', 'G-box']
+    >>> motifs[1].type, motifs[1].nsites, motifs[1].consensus
+    ('PPM', 49.0, 'NTGASTCAN')
     """
     text = _read_text(file, skip)
     motifs = _core._read_meme(text, cwm)
@@ -199,6 +253,18 @@ def read_matrix(
         Whether the values come with letter labels, which are skipped.
     comment
         Lines starting with this string are ignored.
+
+    Examples
+    --------
+    The example file has each motif's name on its own line, followed by
+    one row of counts per letter:
+
+    >>> import universalmotif as um
+    >>> motifs = um.read_matrix(um.example_file("matrix"))
+    >>> [m.name for m in motifs]
+    ['TATA-box', 'AP-1', 'CRE', 'G-box']
+    >>> motifs[0].type, motifs[0].consensus
+    ('PCM', 'KTATAWAWRN')
     """
     return _core._read_matrix(
         _read_text(file, skip), positions, alphabet, type, sep, headers, rownames, comment
@@ -224,6 +290,22 @@ def write_meme(
     ``strand`` overrides the ``strands:`` line. When appending to an existing
     file only the motifs are written. Equal signs in names become periods and
     spaces become dashes.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()[:2]
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     path = Path(tmp) / "motifs.meme"
+    ...     um.write_meme(motifs, path)
+    ...     lines = path.read_text().splitlines()
+    ...     back = um.read_meme(path)
+    >>> lines[:3]
+    ['MEME version 5', '', 'ALPHABET= ACGT']
+    >>> [(m.name, m.type) for m in back]
+    [('TATA-box', 'PPM'), ('AP-1', 'PPM')]
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "MEME")
@@ -237,7 +319,25 @@ def write_meme(
 def write_jaspar(
     motifs: Motif | Iterable[Motif], file: PathLike, overwrite: bool = False, append: bool = False
 ) -> None:
-    """Write DNA, RNA or amino acid motifs as JASPAR count matrices."""
+    """Write DNA, RNA or amino acid motifs as JASPAR count matrices.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()[:2]
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     path = Path(tmp) / "motifs.jaspar"
+    ...     um.write_jaspar(motifs, path)
+    ...     for line in path.read_text().splitlines()[:5]:
+    ...         print(line)
+    >TATA-box
+    A [  2  2 23  1 18 11 20  8 10  7 ]
+    C [  1  0  0  1  3  1  3  1  0  3 ]
+    G [ 11  0  0  1  1  1  0  1 13  5 ]
+    T [  9 21  0 20  1 10  0 13  0  8 ]
+    """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "JASPAR")
     _write_text(file, _core._write_jaspar(ms), overwrite, append)
@@ -260,6 +360,19 @@ def write_homer(
     ``"logodds_abs"`` it is ``threshold`` itself, and with ``"pvalue"`` it is
     a score that random sites from a uniform background reach with at most
     that probability. Give one value or one per motif.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()[:2]
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     path = Path(tmp) / "motifs.motif"
+    ...     um.write_homer(motifs, path, threshold=0.9)
+    ...     back = um.read_homer(path)
+    >>> [(m.name, round(float(m.extrainfo["logodds.threshold"]), 2)) for m in back]
+    [('TATA-box', 8.39), ('AP-1', 8.34)]
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "HOMER")
@@ -276,7 +389,26 @@ def write_transfac(
     altname_tag: str = "NA",
 ) -> None:
     """Write DNA or RNA motifs as TRANSFAC count matrices. ``name_tag`` and
-    ``altname_tag`` choose the fields used for the name and alternate name."""
+    ``altname_tag`` choose the fields used for the name and alternate name.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()[:2]
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     path = Path(tmp) / "motifs.transfac"
+    ...     um.write_transfac(motifs, path)
+    ...     for line in path.read_text().splitlines()[:3]:
+    ...         print(line)
+    ...     back = um.read_transfac(path)
+    ID TATA-box
+    HC TBP
+    OS synthetic
+    >>> [(m.name, m.type, m.nsites) for m in back]
+    [('TATA-box', 'PCM', 23.0), ('AP-1', 'PCM', 49.0)]
+    """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "TRANSFAC")
     _write_text(file, _core._write_transfac(ms, name_tag, altname_tag), overwrite, append)
@@ -290,6 +422,19 @@ def write_cisbp(
     The name, alternate name, family and organism go in the ``TF``,
     ``TF Name``, ``Family`` and ``Species`` fields. Files written here can be
     read back with [`read_cisbp()`][universalmotif.read_cisbp].
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()[:2]
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     path = Path(tmp) / "motifs.txt"
+    ...     um.write_cisbp(motifs, path)
+    ...     back = um.read_cisbp(path)
+    >>> [(m.name, m.type, m.family) for m in back]
+    [('TATA-box', 'PPM', 'TBP'), ('AP-1', 'PPM', 'bZIP')]
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "CIS-BP")
@@ -304,6 +449,19 @@ def write_uniprobe(
 
     Files written here can be read back with
     [`read_uniprobe()`][universalmotif.read_uniprobe].
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()[:2]
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     path = Path(tmp) / "motifs.txt"
+    ...     um.write_uniprobe(motifs, path)
+    ...     back = um.read_uniprobe(path)
+    >>> [(m.name, m.type, m.consensus) for m in back]
+    [('TATA-box', 'PPM', 'KTATAWAWRN'), ('AP-1', 'PPM', 'NTGASTCAN')]
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "UniPROBE")
@@ -325,6 +483,16 @@ def read_fasta(
     custom alphabet. Packed sequences hold a genome in a quarter of the
     memory, and names must then be unique. To scan a
     file just once, pass its path to [`scan_sequences()`][universalmotif.scan_sequences] instead.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> seqs = um.read_fasta(um.example_file("fasta"))
+    >>> len(seqs), len(seqs["target_001"])
+    (100, 1000)
+    >>> packed = um.read_fasta(um.example_file("fasta"), packed=True)
+    >>> len(packed), packed.alphabet
+    (100, 'DNA')
     """
     if skip < 0:
         raise ValueError("skip must be zero or positive")
@@ -342,7 +510,24 @@ def write_fasta(
 ) -> None:
     """Write sequences to a FASTA file, wrapping lines at ``width``
     characters, or not at all when it is 0. Unnamed sequences are called
-    ``seq1``, ``seq2`` and so on."""
+    ``seq1``, ``seq2`` and so on.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import universalmotif as um
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     path = Path(tmp) / "seqs.fa"
+    ...     um.write_fasta({"first": "ACGTACGTAC", "second": "TTGA"}, path, width=4)
+    ...     print(path.read_text(), end="")
+    >first
+    ACGT
+    ACGT
+    AC
+    >second
+    TTGA
+    """
     if isinstance(sequences, Mapping):
         records = [(str(k), str(v)) for k, v in sequences.items()]
     else:
@@ -368,6 +553,22 @@ def write_matrix(
     string when given one, or not at all when ``False``. ``sep`` is written
     after each motif unless it is ``None``, ``type`` converts the motifs first,
     and ``digits`` sets the number of decimal places.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()[:2]
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     path = Path(tmp) / "motifs.txt"
+    ...     um.write_matrix(motifs, path, headers=">", digits=1)
+    ...     lines = path.read_text().splitlines()
+    ...     back = um.read_matrix(path, headers=">")
+    >>> lines[0], lines[1].split()
+    ('>TATA-box', ['2.0', '2.0', '23.0', '1.0', '18.0', '11.0', '20.0', '8.0', '10.0', '7.0'])
+    >>> [(m.name, m.type) for m in back]
+    [('TATA-box', 'PCM'), ('AP-1', 'PCM')]
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "Raw matrix")

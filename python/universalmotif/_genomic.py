@@ -169,6 +169,21 @@ def motif_proximity(
         and ``dist_to_nearest`` holds the number of positions from each
         hit's middle to its nearest anchor, which is 0 inside it and
         negative upstream in the anchor's orientation.
+
+    Examples
+    --------
+    Treating each example target as a chromosome with an anchor at its
+    middle, the W-box hits sit closer to the anchors than chance:
+
+    >>> import universalmotif as um
+    >>> motifs = [um.example_motifs()[i] for i in (3, 5)]
+    >>> targets = um.example_sequences("targets")
+    >>> anchors = [(name, 500, 500) for name in targets]
+    >>> res = um.motif_proximity(anchors=anchors, motifs=motifs, sequences=targets, nthreads=1)
+    >>> res.select("motif", "nhits", "best_dist", "hits_near").row(0)
+    ('W-box', 30, 250, 27)
+    >>> f"{res['pvalue'][0]:.1e}"
+    '2.2e-05'
     """
     if method not in ("binomial", "permutation", "ks"):
         raise ValueError("method must be 'binomial', 'permutation' or 'ks'")
@@ -345,6 +360,21 @@ def match_bkg(
         as a list or as a dict when the universe has names. In a dict,
         repeats get ``.1``, ``.2`` and so on, and genome windows are named
         ``chrom:start-end``.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> targets = um.example_sequences("targets")
+    >>> controls = um.example_sequences("controls")
+    >>> bkg = um.match_bkg(targets, controls, seed=1)
+    >>> len(bkg), list(bkg)[:2]
+    (100, ['control_047', 'control_090'])
+
+    With ``return_indices``, the matches can be checked:
+
+    >>> idx = um.match_bkg(targets, controls, seed=1, return_indices=True)
+    >>> idx.select("target_i", "target_gc", "universe_i", "universe_gc").row(0)
+    (0, 0.339, 46, 0.344)
     """
     _, seqs = _sequence_pairs(sequences)
     if not seqs:

@@ -66,6 +66,21 @@ def compare_motifs(
         ``strand``, ``overlap``, ``score``, ``subject_consensus``,
         ``target_consensus``, ``pvalue`` and ``qvalue``, where ``score`` is
         the mean column correlation.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()[:4]
+    >>> um.compare_motifs(motifs).round(2).tolist()
+    [[1.0, 0.33, 0.11, 0.19], [0.33, 1.0, 0.46, 0.25], [0.11, 0.46, 1.0, 0.58], [0.19, 0.25, 0.58, 1.0]]
+
+    With ``compare_to``, each match passing ``qvalue`` gets a row:
+
+    >>> wbox = um.example_motifs()[5]
+    >>> site = um.create_motif(["CTTTGACCAA", "GTTTGACCAA", "CTTTGACTAA"], name="site")
+    >>> hits = um.compare_motifs([wbox, site], compare_to="W-box")
+    >>> hits["target"].to_list(), hits["score"].round(2).to_list()
+    (['W-box', 'site'], [1.0, 0.65])
     """
     ms = _motif_list(motifs)
     names = _make_unique([m.name for m in ms])
@@ -115,6 +130,15 @@ def merge_motifs(
     probabilities are averaged, weighted by ``nsites`` if ``weighted``. Motifs
     that cannot overlap the anchor by ``min_overlap`` columns are left out.
     The default name joins the merged motifs' names.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> v1 = um.create_motif(["CTTTGACCAA", "GTTTGACCAA", "CTTTGACTAA"], name="v1")
+    >>> v2 = um.create_motif(["TTTGACCAAT", "TTTGACTAAT", "TTTGACCAAA"], name="v2")
+    >>> merged = um.merge_motifs([v1, v2], new_name="W-box merged")
+    >>> merged.name, merged.consensus, merged.type
+    ('W-box merged', 'STTTGACYAAW', 'PPM')
     """
     return _core._merge_motifs(_motif_list(motifs), min_overlap, rc, new_name, weighted, nthreads)
 
@@ -140,6 +164,17 @@ def merge_similar(
     Returns one motif per cluster, or with ``return_clusters`` a summary
     DataFrame of the input motifs with 0-based ``motif_i`` and ``cluster``
     columns.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> v1 = um.create_motif(["CTTTGACCAA", "GTTTGACCAA", "CTTTGACTAA"], name="v1")
+    >>> v2 = um.create_motif(["TTTGACCAAT", "TTTGACTAAT", "TTTGACCAAA"], name="v2")
+    >>> gbox = um.example_motifs()[3]
+    >>> [m.name for m in um.merge_similar([v1, v2, gbox])]
+    ['merged_v1+v2', 'G-box']
+    >>> um.merge_similar([v1, v2, gbox], return_clusters=True)["cluster"].to_list()
+    [0, 0, 1]
     """
     ms = _motif_list(motifs)
     clusters, merged = _core._merge_similar(
@@ -183,6 +218,16 @@ class MotifTree:
         Agglomeration method.
     motifs
         The motifs at the tips, for trees made from motifs.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> dist = [[0.0, 0.1, 0.8], [0.1, 0.0, 0.7], [0.8, 0.7, 0.0]]
+    >>> tree = um.motif_tree(dist, labels=["a", "b", "c"])
+    >>> tree.merge.tolist(), tree.height.tolist()
+    ([[-1, -2], [-3, 1]], [0.1, 0.8])
+    >>> tree.newick
+    '(c:0.4,(a:0.05,b:0.05):0.35);'
     """
 
     labels: list[str]
@@ -195,7 +240,20 @@ class MotifTree:
     motifs: list[Motif] | None = field(default=None, repr=False)
 
     def write_newick(self, file) -> None:
-        """Write the Newick string to a file."""
+        """Write the Newick string to a file.
+
+        Examples
+        --------
+        >>> import tempfile
+        >>> from pathlib import Path
+        >>> import universalmotif as um
+        >>> tree = um.motif_tree(um.example_motifs()[:3])
+        >>> with tempfile.TemporaryDirectory() as tmp:
+        ...     path = Path(tmp) / "motifs.nwk"
+        ...     tree.write_newick(path)
+        ...     path.read_text().strip() == tree.newick
+        True
+        """
         with open(file, "w") as f:
             f.write(self.newick + "\n")
 
@@ -209,6 +267,16 @@ class MotifTree:
         first appear among the motifs. Cutting by height needs increasing
         merge heights, which the centroid and median methods do not
         guarantee.
+
+        Examples
+        --------
+        >>> import universalmotif as um
+        >>> dist = [[0.0, 0.1, 0.8], [0.1, 0.0, 0.7], [0.8, 0.7, 0.0]]
+        >>> tree = um.motif_tree(dist, labels=["a", "b", "c"])
+        >>> tree.cutree(k=2).tolist()
+        [0, 0, 1]
+        >>> tree.cutree(h=0.05).tolist()
+        [0, 1, 2]
         """
         if (k is None) == (h is None):
             raise ValueError("give exactly one of k and h")
@@ -265,6 +333,16 @@ class MotifTree:
         Returns
         -------
         The matplotlib axes.
+
+        Examples
+        --------
+        >>> import matplotlib.pyplot as plt
+        >>> import universalmotif as um
+        >>> tree = um.motif_tree(um.example_motifs())
+        >>> ax = tree.plot(groups=tree.cutree(k=3), legend=False)
+        >>> type(ax).__name__
+        'Axes'
+        >>> plt.close("all")
         """
         from ._plot import plot_tree
 
@@ -308,6 +386,17 @@ def motif_tree(
     attribute to label tips with, such as ``"name"``, ``"altname"`` or
     ``"family"``. Duplicate motif names get ``.1``, ``.2`` and so on, while
     the first of each is left as it is.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> tree = um.motif_tree(um.example_motifs()[:6])
+    >>> tree
+    MotifTree(labels=['TATA-box', 'AP-1', 'CRE', 'G-box', 'E-box', 'W-box'], method='complete')
+    >>> [tree.labels[i] for i in tree.order]
+    ['TATA-box', 'AP-1', 'W-box', 'E-box', 'CRE', 'G-box']
+    >>> tree.height.round(3).tolist()
+    [0.096, 0.211, 0.354, 0.384, 0.447]
     """
     if isinstance(motifs, np.ndarray) or (
         isinstance(motifs, Sequence) and motifs and not isinstance(motifs[0], Motif)

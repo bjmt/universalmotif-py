@@ -11,7 +11,50 @@ class ArrowTable:
     def __arrow_c_stream__(self, requested_schema: object | None = None) -> object: ...
 
 class Motif:
-    """A sequence motif. Motifs are immutable."""
+    """A sequence motif.
+
+    Motifs are immutable. The functions in the package, such as
+    [`convert_type()`][universalmotif.convert_type] or
+    [`trim_motifs()`][universalmotif.trim_motifs], return new motifs, and
+    `replace()` returns a copy with some of the metadata changed. New motifs
+    are made with [`create_motif()`][universalmotif.create_motif] or read from
+    a file.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motif = um.example_motifs()[3]
+    >>> print(motif)
+           Motif name:   G-box
+               Family:   bZIP
+             Organism:   synthetic
+             Alphabet:   DNA
+                 Type:   PCM
+              Strands:   +-
+             Total IC:   7.9
+          Pseudocount:   1
+            Consensus:   NCACGTGN
+         Target sites:   71
+    <BLANKLINE>
+       N  C  A  C  G  T  G  N
+    A 17  6 62  0  2  0 12 27
+    C  9 62  3 69  1 15  1 10
+    G 23  1  2  0 64  3 58 21
+    T 22  2  4  2  4 53  0 13
+
+    The matrix has one row per letter and one column per position:
+
+    >>> motif.letters, motif.matrix.shape
+    (['A', 'C', 'G', 'T'], (4, 8))
+    >>> motif.matrix[:, 2].tolist()
+    [62.0, 3.0, 2.0, 4.0]
+
+    Metadata is changed by making a copy:
+
+    >>> renamed = motif.replace(name="G-box copy", organism=None)
+    >>> renamed.name, renamed.organism, motif.name
+    ('G-box copy', None, 'G-box')
+    """
 
     @property
     def name(self) -> str: ...

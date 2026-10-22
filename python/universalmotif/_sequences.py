@@ -44,7 +44,16 @@ def _restore(sequences, names: list[str], seqs: list[str]):
 
 def get_klets(letters: str | Sequence[str], k: int = 1) -> list[str]:
     """All k-lets of some letters, in order, with the first position varying
-    slowest. The letters are used in the order given."""
+    slowest. The letters are used in the order given.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> um.get_klets("AC", k=2)
+    ['AA', 'AC', 'CA', 'CC']
+    >>> len(um.get_klets("ACGT", k=3))
+    64
+    """
     if k < 1:
         raise ValueError("k must be at least 1")
     letters = "".join(letters)
@@ -57,6 +66,17 @@ def count_klets(string: str, k: int = 1, alph: str | Sequence[str] | None = None
     Every k-let of ``alph``, which defaults to the letters in the string,
     gets a row in sorted order; k-lets with letters outside ``alph`` are not
     counted. Returns a DataFrame with columns ``klets`` and ``counts``.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> um.count_klets("AACGTTAC").rows()
+    [('A', 3), ('C', 2), ('G', 1), ('T', 2)]
+    >>> counts = um.count_klets("AACGTTAC", k=2)
+    >>> counts.shape
+    (16, 2)
+    >>> counts.filter(counts["counts"] > 0).rows()
+    [('AA', 1), ('AC', 2), ('CG', 1), ('GT', 1), ('TA', 1), ('TT', 1)]
     """
     if k < 1:
         raise ValueError("k must be at least 1")
@@ -77,6 +97,14 @@ def calc_windows(n: int, window: int = 1, overlap: int = 0, return_incomp: bool 
 
     The last window may be shorter than the others unless ``return_incomp``
     is false. A window wider than ``n`` shrinks to ``n``.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> um.calc_windows(11, window=4, overlap=1).rows()
+    [(1, 4), (4, 7), (7, 10), (10, 11)]
+    >>> um.calc_windows(11, window=4, overlap=1, return_incomp=False).rows()
+    [(1, 4), (4, 7), (7, 10)]
     """
     n, window, overlap = int(n), int(window), int(overlap)
     if n < 1:
@@ -98,7 +126,16 @@ def calc_windows(n: int, window: int = 1, overlap: int = 0, return_incomp: bool 
 
 def window_string(string: str, window: int = 1, overlap: int = 0, return_incomp: bool = True) -> list[str]:
     """Split a string into sliding windows, as laid out by
-    [`calc_windows()`][universalmotif.calc_windows]."""
+    [`calc_windows()`][universalmotif.calc_windows].
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> um.window_string("ACGTACGTACG", window=4)
+    ['ACGT', 'ACGT', 'ACG']
+    >>> um.window_string("ACGTACGTACG", window=4, overlap=1)
+    ['ACGT', 'TACG', 'GTAC', 'CG']
+    """
     if not string:
         raise ValueError("string cannot be empty")
     w = calc_windows(len(string), window, overlap, return_incomp)
@@ -123,6 +160,14 @@ def calc_complexity(
     complexity. ``alph`` gives the possible letters, by default those in the
     string. Returns a float for
     one string and a numpy array for several.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> round(um.calc_complexity("ACGTTGCAAC"), 3)
+    0.731
+    >>> um.calc_complexity(["ACGTTGCAAC", "ATATATATAT"], alph="ACGT").round(3).tolist()
+    [0.731, 0.399]
     """
     if complexity_method not in _COMPLEXITY_METHODS:
         raise ValueError(f"complexity_method must be one of {', '.join(_COMPLEXITY_METHODS)}")
@@ -150,6 +195,16 @@ def sequence_complexity(
     window, rounded. A window longer than a sequence shrinks to it. See
     [`calc_complexity()`][universalmotif.calc_complexity] for the methods. Returns a DataFrame with
     columns ``sequence``, ``start``, ``stop`` and ``complexity``.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> seqs = {"seq": "ACGTTGCAACATATATATATATATAT"}
+    >>> res = um.sequence_complexity(seqs, window_size=10, window_overlap=5)
+    >>> res.select("start", "stop").rows()
+    [(1, 10), (6, 15), (11, 20), (16, 25), (21, 26)]
+    >>> res["complexity"].round(3).to_list()
+    [0.731, 0.644, 0.399, 0.399, 0.36]
     """
     if method not in _COMPLEXITY_METHODS:
         raise ValueError(f"method must be one of {', '.join(_COMPLEXITY_METHODS)}")
@@ -238,6 +293,15 @@ def get_bkg(
         under each k-let. With windows, k-lets are sorted alphabetically
         whatever their size and each k-let's windows follow one another,
         with per-sequence counts grouped by sequence first.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> seqs = um.example_sequences()
+    >>> um.get_bkg(seqs, k=1).rows()
+    [('A', 32793, 0.32793), ('C', 17095, 0.17095), ('G', 17101, 0.17101), ('T', 33011, 0.33011)]
+    >>> um.get_bkg(seqs, k=[1, 2]).shape
+    (20, 3)
     """
     names, seqs = _sequence_pairs(sequences)
     ks = [int(k)] if isinstance(k, (int, np.integer)) else [int(x) for x in k]
@@ -294,6 +358,16 @@ def shuffle_sequences(
 
     Returns new sequences in the same form as the input, whether a string, a
     list or a dict with the same keys.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> seq = "AACCGGTTACGTACGT"
+    >>> shuffled = um.shuffle_sequences(seq, k=2, seed=1)
+    >>> shuffled
+    'ACCGTACGGTAACGTT'
+    >>> um.count_klets(shuffled, k=2).equals(um.count_klets(seq, k=2))
+    True
     """
     if method not in _SHUFFLE_METHODS:
         raise ValueError("method must be 'euler', 'markov' or 'linear'")
@@ -321,6 +395,18 @@ def create_sequences(
     [`get_klets()`][universalmotif.get_klets] gives; their number sets k, and
     sequences are drawn from the Markov model of order k-1 they define. Letters
     are uniform by default.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> um.create_sequences(seqnum=3, seqlen=12, seed=1)
+    ['TTTGGACAGCGC', 'TGGTAGCAAGTA', 'ATAGAAGGACGT']
+
+    AT-rich sequences, from letter frequencies:
+
+    >>> freqs = {"A": 0.4, "C": 0.1, "G": 0.1, "T": 0.4}
+    >>> um.create_sequences(seqnum=2, seqlen=12, freqs=freqs, seed=1)
+    ['TTTTGAAATAGA', 'TGGTATCAATTA']
     """
     letters = _ALPHABETS.get(alphabet, None) or _letters(alphabet)
     if len(letters) < 1:
@@ -347,6 +433,16 @@ def shuffle_motifs(motifs: Motif | Iterable[Motif], k: int = 2, seed: int | None
     The new motifs keep the original widths and types, with ``" [shuffled]"``
     added to their names. With ``k`` above 1, columns move in blocks of
     ``k`` and leftover columns stay at the ends.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()[:3]
+    >>> shuffled = um.shuffle_motifs(motifs, seed=1)
+    >>> [(m.name, m.width) for m in shuffled]
+    [('TATA-box [shuffled]', 10), ('AP-1 [shuffled]', 9), ('CRE [shuffled]', 8)]
+    >>> [m.consensus for m in shuffled]
+    ['KASTAACNNW', 'AWRTATCTG', 'ANCAGTTG']
     """
     single = isinstance(motifs, Motif)
     ms = [motifs] if single else [_check_motif(m) for m in motifs]
@@ -358,7 +454,17 @@ def shuffle_motifs(motifs: Motif | Iterable[Motif], k: int = 2, seed: int | None
 
 def sample_sites(motif: Motif, n: int = 100, seed: int | None = None) -> list[str]:
     """Draw ``n`` sites from a motif, each letter chosen with the motif's
-    probabilities at its position."""
+    probabilities at its position.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> wbox = um.example_motifs()[5]
+    >>> wbox.consensus
+    'GBTTGACYS'
+    >>> um.sample_sites(wbox, n=3, seed=1)
+    ['TTTTGACCG', 'CGTTGACCC', 'ACTTGACTG']
+    """
     if n < 0:
         raise ValueError("n must be non-negative")
     return _core._sample_sites(_check_motif(motif), n, _seed(seed))
@@ -406,6 +512,17 @@ def implant_motifs(
     ``sequence_i``, ``motif_i``, ``start``, ``width``, ``strand`` and
     ``planted``. The indices are 0-based, ``start`` is 1-based, and
     ``planted`` is the site as it reads on the forward strand.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> wbox = um.example_motifs()[5]
+    >>> seqs = um.create_sequences(seqnum=3, seqlen=20, seed=1)
+    >>> new, sites = um.implant_motifs(wbox, seqs, seed=1, return_indices=True)
+    >>> new
+    ['TTTGGATCTTGACTATCGAA', 'TGGTAGGTCAAAGTGAGCTG', 'AGCTCGACCGGTCTGTCTAG']
+    >>> sites.select("sequence_i", "start", "strand", "planted").rows()
+    [(0, 7, '+', 'TCTTGACTA'), (1, 5, '-', 'AGGTCAAAG'), (2, 2, '+', 'GCTCGACCG')]
     """
     if strand not in ("both", "+"):
         raise ValueError("strand must be 'both' or '+'")
@@ -486,6 +603,19 @@ def motif_finder(
     named ``motif_1``, ``motif_2`` and so on, with their q-values as
     E-values. ``seqs_pos`` and ``seqs_neg`` count sequences with a hit, and
     ``sites_pos`` and ``sites_neg`` count hits.
+
+    Examples
+    --------
+    A site planted in each of 20 random sequences is found again, here as
+    its reverse complement:
+
+    >>> import universalmotif as um
+    >>> site = um.create_motif("TTGACCAT", nsites=50)
+    >>> seqs = um.create_sequences(seqnum=20, seqlen=100, seed=1)
+    >>> seqs = um.implant_motifs(site, seqs, seed=1)
+    >>> res = um.motif_finder(seqs, min_width=6, max_width=10, seed=1)
+    >>> res.select("consensus", "seqs_pos", "seqs_neg").rows()
+    [('TGGTCAA', 20, 0)]
     """
     if min_width < 3 or max_width > 30 or min_width > max_width:
         raise ValueError("widths must satisfy 3 <= min_width <= max_width <= 30")

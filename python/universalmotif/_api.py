@@ -93,6 +93,37 @@ def create_motif(
         order or a mapping from letters to values. Uniform by default.
     seed
         Random seed, for random motifs only.
+
+    Examples
+    --------
+    A motif from a consensus sequence:
+
+    >>> import universalmotif as um
+    >>> motif = um.create_motif("TATAWAW", name="TATA", nsites=10)
+    >>> print(motif)
+           Motif name:   TATA
+             Alphabet:   DNA
+                 Type:   PPM
+              Strands:   +-
+             Total IC:   12
+          Pseudocount:   0
+            Consensus:   TATAWAW
+         Target sites:   10
+    <BLANKLINE>
+      T A T A   W A   W
+    A 0 1 0 1 0.5 1 0.5
+    C 0 0 0 0 0.0 0 0.0
+    G 0 0 0 0 0.0 0 0.0
+    T 1 0 1 0 0.5 0 0.5
+
+    A count matrix from aligned sites:
+
+    >>> import universalmotif as um
+    >>> motif = um.create_motif(["TATAAA", "TATAAT", "TATATA"], type="PCM")
+    >>> motif.nsites, motif.consensus
+    (3.0, 'TATAWW')
+    >>> motif.matrix.tolist()
+    [[0.0, 3.0, 0.0, 3.0, 2.0, 2.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [3.0, 0.0, 3.0, 0.0, 1.0, 1.0]]
     """
     opts = dict(
         type=type,
@@ -170,6 +201,18 @@ def convert_type(motifs, type, pseudocount=None, relative_entropy=False):
     -----
     A motif without ``nsites`` is treated as having 100 sites when counts are
     needed. The consensus and total IC are kept from the input motif.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> ap1 = um.example_motifs()[1]
+    >>> ap1.type, ap1.consensus
+    ('PCM', 'NTGASTCAN')
+    >>> ppm = um.convert_type(ap1, "PPM")
+    >>> ppm.matrix[:, 1].round(3).tolist()
+    [0.065, 0.025, 0.005, 0.905]
+    >>> [m.type for m in um.convert_type(um.example_motifs()[:3], "PWM")]
+    ['PWM', 'PWM', 'PWM']
     """
     return _apply(
         motifs, lambda m: _core._convert_type(m, type, pseudocount, relative_entropy)
@@ -181,6 +224,13 @@ def motif_rc(motifs, ignore_alphabet: bool = False):
 
     With ``ignore_alphabet=True`` other alphabets are accepted, and their
     rows and columns are simply reversed.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> wbox = um.example_motifs()[5]
+    >>> wbox.consensus, um.motif_rc(wbox).consensus
+    ('GBTTGACYS', 'SRGTCAAVC')
     """
     return _apply(motifs, lambda m: _core._motif_rc(m, ignore_alphabet))
 
@@ -210,6 +260,15 @@ def trim_motifs(motifs, min_ic: float = 0.25, trim_from: TrimFrom = "both"):
     chosen ends until a column at or above it is reached. Motifs that are
     trimmed away completely are dropped from a list with a warning; a single
     motif that is trimmed away raises ``ValueError``.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> ap1 = um.example_motifs()[1]
+    >>> ap1.consensus, um.trim_motifs(ap1).consensus
+    ('NTGASTCAN', 'TGASTCA')
+    >>> um.trim_motifs(ap1, trim_from="left").consensus
+    'TGASTCAN'
     """
     return _drop_trimmed(motifs, lambda m: _core._trim_motif(m, min_ic, trim_from))
 
@@ -226,6 +285,23 @@ def trim_cwm(
     which is ``abs_threshold`` if given and otherwise ``trim_threshold``
     times the largest column sum. Everything between the first and last kept
     columns is retained.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> cwm = um.create_motif(
+    ...     [[0.01, 0.0, 0.6, 0.0, 0.02],
+    ...      [0.0, 0.5, 0.0, 0.0, 0.0],
+    ...      [0.02, 0.0, 0.0, 0.7, 0.0],
+    ...      [0.0, 0.0, -0.1, 0.0, 0.01]],
+    ...     alphabet="DNA",
+    ...     type="CWM",
+    ... )
+    >>> trimmed = um.trim_cwm(cwm)
+    >>> trimmed.width
+    3
+    >>> trimmed.matrix.tolist()
+    [[0.0, 0.6, 0.0], [0.5, 0.0, 0.0], [0.0, 0.0, 0.7], [0.0, -0.1, 0.0]]
     """
     return _drop_trimmed(
         motifs, lambda m: _core._trim_cwm(m, trim_threshold, abs_threshold, trim_from)
@@ -239,6 +315,17 @@ def round_motif(motifs, pct_tolerance: float | str = 0.05):
     string such as ``"5%"``, are set to zero and each column is
     renormalised. The motif is
     returned in its original type.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motif = um.create_motif(
+    ...     [[0.9, 0.02], [0.04, 0.48], [0.03, 0.48], [0.03, 0.02]], alphabet="DNA"
+    ... )
+    >>> um.round_motif(motif).matrix.tolist()
+    [[1.0, 0.0], [0.0, 0.5], [0.0, 0.5], [0.0, 0.0]]
+    >>> um.round_motif(motif, "3%").matrix.tolist()
+    [[0.9, 0.0], [0.04, 0.5], [0.03, 0.5], [0.03, 0.0]]
     """
     if isinstance(pct_tolerance, str):
         pct_tolerance = float(pct_tolerance.strip().rstrip("%")) / 100
@@ -249,6 +336,16 @@ def normalize(motifs):
     """Re-apply each motif's pseudocount by converting to counts and back.
 
     A pseudocount of zero is replaced by 1. PCMs are returned unchanged.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> motif = um.create_motif(["TGACGTCA"] * 10)
+    >>> motif.pseudocount, motif.matrix[:, 0].tolist()
+    (0.0, [0.0, 0.0, 0.0, 1.0])
+    >>> normalised = um.normalize(motif)
+    >>> normalised.pseudocount, normalised.matrix[:, 0].round(3).tolist()
+    (1.0, [0.023, 0.023, 0.023, 0.932])
     """
     return _apply(motifs, _core._normalize)
 
@@ -261,7 +358,18 @@ def position_icscore(
     nsites: float = 100.0,
     relative_entropy: bool = False,
 ) -> float:
-    """Information content of a single motif column."""
+    """Information content of a single motif column.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> um.position_icscore([0.25, 0.25, 0.25, 0.25])
+    0.0
+    >>> um.position_icscore([1.0, 0.0, 0.0, 0.0], pseudocount=0)
+    2.0
+    >>> round(um.position_icscore([0.5, 0.0, 0.0, 0.5], pseudocount=0), 3)
+    1.0
+    """
     return _core._position_icscore(
         [float(x) for x in position],
         [] if bkg is None else [float(x) for x in bkg],
@@ -279,7 +387,17 @@ def get_consensus(
     pseudocount: float = 1.0,
 ) -> str:
     """IUPAC consensus letter of a DNA or RNA column, with its values in A,
-    C, G and T or U order."""
+    C, G and T or U order.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> columns = [[0.9, 0.05, 0.05, 0.0], [0.5, 0.0, 0.5, 0.0], [0.25, 0.25, 0.25, 0.25]]
+    >>> [um.get_consensus(col) for col in columns]
+    ['A', 'R', 'N']
+    >>> um.get_consensus([1, 0, 1, 18], alphabet="RNA", type="PCM")
+    'U'
+    """
     if alphabet not in ("DNA", "RNA"):
         raise ValueError("alphabet must be one of DNA, RNA")
     return _core._get_consensus(
@@ -290,17 +408,47 @@ def get_consensus(
 def get_consensus_aa(
     position: Sequence[float], type: MotifType = "PPM", pseudocount: float = 0.0
 ) -> str:
-    """Consensus letter of an amino acid column, including B, Z, J and X."""
+    """Consensus letter of an amino acid column, including B, Z, J and X.
+
+    Examples
+    --------
+    The column is in alphabetical order of the one-letter codes, so here
+    D and N share the probability:
+
+    >>> import universalmotif as um
+    >>> col = [0.0] * 20
+    >>> col[2] = col[11] = 0.5
+    >>> um.get_consensus_aa(col)
+    'B'
+    """
     return _core._get_consensus_aa([float(x) for x in position], type, pseudocount)
 
 
 def consensus_to_ppm(letter: str) -> np.ndarray:
-    """The DNA probability column for an IUPAC letter."""
+    """The DNA probability column for an IUPAC letter.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> um.consensus_to_ppm("W").tolist()
+    [0.499, 0.001, 0.001, 0.499]
+    >>> um.consensus_to_ppm("N").tolist()
+    [0.25, 0.25, 0.25, 0.25]
+    """
     return np.array(_core._consensus_to_ppm(letter))
 
 
 def consensus_to_ppm_aa(letter: str) -> np.ndarray:
-    """The amino acid probability column for a consensus letter."""
+    """The amino acid probability column for a consensus letter.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> col = um.consensus_to_ppm_aa("B")
+    >>> letters = "ACDEFGHIKLMNPQRSTVWY"
+    >>> {a: round(float(p), 3) for a, p in zip(letters, col) if p > 0.1}
+    {'D': 0.491, 'N': 0.491}
+    """
     return np.array(_core._consensus_to_ppm_aa(letter))
 
 
@@ -325,6 +473,19 @@ def summarise_motifs(motifs, na_rm: bool = True) -> pl.DataFrame:
     """Summarise motifs as a polars DataFrame, one row per motif.
 
     With ``na_rm=True``, columns that are empty for every motif are dropped.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> summary = um.summarise_motifs(um.example_motifs())
+    >>> summary.shape
+    (12, 8)
+    >>> summary.columns
+    ['name', 'family', 'organism', 'consensus', 'alphabet', 'strand', 'icscore', 'nsites']
+    >>> summary["consensus"].to_list()[:4]
+    ['KTATAWAWRN', 'NTGASTCAN', 'TGACGTCA', 'NCACGTGN']
+    >>> [round(x, 2) for x in summary["icscore"].to_list()[:4]]
+    [8.83, 9.65, 10.73, 7.9]
     """
     if isinstance(motifs, Motif):
         motifs = [motifs]

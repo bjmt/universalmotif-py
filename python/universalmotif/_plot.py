@@ -102,6 +102,17 @@ def view_logo(
     ``y_spacer`` set the gaps between letters, ``sort_positions`` stacks
     each position's letters by height, and ``fit_to_height`` scales every
     position to that height. The axes are left bare.
+
+    Examples
+    --------
+    >>> import matplotlib.pyplot as plt
+    >>> import numpy as np
+    >>> import universalmotif as um
+    >>> x = np.array([[1.0, 0.2, -0.5], [0.1, 1.5, 0.3]])
+    >>> ax = um.view_logo(x, letters=["A", "Bc"])
+    >>> type(ax).__name__
+    'Axes'
+    >>> plt.close("all")
     """
     m, rows = _logo_input(x, letters)
     if colour_scheme is not None:
@@ -317,6 +328,22 @@ def view_motifs(
     -------
     matplotlib.figure.Figure | dict[str, numpy.ndarray]
         A matplotlib figure, or with ``return_raw`` a dict of matrices.
+
+    Examples
+    --------
+    >>> import matplotlib.pyplot as plt
+    >>> import universalmotif as um
+    >>> motifs = um.example_motifs()[:3]
+    >>> fig = um.view_motifs(motifs)
+    >>> type(fig).__name__, len(fig.axes)
+    ('Figure', 3)
+    >>> plt.close(fig)
+
+    With ``return_raw``, the aligned matrices share one width:
+
+    >>> raw = um.view_motifs(motifs, use_type="PPM", return_raw=True)
+    >>> {name: m.shape for name, m in raw.items()}
+    {'TATA-box [RC]': (4, 11), 'AP-1': (4, 11), 'CRE': (4, 11)}
     """
     if names_pos not in ("top", "right"):
         raise ValueError("names_pos must be 'top' or 'right'")
@@ -386,6 +413,17 @@ def plot_motif_peaks(
     One panel per motif, or per motif named in ``motifs``, shows a
     histogram of the hit centres, with the most enriched window shaded and
     the P-value and enrichment in the title.
+
+    Examples
+    --------
+    >>> import matplotlib.pyplot as plt
+    >>> import universalmotif as um
+    >>> wbox = um.example_motifs()[5]
+    >>> hits = um.scan_sequences(wbox, um.example_sequences("targets"), nthreads=1)
+    >>> fig = um.plot_motif_peaks(um.motif_peaks(hits, seq_length=1000, nthreads=1))
+    >>> type(fig).__name__
+    'Figure'
+    >>> plt.close(fig)
     """
     if "centers" not in peaks.columns:
         raise ValueError("peaks has no centers column; was it made by motif_peaks()?")
@@ -658,6 +696,19 @@ def plot_motif_proximity(
 
     Distances are signed and negative upstream of stranded anchors. With
     ``log_x`` the absolute distances plus one are drawn on a log scale.
+
+    Examples
+    --------
+    >>> import matplotlib.pyplot as plt
+    >>> import universalmotif as um
+    >>> motifs = [um.example_motifs()[i] for i in (3, 5)]
+    >>> targets = um.example_sequences("targets")
+    >>> anchors = [(name, 500, 500) for name in targets]
+    >>> res = um.motif_proximity(anchors=anchors, motifs=motifs, sequences=targets, nthreads=1)
+    >>> fig = um.plot_motif_proximity(res)
+    >>> type(fig).__name__
+    'Figure'
+    >>> plt.close(fig)
     """
     if "dist_to_nearest" not in proximity.columns:
         raise ValueError("proximity has no dist_to_nearest column; was it made by motif_proximity()?")
@@ -728,6 +779,17 @@ def plot_match_bkg(
     Give the targets and the background to draw their GC fraction and length,
     or the ``indices`` table from ``match_bkg(..., return_indices=True)`` to
     also see any covariates. ``by`` picks the axes to draw.
+
+    Examples
+    --------
+    >>> import matplotlib.pyplot as plt
+    >>> import universalmotif as um
+    >>> targets = um.example_sequences("targets")
+    >>> bkg = um.match_bkg(targets, um.example_sequences("controls"), seed=1)
+    >>> fig = um.plot_match_bkg(targets, bkg, by=["gc"])
+    >>> type(fig).__name__
+    'Figure'
+    >>> plt.close(fig)
     """
     labels = {"gc": "GC fraction", "length": "Sequence length"}
     panels: list[tuple[str, np.ndarray, np.ndarray]] = []

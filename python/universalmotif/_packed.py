@@ -21,6 +21,15 @@ class PackedSequences(Mapping[str, str]):
     it is looked up. DNA, RNA and protein letters come back in upper case,
     so soft-masking is lost, while the letters of custom alphabets and any
     other letters, such as ``N``, come back as they were.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> packed = um.pack_sequences({"chr1": "ACGTNNacgt", "chr2": "TTGACC"})
+    >>> list(packed), packed.lengths
+    (['chr1', 'chr2'], {'chr1': 10, 'chr2': 6})
+    >>> packed["chr1"]
+    'ACGTNNACGT'
     """
 
     __slots__ = ("_inner",)
@@ -45,7 +54,15 @@ class PackedSequences(Mapping[str, str]):
 
     def subseq(self, name: str, start: int, end: int) -> str:
         """Positions ``start`` to ``end`` of the sequence called ``name``,
-        counted from 1 and inclusive, decoding only those."""
+        counted from 1 and inclusive, decoding only those.
+
+        Examples
+        --------
+        >>> import universalmotif as um
+        >>> packed = um.pack_sequences({"chr1": "ACGTNNACGT"})
+        >>> packed.subseq("chr1", 3, 8)
+        'GTNNAC'
+        """
         i = self._inner.index(name)
         if i is None:
             raise KeyError(name)
@@ -87,6 +104,17 @@ def pack_sequences(
     alphabet, and must match the motifs the sequences will be scanned with.
     Unnamed sequences are called ``seq1``, ``seq2`` and so on; names must be
     unique.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> seqs = um.example_sequences()
+    >>> packed = um.pack_sequences(seqs)
+    >>> len(packed), packed.alphabet
+    (100, 'DNA')
+    >>> wbox = um.example_motifs()[5]
+    >>> um.scan_sequences(wbox, packed).equals(um.scan_sequences(wbox, seqs))
+    True
     """
     from ._analysis import _sequence_pairs
 
