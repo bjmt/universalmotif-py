@@ -193,6 +193,8 @@ def _scan_sequences(
     rc: bool,
     no_overlaps: tuple[str, bool, bool] | None,
     nthreads: int,
+    use_gaps: bool,
+    correct_gaps: bool,
     motif_names: list[str],
     sequence_names: list[str],
 ) -> ArrowTable: ...
@@ -203,6 +205,8 @@ def _scan_packed(
     rc: bool,
     no_overlaps: tuple[str, bool, bool] | None,
     nthreads: int,
+    use_gaps: bool,
+    correct_gaps: bool,
     motif_names: list[str],
 ) -> ArrowTable: ...
 def _scan_fasta(
@@ -212,6 +216,8 @@ def _scan_fasta(
     rc: bool,
     no_overlaps: tuple[str, bool, bool] | None,
     nthreads: int,
+    use_gaps: bool,
+    correct_gaps: bool,
     motif_names: list[str],
 ) -> ArrowTable: ...
 def _dedup(

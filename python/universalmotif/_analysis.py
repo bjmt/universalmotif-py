@@ -151,6 +151,8 @@ def scan_sequences(
     no_overlaps_by: str = "pvalue",
     no_overlaps_by_strand: bool = False,
     no_overlaps_by_motif: bool = False,
+    use_gaps: bool = True,
+    correct_gaps: bool = False,
 ) -> pl.DataFrame:
     """Scan sequences for motif hits.
 
@@ -179,6 +181,16 @@ def scan_sequences(
         hits across strands and across motifs.
     nthreads
         Threads to use; 0 means all available.
+    use_gaps
+        Scan gapped motifs (see :func:`add_gap`) with every combination of
+        their gap sizes; otherwise their gaps are ignored. A gapped hit's
+        ``match`` shows the gap as dots, and its P-value is that of its score
+        under the motif without the gap, as in the R package. Unlike the R
+        package, both strands are scanned.
+    correct_gaps
+        Bonferroni-correct gapped motifs' P-values for the number of
+        combinations of gap sizes tried: hits must reach ``pvalue`` divided
+        by that number, and their P-values are multiplied by it (up to 1).
 
     Returns
     -------
@@ -194,13 +206,13 @@ def scan_sequences(
     overlaps = (no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif) if no_overlaps else None
     motif_names = _make_unique([m.name for m in ms])
     if isinstance(sequences, PackedSequences):
-        hits = _core._scan_packed(ms, sequences._inner, pvalue, rc, overlaps, nthreads, motif_names)
+        hits = _core._scan_packed(ms, sequences._inner, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names)
     elif isinstance(sequences, os.PathLike):
         path = os.fspath(sequences)
-        hits = _core._scan_fasta(ms, path, pvalue, rc, overlaps, nthreads, motif_names)
+        hits = _core._scan_fasta(ms, path, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names)
     else:
         names, seqs = _sequence_pairs(sequences)
-        hits = _core._scan_sequences(ms, seqs, pvalue, rc, overlaps, nthreads, motif_names, names)
+        hits = _core._scan_sequences(ms, seqs, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names, names)
     return pl.DataFrame(hits).cast(_HIT_SCHEMA)
 
 

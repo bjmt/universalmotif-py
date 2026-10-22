@@ -85,6 +85,8 @@ fn scan_options(
     rc: bool,
     no_overlaps: Option<(String, bool, bool)>,
     nthreads: usize,
+    use_gaps: bool,
+    correct_gaps: bool,
 ) -> PyResult<ScanOptions> {
     let no_overlaps = no_overlaps
         .map(|(by, ignore_strand, ignore_motif)| {
@@ -109,6 +111,8 @@ fn scan_options(
         rc,
         no_overlaps,
         nthreads,
+        use_gaps,
+        correct_gaps,
     })
 }
 
@@ -152,7 +156,7 @@ fn hit_table(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, sequences, pvalue, rc, no_overlaps, nthreads, motif_names, sequence_names))]
+#[pyo3(signature = (motifs, sequences, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, motif_names, sequence_names))]
 #[allow(clippy::too_many_arguments)]
 fn _scan_sequences<'py>(
     py: Python<'py>,
@@ -162,11 +166,13 @@ fn _scan_sequences<'py>(
     rc: bool,
     no_overlaps: Option<(String, bool, bool)>,
     nthreads: usize,
+    use_gaps: bool,
+    correct_gaps: bool,
     motif_names: Vec<String>,
     sequence_names: Vec<String>,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
-    let opts = scan_options(pvalue, rc, no_overlaps, nthreads)?;
+    let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps)?;
     let t = py
         .detach(|| scan_table(&motifs, &sequences, &opts))
         .map_err(err)?;
@@ -175,7 +181,7 @@ fn _scan_sequences<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, packed, pvalue, rc, no_overlaps, nthreads, motif_names))]
+#[pyo3(signature = (motifs, packed, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, motif_names))]
 #[allow(clippy::too_many_arguments)]
 fn _scan_packed<'py>(
     py: Python<'py>,
@@ -185,10 +191,12 @@ fn _scan_packed<'py>(
     rc: bool,
     no_overlaps: Option<(String, bool, bool)>,
     nthreads: usize,
+    use_gaps: bool,
+    correct_gaps: bool,
     motif_names: Vec<String>,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
-    let opts = scan_options(pvalue, rc, no_overlaps, nthreads)?;
+    let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps)?;
     let p = packed.get();
     let t = py
         .detach(|| scan_encoded(&motifs, &p.seqs, &opts))
@@ -198,7 +206,7 @@ fn _scan_packed<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, path, pvalue, rc, no_overlaps, nthreads, motif_names))]
+#[pyo3(signature = (motifs, path, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, motif_names))]
 #[allow(clippy::too_many_arguments)]
 fn _scan_fasta<'py>(
     py: Python<'py>,
@@ -208,10 +216,12 @@ fn _scan_fasta<'py>(
     rc: bool,
     no_overlaps: Option<(String, bool, bool)>,
     nthreads: usize,
+    use_gaps: bool,
+    correct_gaps: bool,
     motif_names: Vec<String>,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
-    let opts = scan_options(pvalue, rc, no_overlaps, nthreads)?;
+    let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps)?;
     let mut f = py
         .detach(|| scan_fasta(&motifs, &path, &opts))
         .map_err(err)?;
