@@ -80,12 +80,26 @@ MEME site tables come back as polars DataFrames.
 ## Development
 
 Building needs a Rust toolchain and [uv](https://docs.astral.sh/uv/), and a
-checkout of [universalmotif-rs](../universalmotif-rs) next to this one.
+checkout of [universalmotif-rs](https://github.com/bjmt/universalmotif-rs)
+next to this one (the package builds against it, and the tests read the R
+reference values kept there).
 
 ```sh
-uv sync
-uv run maturin develop
-uv run pytest
+uv sync --group dev --no-install-project
+uv run --no-sync maturin develop --release
+uv run --no-sync pytest
+```
+
+## Documentation
+
+The documentation is built with MkDocs from `docs/`, with the API reference
+generated from the docstrings and the guides written as notebooks that are
+run on every build. To build it and preview it locally:
+
+```sh
+uv sync --group docs --no-install-project
+uv run --no-sync maturin develop --release
+uv run --no-sync mkdocs serve
 ```
 
 ## License

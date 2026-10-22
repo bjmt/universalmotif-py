@@ -57,14 +57,15 @@ def compare_motifs(
 
     Returns
     -------
-    Without ``compare_to``, an all-against-all numpy array (rows are
-    queries, columns targets) of the mean column correlation, P-value or
-    q-value (``matrix_out``). With ``compare_to`` (motif indices, 0-based,
-    or names), a DataFrame with one row per significant (``qvalue``) match:
-    ``subject``, ``subject_i``, ``target``, ``target_i``, ``offset``,
-    ``strand``, ``overlap``, ``score`` (mean column correlation),
-    ``subject_consensus``, ``target_consensus``, ``pvalue`` and ``qvalue``,
-    ordered by q-value.
+    numpy.ndarray | polars.DataFrame
+        Without ``compare_to``, an all-against-all numpy array (rows are
+        queries, columns targets) of the mean column correlation, P-value or
+        q-value (``matrix_out``). With ``compare_to`` (motif indices, 0-based,
+        or names), a DataFrame with one row per significant (``qvalue``) match:
+        ``subject``, ``subject_i``, ``target``, ``target_i``, ``offset``,
+        ``strand``, ``overlap``, ``score`` (mean column correlation),
+        ``subject_consensus``, ``target_consensus``, ``pvalue`` and ``qvalue``,
+        ordered by q-value.
     """
     ms = _motif_list(motifs)
     names = _make_unique([m.name for m in ms])
@@ -133,9 +134,9 @@ def merge_similar(
     """Cluster similar motifs and merge each cluster.
 
     This is the port of universalmotif's ``merge_similar_lite()``. Motifs
-    are linked when :func:`compare_motifs` gives them a q-value of at most
+    are linked when [`compare_motifs()`][universalmotif.compare_motifs] gives them a q-value of at most
     ``qvalue`` in either direction, clusters are the connected groups, and
-    each cluster of several motifs is merged with :func:`merge_motifs`.
+    each cluster of several motifs is merged with [`merge_motifs()`][universalmotif.merge_motifs].
 
     Returns one motif per cluster, or with ``return_clusters`` a summary
     DataFrame of the input motifs with ``motif_i`` and ``cluster`` columns
@@ -250,7 +251,7 @@ class MotifTree:
             number per motif.
         tip_logos
             Draw each motif's logo at its tip, aligned as in
-            :func:`view_motifs` (rectangular and slanted layouts only).
+            [`view_motifs()`][universalmotif.view_motifs] (rectangular and slanted layouts only).
             ``tip_logo_width`` is the width of one position in tree units
             and ``tip_logo_height`` the logo height in tip spacings.
         branch_length
@@ -293,7 +294,7 @@ def motif_tree(
     """Cluster motifs into a tree.
 
     This builds the tree that universalmotif's ``motif_tree_lite()`` draws:
-    Motifs are compared with :func:`compare_motifs`, mean column
+    Motifs are compared with [`compare_motifs()`][universalmotif.compare_motifs], mean column
     correlations become distances as ``(1 - score) / 2``, and the distances
     are clustered with R's ``hclust`` algorithm (``method`` is any of its
     methods: ``"complete"``, ``"average"``, ``"single"``, ``"ward.D"``,

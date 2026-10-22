@@ -8,12 +8,12 @@ from . import _core
 
 
 class PackedSequences(Mapping[str, str]):
-    """Named sequences packed for scanning, from :func:`read_fasta` with
-    ``packed=True`` or from :func:`pack_sequences`.
+    """Named sequences packed for scanning, from [`read_fasta()`][universalmotif.read_fasta] with
+    ``packed=True`` or from [`pack_sequences()`][universalmotif.pack_sequences].
 
     DNA and RNA take two bits per letter, so a human genome needs about
     0.8 GB instead of 3.1 GB as text; other alphabets take a byte per
-    letter. :func:`scan_sequences` scans them as they are, which makes them
+    letter. [`scan_sequences()`][universalmotif.scan_sequences] scans them as they are, which makes them
     the way to scan one large set of sequences many times.
 
     They are also a read-only mapping from names to sequences, so they can
@@ -81,7 +81,7 @@ def pack_sequences(
     alphabet: str = "DNA",
     nthreads: int = 1,
 ) -> PackedSequences:
-    """Pack sequences for scanning (see :class:`PackedSequences`).
+    """Pack sequences for scanning (see [`PackedSequences`][universalmotif.PackedSequences]).
 
     ``alphabet`` is ``"DNA"``, ``"RNA"``, ``"AA"`` or the letters of a custom
     alphabet, and must match the motifs the sequences will be scanned with.

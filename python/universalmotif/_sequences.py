@@ -97,7 +97,7 @@ def calc_windows(n: int, window: int = 1, overlap: int = 0, return_incomp: bool 
 
 
 def window_string(string: str, window: int = 1, overlap: int = 0, return_incomp: bool = True) -> list[str]:
-    """Split a string into sliding windows (see :func:`calc_windows`)."""
+    """Split a string into sliding windows (see [`calc_windows()`][universalmotif.calc_windows])."""
     if not string:
         raise ValueError("string cannot be empty")
     w = calc_windows(len(string), window, overlap, return_incomp)
@@ -146,7 +146,7 @@ def sequence_complexity(
     ``window_size`` below 1 is a fraction of each sequence's length, and so
     is ``window_overlap`` between 0 and 1 (by default half the window,
     rounded). A window longer than a sequence shrinks to it. See
-    :func:`calc_complexity` for the methods. Returns a DataFrame with
+    [`calc_complexity()`][universalmotif.calc_complexity] for the methods. Returns a DataFrame with
     columns ``sequence``, ``start``, ``stop`` and ``complexity``.
     """
     if method not in _COMPLEXITY_METHODS:
@@ -227,9 +227,10 @@ def get_bkg(
 
     Returns
     -------
-    A DataFrame with columns ``klet``, ``count`` and ``probability``, plus
-    ``sequence`` for per-sequence counts and ``start`` and ``stop`` for
-    windows. Rows are ordered as by the R package.
+    polars.DataFrame
+        A DataFrame with columns ``klet``, ``count`` and ``probability``, plus
+        ``sequence`` for per-sequence counts and ``start`` and ``stop`` for
+        windows. Rows are ordered as by the R package.
     """
     names, seqs = _sequence_pairs(sequences)
     ks = [int(k)] if isinstance(k, (int, np.integer)) else [int(x) for x in k]
@@ -310,7 +311,7 @@ def create_sequences(
 
     ``alphabet`` is ``"DNA"``, ``"RNA"``, ``"AA"`` or a string of letters.
     ``freqs`` gives the frequency of every k-let of the alphabet (letters
-    sorted, as from :func:`get_klets`), either in that order or as a mapping
+    sorted, as from [`get_klets()`][universalmotif.get_klets]), either in that order or as a mapping
     from k-lets; their number sets k, and sequences are drawn from the
     Markov model of order k-1 they define. Letters are uniform by default.
     """
@@ -465,7 +466,7 @@ def motif_finder(
     dropped.
 
     Without ``bkg_sequences``, the background is the positives shuffled
-    with :func:`shuffle_sequences` (Euler method, ``k=shuffle_k``,
+    with [`shuffle_sequences()`][universalmotif.shuffle_sequences] (Euler method, ``k=shuffle_k``,
     ``seed``). Parallelism is across widths.
 
     Returns a DataFrame in order of P-value, with the motifs (PPMs named

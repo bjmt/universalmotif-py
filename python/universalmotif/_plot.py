@@ -279,7 +279,7 @@ def view_motifs(
 
     This is the port of universalmotif's ``view_motifs_lite()``, extended to
     any alphabet. Several motifs are aligned to the one with the highest
-    information content (as :func:`compare_motifs` aligns them, trying
+    information content (as [`compare_motifs()`][universalmotif.compare_motifs] aligns them, trying
     reverse complements of DNA and RNA motifs with ``rc``), reverse
     complemented where that aligns better (their names get ``rc_text``),
     padded into a common frame and drawn one above the other.
@@ -302,7 +302,7 @@ def view_motifs(
         Letter colours. DNA, RNA and amino acids default to the R package's
         colours, other alphabets to a categorical palette.
     min_height, x_spacer, y_spacer, sort_positions, sort_positions_decreasing, fit_to_height, flip_neg
-        Letter layout, as in :func:`view_logo`. Letters are sorted by height
+        Letter layout, as in [`view_logo()`][universalmotif.view_logo]. Letters are sorted by height
         except for PCMs and PPMs, and PPM positions are scaled to a height of
         1, unless told otherwise.
     return_raw
@@ -311,7 +311,8 @@ def view_motifs(
 
     Returns
     -------
-    A matplotlib figure, or with ``return_raw`` a dict of matrices.
+    matplotlib.figure.Figure | dict[str, numpy.ndarray]
+        A matplotlib figure, or with ``return_raw`` a dict of matrices.
     """
     if names_pos not in ("top", "right"):
         raise ValueError("names_pos must be 'top' or 'right'")
@@ -376,7 +377,7 @@ def plot_motif_peaks(
     fill_window: str = "#ffe4a3",
     figsize: tuple[float, float] | None = None,
 ) -> Figure:
-    """Draw the positions of motif hits found by :func:`motif_peaks`.
+    """Draw the positions of motif hits found by [`motif_peaks()`][universalmotif.motif_peaks].
 
     One panel per motif (or per motif named in ``motifs``) shows a
     histogram of the hit centres, with the most enriched window shaded and
@@ -649,7 +650,7 @@ def plot_motif_proximity(
     figsize: tuple[float, float] | None = None,
 ) -> Figure:
     """Draw each motif's distances to the nearest anchor, from
-    :func:`motif_proximity`, with the most enriched zone shaded.
+    [`motif_proximity()`][universalmotif.motif_proximity], with the most enriched zone shaded.
 
     Distances are signed (negative upstream of stranded anchors); with
     ``log_x`` the absolute distances plus one are drawn on a log scale.
@@ -716,7 +717,7 @@ def plot_match_bkg(
     figsize: tuple[float, float] | None = None,
 ) -> Figure:
     """Compare the composition of targets and their matched background
-    from :func:`match_bkg`, as overlaid densities.
+    from [`match_bkg()`][universalmotif.match_bkg], as overlaid densities.
 
     Give the targets and the background (GC fraction and length are drawn),
     or the ``indices`` table from ``match_bkg(..., return_indices=True)``

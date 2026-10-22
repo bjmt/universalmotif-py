@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+# The package builds against the universalmotif crate checked out next to
+# it (see Cargo.toml), which also holds the R reference values the tests
+# use. While that repository is private, it is checked out with a read-only
+# deploy key stored in the UNIVERSALMOTIF_RS_DEPLOY_KEY secret.
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.10" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: macos-latest, python: "3.13" }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: universalmotif-py
+      - uses: actions/checkout@v4
+        with:
+          repository: bjmt/universalmotif-rs
+          ssh-key: ${{ secrets.UNIVERSALMOTIF_RS_DEPLOY_KEY }}
+          path: universalmotif-rs
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: universalmotif-py
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install dependencies
+        working-directory: universalmotif-py
+        run: uv sync --group dev --no-install-project
+      - name: Lint the bindings
+        working-directory: universalmotif-py
+        run: |
+          cargo fmt --check
+          PYO3_PYTHON="$PWD/.venv/bin/python" cargo clippy --all-targets -- -D warnings
+      - name: Build and test
+        working-directory: universalmotif-py
+        run: |
+          uv run --no-sync maturin develop --release
+          uv run --no-sync pytest -W error
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: universalmotif-py
+      - uses: actions/checkout@v4
+        with:
+          repository: bjmt/universalmotif-rs
+          ssh-key: ${{ secrets.UNIVERSALMOTIF_RS_DEPLOY_KEY }}
+          path: universalmotif-rs
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: universalmotif-py
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - name: Build the site
+        working-directory: universalmotif-py
+        run: |
+          uv sync --group docs --no-install-project
+          uv run --no-sync maturin develop --release
+          uv run --no-sync mkdocs build --strict
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docs-site
+          path: universalmotif-py/site

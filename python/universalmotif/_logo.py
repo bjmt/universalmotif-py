@@ -1,6 +1,6 @@
 """Letter polygons for sequence logos.
 
-A port of the polygon layout in universalmotif's ``view_motifs()``: letters
+A port of the polygon layout in universalmotif's [`view_motifs()`][universalmotif.view_motifs]: letters
 are drawn from outlines of the Roboto Medium font (the R package's
 ``fontDFroboto``), stacked by height within each position, with negative
 values stacked below zero.

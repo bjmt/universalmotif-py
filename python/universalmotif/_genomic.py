@@ -107,7 +107,7 @@ def motif_proximity(
 ) -> pl.DataFrame:
     """Test whether motif hits sit closer to genomic anchors than chance.
 
-    The genome-wide counterpart of :func:`motif_peaks`. Each hit counts at
+    The genome-wide counterpart of [`motif_peaks()`][universalmotif.motif_peaks]. Each hit counts at
     its middle position. For each distance ``d`` in ``dist_thresholds`` (by
     default 10, 25, 50, 100 and so on, up to half the smallest universe
     region), the near zone is every scanned position within ``d`` of an
@@ -128,7 +128,7 @@ def motif_proximity(
     Parameters
     ----------
     hits
-        Hits from :func:`scan_sequences` (``sequence`` holds the chromosome
+        Hits from [`scan_sequences()`][universalmotif.scan_sequences] (``sequence`` holds the chromosome
         names), with ``motif``, ``score``, ``start``, ``end`` and
         ``strand``. Give this, or ``motifs`` and ``sequences`` (a mapping
         from chromosome names to sequences) to scan with ``scan_pvalue`` and
@@ -156,14 +156,15 @@ def motif_proximity(
 
     Returns
     -------
-    A DataFrame of motifs with q-values up to ``qvalue``, in order of
-    P-value: ``motif``, ``motif_i`` (0-based rank of the name), ``method``,
-    ``count``, ``orientation``, ``nhits``, ``best_dist``, ``hits_near``,
-    ``hits_far``, ``frac_near``, ``expected_near``, ``enrichment``,
-    ``log2_enrichment``, ``pvalue``, ``qvalue``, ``ks_d`` and
-    ``dist_to_nearest`` (the number of positions from each hit's middle to
-    its nearest anchor, 0 inside it and negative upstream in the anchor's
-    orientation).
+    polars.DataFrame
+        A DataFrame of motifs with q-values up to ``qvalue``, in order of
+        P-value: ``motif``, ``motif_i`` (0-based rank of the name), ``method``,
+        ``count``, ``orientation``, ``nhits``, ``best_dist``, ``hits_near``,
+        ``hits_far``, ``frac_near``, ``expected_near``, ``enrichment``,
+        ``log2_enrichment``, ``pvalue``, ``qvalue``, ``ks_d`` and
+        ``dist_to_nearest`` (the number of positions from each hit's middle to
+        its nearest anchor, 0 inside it and negative upstream in the anchor's
+        orientation).
     """
     if method not in ("binomial", "permutation", "ks"):
         raise ValueError("method must be 'binomial', 'permutation' or 'ks'")
@@ -315,7 +316,7 @@ def match_bkg(
         Candidate background sequences, as a list or a mapping from names.
     genome
         Instead of ``universe``, a mapping from chromosome names to
-        sequences (such as :func:`read_fasta` of a genome) to draw
+        sequences (such as [`read_fasta()`][universalmotif.read_fasta] of a genome) to draw
         ``n_candidates`` random windows from (by default
         ``max(10000, 10 * len(sequences))``), with widths taken from the
         targets, on ``chromosomes`` (all by default) and avoiding
@@ -332,9 +333,10 @@ def match_bkg(
 
     Returns
     -------
-    The matched sequences, ``n_per_target`` per target in target order: a
-    list, or a dict when the universe has names (repeats get ``.1``,
-    ``.2`` and so on; genome windows are named ``chrom:start-end``).
+    list[str] | dict[str, str]
+        The matched sequences, ``n_per_target`` per target in target order: a
+        list, or a dict when the universe has names (repeats get ``.1``,
+        ``.2`` and so on; genome windows are named ``chrom:start-end``).
     """
     _, seqs = _sequence_pairs(sequences)
     if not seqs:

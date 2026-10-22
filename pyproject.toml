@@ -25,6 +25,17 @@ plot = ["matplotlib>=3.8"]
 
 [dependency-groups]
 dev = ["maturin>=1.9,<2", "matplotlib>=3.8", "pytest>=8", "scipy>=1.15.3"]
+docs = [
+    "maturin>=1.9,<2",
+    "matplotlib>=3.8",
+    # MkDocs 2 drops the plugin system these rely on.
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.27",
+    "mkdocs-jupyter>=0.25",
+    "ipykernel>=6.29",
+    "ruff>=0.6",
+]
 
 [tool.maturin]
 python-source = "python"

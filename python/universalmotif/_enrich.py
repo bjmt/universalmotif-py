@@ -51,7 +51,7 @@ def enrich_motifs(
 
     This is the port of universalmotif's ``enrich_motifs_lite()``, extended
     to any alphabet. Target
-    and background sequences are scanned with :func:`scan_sequences` (hits
+    and background sequences are scanned with [`scan_sequences()`][universalmotif.scan_sequences] (hits
     have P-values below ``pvalue``), and each motif gets a one-sided
     Fisher's exact test, with ``pseudocount`` added to every cell, on either
     the number of sequences with a hit (``test="seqs"``) or the number of
@@ -59,7 +59,7 @@ def enrich_motifs(
     Q-values are Benjamini-Hochberg adjusted across all motifs.
 
     Without ``bkg_sequences``, the background is the targets shuffled with
-    :func:`shuffle_sequences` (Euler method, ``k=shuffle_k``, ``seed``).
+    [`shuffle_sequences()`][universalmotif.shuffle_sequences] (Euler method, ``k=shuffle_k``, ``seed``).
 
     Returns a DataFrame of the motifs with q-values up to ``qvalue``, in
     order of P-value: ``motif``, ``motif_i`` (0-based), ``consensus``,
@@ -149,7 +149,7 @@ def motif_coocc(
     ``min_coocc`` sequences are not tested. Q-values are Benjamini-Hochberg
     adjusted across the tested pairs.
 
-    Give either ``sequences``, which are scanned with :func:`scan_sequences`
+    Give either ``sequences``, which are scanned with [`scan_sequences()`][universalmotif.scan_sequences]
     (``pvalue``, ``rc``, and with ``no_overlaps`` overlapping hits of the
     same motif removed), or a ``hits`` table with ``sequence_i`` (0-based)
     and either ``motif_i`` (0-based) or ``motif`` (names) columns, plus
@@ -245,7 +245,7 @@ def motif_peaks(
     Parameters
     ----------
     hits
-        A hit table such as from :func:`scan_sequences`, with ``motif``,
+        A hit table such as from [`scan_sequences()`][universalmotif.scan_sequences], with ``motif``,
         ``score``, ``start``, ``end`` (or ``stop``) and ``sequence`` (or
         ``sequence_i``) columns.
     seq_strand
@@ -256,12 +256,13 @@ def motif_peaks(
 
     Returns
     -------
-    A DataFrame of the motifs with q-values up to ``qvalue``, in order of
-    P-value: ``motif``, ``motif_i`` (0-based rank of the name among those
-    in ``hits``), ``mode``, ``seq_length``, ``nhits``, ``best_window``,
-    ``best_center``, ``hits_in``, ``hits_out``, ``expected_in``,
-    ``enrichment``, ``log2_enrichment``, ``pvalue``, ``qvalue`` and
-    ``centers`` (the rounded hit centres used).
+    polars.DataFrame
+        A DataFrame of the motifs with q-values up to ``qvalue``, in order of
+        P-value: ``motif``, ``motif_i`` (0-based rank of the name among those
+        in ``hits``), ``mode``, ``seq_length``, ``nhits``, ``best_window``,
+        ``best_center``, ``hits_in``, ``hits_out``, ``expected_in``,
+        ``enrichment``, ``log2_enrichment``, ``pvalue``, ``qvalue`` and
+        ``centers`` (the rounded hit centres used).
     """
     if mode not in ("central", "local"):
         raise ValueError("mode must be 'central' or 'local'")

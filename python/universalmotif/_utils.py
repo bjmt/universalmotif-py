@@ -129,7 +129,7 @@ def get_scores(motif: Motif, allow_nonfinite: bool = False) -> npt.NDArray[np.fl
 
 def get_matches(motif: Motif, score: float, allow_nonfinite: bool = False) -> list[str]:
     """Every word scoring at least ``score``. A score of ``inf`` (as
-    :func:`motif_pvalue` gives for an unreachable P-value) has no matches."""
+    [`motif_pvalue()`][universalmotif.motif_pvalue] gives for an unreachable P-value) has no matches."""
     return _core._get_matches(_one_motif(motif), float(score), allow_nonfinite)
 
 
@@ -207,7 +207,7 @@ def add_gap(motifs, gaploc: int | Sequence[int] | None = None, mingap: int | Seq
 
 def ungap(motifs, delete: bool = False):
     """Turn motifs' gaps off. The gap positions and sizes are kept, so
-    :func:`add_gap` can restore them, unless ``delete``."""
+    [`add_gap()`][universalmotif.add_gap] can restore them, unless ``delete``."""
     return _apply(motifs, lambda m: _core._ungap(m, delete))
 
 
@@ -314,7 +314,7 @@ def mask_ranges(sequences: Mapping[str, str], ranges, letter: str = "-") -> dict
 
 def shuffle_string(string: str, k: int = 1, method: str = "euler", seed: int | None = None) -> str:
     """Shuffle one string while keeping its k-let counts (see
-    :func:`shuffle_sequences`)."""
+    [`shuffle_sequences()`][universalmotif.shuffle_sequences])."""
     from ._sequences import shuffle_sequences
 
     if not isinstance(string, str):
@@ -325,7 +325,7 @@ def shuffle_string(string: str, k: int = 1, method: str = "euler", seed: int | N
 def slide_fun(string: str, fun: Callable[[str], Any], window: int = 1, overlap: int = 0,
               return_incomp: bool = True) -> list[Any]:
     """Apply ``fun`` to each sliding window of ``string`` (see
-    :func:`window_string`). A window longer than the string is shortened to
+    [`window_string()`][universalmotif.window_string]). A window longer than the string is shortened to
     it when ``return_incomp`` is set and is an error otherwise."""
     from ._sequences import window_string
 

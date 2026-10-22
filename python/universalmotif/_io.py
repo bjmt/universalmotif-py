@@ -117,15 +117,16 @@ def read_meme(
 
     Returns
     -------
-    A list of motifs, or with ``readsites`` or ``readsites_meta`` a dict with
-    the key ``"motifs"`` plus:
+    list[Motif] | dict
+        A list of motifs, or with ``readsites`` or ``readsites_meta`` a dict with
+        the key ``"motifs"`` plus:
 
-    - ``"sites"``: a dict from motif name to a DataFrame of ``sequence`` and
-      ``site``.
-    - ``"sites_meta"``: one DataFrame of ``motif``, ``sequence``, ``strand``,
-      ``position``, ``pvalue`` and ``site``.
-    - ``"sites_meta_combined"``: a DataFrame of ``sequence``, ``pvalue`` and
-      ``diagram``.
+        - ``"sites"``: a dict from motif name to a DataFrame of ``sequence``
+            and ``site``.
+        - ``"sites_meta"``: one DataFrame of ``motif``, ``sequence``,
+            ``strand``, ``position``, ``pvalue`` and ``site``.
+        - ``"sites_meta_combined"``: a DataFrame of ``sequence``, ``pvalue``
+            and ``diagram``.
     """
     text = _read_text(file, skip)
     motifs = _core._read_meme(text, cwm)
@@ -286,7 +287,7 @@ def write_cisbp(
 
     The name, alternate name, family and organism go in the ``TF``,
     ``TF Name``, ``Family`` and ``Species`` fields. The R package has no
-    CIS-BP writer; files written here can be read by its ``read_cisbp()``.
+    CIS-BP writer; files written here can be read by its [`read_cisbp()`][universalmotif.read_cisbp].
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "CIS-BP")
@@ -300,7 +301,7 @@ def write_uniprobe(
     by ``A:``, ``C:``, ``G:`` and ``T:`` rows of probabilities.
 
     The R package has no UniPROBE writer; files written here can be read by
-    its ``read_uniprobe()``.
+    its [`read_uniprobe()`][universalmotif.read_uniprobe].
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "UniPROBE")
@@ -317,10 +318,10 @@ def read_fasta(
     bytes and decompressed as they are read.
 
     With ``packed``, the sequences are packed for scanning as they are read
-    and returned as :class:`PackedSequences` for ``alphabet`` (``"DNA"``,
+    and returned as [`PackedSequences`][universalmotif.PackedSequences] for ``alphabet`` (``"DNA"``,
     ``"RNA"``, ``"AA"`` or the letters of a custom alphabet), which hold a
     genome in a quarter of the memory; names must then be unique. To scan a
-    file just once, pass its path to :func:`scan_sequences` instead.
+    file just once, pass its path to [`scan_sequences()`][universalmotif.scan_sequences] instead.
     """
     if skip < 0:
         raise ValueError("skip must be zero or positive")

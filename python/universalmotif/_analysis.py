@@ -57,8 +57,9 @@ def motif_pvalue(
 
     Returns
     -------
-    A float for one motif and one value, a numpy array when values pair up
-    with motifs, or a list of arrays when each motif gets several values.
+    float | numpy.ndarray | list[numpy.ndarray]
+        A float for one motif and one value, a numpy array when values pair up
+        with motifs, or a list of arrays when each motif gets several values.
     """
     if (score is None) == (pvalue is None):
         raise ValueError("give exactly one of score and pvalue")
@@ -165,24 +166,24 @@ def scan_sequences(
     ----------
     sequences
         A sequence, a list of sequences, or a mapping from names to
-        sequences (such as the result of :func:`read_fasta`). DNA, RNA and
+        sequences (such as the result of [`read_fasta()`][universalmotif.read_fasta]). DNA, RNA and
         protein letters are matched case-insensitively and custom alphabets
         exactly; anything else (such as ``N`` or ``X``) never forms part of
-        a hit. :class:`PackedSequences` are scanned without decoding them,
-        and a FASTA file given as a path (such as a :class:`pathlib.Path`),
+        a hit. [`PackedSequences`][universalmotif.PackedSequences] are scanned without decoding them,
+        and a FASTA file given as a path (such as a ``pathlib.Path``),
         gzipped or not, is read and scanned a batch at a time, so a genome
         can be scanned in a few hundred MB.
     rc
         Also scan the reverse strand.
     no_overlaps
-        Remove overlapping hits with :func:`dedup_hits`, keeping the best
+        Remove overlapping hits with [`dedup_hits()`][universalmotif.dedup_hits], keeping the best
         by ``no_overlaps_by`` (``"pvalue"`` or ``"score"``).
         ``no_overlaps_by_strand`` and ``no_overlaps_by_motif`` also compare
         hits across strands and across motifs.
     nthreads
         Threads to use; 0 means all available.
     use_gaps
-        Scan gapped motifs (see :func:`add_gap`) with every combination of
+        Scan gapped motifs (see [`add_gap()`][universalmotif.add_gap]) with every combination of
         their gap sizes; otherwise their gaps are ignored. A gapped hit's
         ``match`` shows the gap as dots, and its P-value is that of its score
         under the motif without the gap, as in the R package. Unlike the R
@@ -194,13 +195,14 @@ def scan_sequences(
 
     Returns
     -------
-    A DataFrame with one row per hit: ``motif``, ``motif_i``, ``sequence``,
-    ``sequence_i``, ``start``, ``end``, ``strand``, ``score``,
-    ``score_pct`` (percentage of the motif's maximum score), ``match`` (the
-    matched sequence, reverse complemented on the ``-`` strand) and
-    ``pvalue``. ``motif_i`` and ``sequence_i`` are 0-based indices into the
-    inputs; ``start`` and ``end`` are 1-based, inclusive and on the forward
-    strand. Rows are ordered by motif, sequence and start.
+    polars.DataFrame
+        A DataFrame with one row per hit: ``motif``, ``motif_i``, ``sequence``,
+        ``sequence_i``, ``start``, ``end``, ``strand``, ``score``,
+        ``score_pct`` (percentage of the motif's maximum score), ``match`` (the
+        matched sequence, reverse complemented on the ``-`` strand) and
+        ``pvalue``. ``motif_i`` and ``sequence_i`` are 0-based indices into the
+        inputs; ``start`` and ``end`` are 1-based, inclusive and on the forward
+        strand. Rows are ordered by motif, sequence and start.
     """
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
     overlaps = (no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif) if no_overlaps else None
