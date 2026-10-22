@@ -1,8 +1,8 @@
-"""The Python API against reference values from universalmotif."""
+"""The Python API against reference values from the R package."""
 
 import pytest
 
-import pyumotif as um
+import universalmotif as um
 
 from conftest import assert_motif_matches, load_reference, motif_from_record, num, nums
 
@@ -33,8 +33,8 @@ def test_create_motif():
             matrix = [list(row) for row in zip(*cols)]
             call = lambda: um.create_motif(matrix, letters=inp["rows"], **kwargs)
             if len(cols) == 1 and case.get("motif") is None:
-                # universalmotif fails on single-column matrices with row
-                # names (see umotif's DIVERGENCES.md).
+                # The R package fails on single-column matrices with row
+                # names (see DIVERGENCES.md in the Rust crate).
                 assert call().type == "PCM"
                 continue
         else:
@@ -79,7 +79,7 @@ def test_ops():
         elif op == "normalize":
             call = lambda: um.normalize(motif)
         elif op == "trim_motifs":
-            # universalmotif fills in nsites = 100 here; umotif does not.
+            # The R package fills in nsites = 100 here; this port does not.
             skip_nsites = motif.nsites is None
             call = lambda: um.trim_motifs(
                 motif, min_ic=num(args["min_ic"]), trim_from=args["trim_from"]

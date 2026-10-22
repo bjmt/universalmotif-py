@@ -221,16 +221,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pyumotif"
-version = "0.1.0"
-dependencies = [
- "numpy",
- "pyo3",
- "rand",
- "umotif",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -322,7 +312,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "umotif"
+name = "unicode-ident"
+version = "1.0.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+
+[[package]]
+name = "universalmotif"
 version = "0.1.0"
 dependencies = [
  "rand",
@@ -331,7 +327,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "unicode-ident"
-version = "1.0.27"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+name = "universalmotif-py"
+version = "0.1.0"
+dependencies = [
+ "numpy",
+ "pyo3",
+ "rand",
+ "universalmotif",
+]

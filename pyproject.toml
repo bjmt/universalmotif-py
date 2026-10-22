@@ -3,7 +3,7 @@ requires = ["maturin>=1.9,<2"]
 build-backend = "maturin"
 
 [project]
-name = "pyumotif"
+name = "universalmotif"
 version = "0.1.0"
 description = "Sequence motif manipulation and analysis, a Python port of universalmotif"
 readme = "README.md"
@@ -27,7 +27,7 @@ dev = ["maturin>=1.9,<2", "pytest>=8"]
 
 [tool.maturin]
 python-source = "python"
-module-name = "pyumotif._umotif"
+module-name = "universalmotif._core"
 features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]

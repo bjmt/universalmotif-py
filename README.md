@@ -1,9 +1,10 @@
-# pyumotif
+# universalmotif (Python)
 
-pyumotif is a Python package for working with sequence motifs. It is a port
-of the [universalmotif](https://bioconductor.org/packages/universalmotif/)
-R/Bioconductor package, built on the
-[umotif](../motifkit) Rust library, and it uses numpy arrays for motif
+This is the Python version of universalmotif, a package for working with
+sequence motifs. It is a port of the
+[universalmotif](https://bioconductor.org/packages/universalmotif/)
+R/Bioconductor package, built on the Rust version
+([universalmotif-rs](../universalmotif-rs)), and it uses numpy arrays for motif
 matrices and polars DataFrames for tables.
 
 The package is at an early stage. Creating motifs, converting between motif
@@ -15,7 +16,7 @@ will follow.
 ## Example
 
 ```python
-import pyumotif as um
+import universalmotif as um
 
 motif = um.create_motif("TATAWAW", nsites=50)
 pwm = um.convert_type(motif, "PWM", pseudocount=1)
@@ -29,16 +30,16 @@ um.write_meme([motif, sites], "motifs.meme")
 motifs = um.read_meme("motifs.meme")
 ```
 
-Function names follow universalmotif, with dotted R argument names written
-with underscores (`min.ic` becomes `min_ic`). Where universalmotif has both a
-full and a `_lite` version of a function, pyumotif will provide the lite
+Function names follow the R package, with dotted R argument names written
+with underscores (`min.ic` becomes `min_ic`). Where the R package has both a
+full and a `_lite` version of a function, this package will provide the lite
 version under the plain name. Readers always return a list of motifs, and
 MEME site tables come back as polars DataFrames.
 
 ## Development
 
-pyumotif needs a Rust toolchain and [uv](https://docs.astral.sh/uv/). It
-expects a checkout of umotif next to it, currently at `../motifkit`.
+Building needs a Rust toolchain and [uv](https://docs.astral.sh/uv/), and a
+checkout of [universalmotif-rs](../universalmotif-rs) next to this one.
 
 ```sh
 uv sync

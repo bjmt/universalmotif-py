@@ -4,12 +4,12 @@
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::PyBool;
-use umotif::Motif;
-use umotif::io::{cisbp, homer, jaspar, matrix, meme, transfac, uniprobe};
+use universalmotif::Motif;
+use universalmotif::io::{cisbp, homer, jaspar, matrix, meme, transfac, uniprobe};
 
 use crate::{PyMotif, err, parse_alphabet, parse_type};
 
-fn wrap(r: umotif::Result<Vec<Motif>>) -> PyResult<Vec<PyMotif>> {
+fn wrap(r: universalmotif::Result<Vec<Motif>>) -> PyResult<Vec<PyMotif>> {
     r.map(|v| v.into_iter().map(PyMotif::from).collect())
         .map_err(err)
 }

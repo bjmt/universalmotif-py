@@ -1,16 +1,16 @@
 [package]
-name = "pyumotif"
+name = "universalmotif-py"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
 publish = false
 
 [lib]
-name = "_umotif"
+name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-umotif = { path = "../motifkit" }  # move to ../umotif once that directory is free
+universalmotif = { path = "../universalmotif-rs" }
 numpy = "0.30.0"
 pyo3 = { version = "0.30.1", features = ["abi3-py310"] }
 rand = "0.10.3"

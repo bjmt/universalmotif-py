@@ -1,6 +1,5 @@
-"""Helpers for the reference values that umotif exports from
-universalmotif (see scripts/make_reference.R in the umotif repository,
-currently checked out at ../motifkit)."""
+"""Helpers for the reference values that the Rust crate exports from the R
+package (see scripts/make_reference.R in ../universalmotif-rs)."""
 
 import json
 import math
@@ -9,9 +8,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from pyumotif import _umotif
+from universalmotif import _core
 
-REFERENCE_DIR = Path(__file__).resolve().parents[2] / "motifkit" / "tests" / "reference"
+REFERENCE_DIR = Path(__file__).resolve().parents[2] / "universalmotif-rs" / "tests" / "reference"
 
 
 def load_reference(name, key="cases"):
@@ -74,7 +73,7 @@ def motif_from_record(r):
         },
         "matrix": [nums(c) for c in r["matrix"]],
     }
-    return _umotif._motif_from_state(state)
+    return _core._motif_from_state(state)
 
 
 def assert_motif_matches(got, record, ctx="", skip_nsites=False):

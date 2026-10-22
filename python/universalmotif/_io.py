@@ -1,4 +1,4 @@
-"""Reading and writing motif files. Parsing and formatting happen in umotif;
+"""Reading and writing motif files. Parsing and formatting happen in the Rust crate;
 this module deals with files, line skipping and appending."""
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ from typing import Literal
 
 import polars as pl
 
-from . import _umotif
+from . import _core
 from ._api import MotifType, _check_motif
-from ._umotif import Motif
+from ._core import Motif
 
 Positions = Literal["columns", "rows"]
 PathLike = str | os.PathLike[str]
@@ -58,7 +58,7 @@ def read_jaspar(file: PathLike, skip: int = 0) -> list[Motif]:
     with ``nsites`` set to the largest column sum. ``skip`` drops lines from
     the start of the file.
     """
-    return _umotif._read_jaspar(_read_text(file, skip))
+    return _core._read_jaspar(_read_text(file, skip))
 
 
 def read_homer(file: PathLike, skip: int = 0) -> list[Motif]:
@@ -68,7 +68,7 @@ def read_homer(file: PathLike, skip: int = 0) -> list[Motif]:
     ``"logodds.threshold"``, and site counts and P-values are read from
     HOMER's statistics column when present.
     """
-    return _umotif._read_homer(_read_text(file, skip))
+    return _core._read_homer(_read_text(file, skip))
 
 
 def read_transfac(file: PathLike, skip: int = 0) -> list[Motif]:
@@ -78,19 +78,19 @@ def read_transfac(file: PathLike, skip: int = 0) -> list[Motif]:
     identifier (``ID``) or factor name (``NA``) as the alternate name; ``HC``
     and ``OS`` give the family and organism.
     """
-    return _umotif._read_transfac(_read_text(file, skip))
+    return _core._read_transfac(_read_text(file, skip))
 
 
 def read_cisbp(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read CIS-BP motifs, using the ``TF``, ``TF Name``, ``Family`` and
     ``Species`` fields as the name, alternate name, family and organism."""
-    return _umotif._read_cisbp(_read_text(file, skip))
+    return _core._read_cisbp(_read_text(file, skip))
 
 
 def read_uniprobe(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read UniPROBE motifs from full output (keeping the enrichment score in
     ``extrainfo``) or from minimal files."""
-    return _umotif._read_uniprobe(_read_text(file, skip))
+    return _core._read_uniprobe(_read_text(file, skip))
 
 
 def read_meme(
@@ -127,7 +127,7 @@ def read_meme(
       ``diagram``.
     """
     text = _read_text(file, skip)
-    motifs = _umotif._read_meme(text, cwm)
+    motifs = _core._read_meme(text, cwm)
     if not (readsites or readsites_meta):
         return motifs
     out: dict[str, object] = {"motifs": motifs}
@@ -137,11 +137,11 @@ def read_meme(
                 {"sequence": [s[0] for s in rows], "site": [s[1] for s in rows]},
                 schema={"sequence": pl.String, "site": pl.String},
             )
-            for name, rows in _umotif._read_meme_sites(text)
+            for name, rows in _core._read_meme_sites(text)
         }
     if readsites_meta:
         rows = [
-            (name, *r) for name, table in _umotif._read_meme_site_pvalues(text) for r in table
+            (name, *r) for name, table in _core._read_meme_site_pvalues(text) for r in table
         ]
         out["sites_meta"] = pl.DataFrame(
             rows,
@@ -156,7 +156,7 @@ def read_meme(
             orient="row",
         )
         out["sites_meta_combined"] = pl.DataFrame(
-            _umotif._read_meme_combined(text),
+            _core._read_meme_combined(text),
             schema={"sequence": pl.String, "pvalue": pl.Float64, "diagram": pl.String},
             orient="row",
         )
@@ -196,7 +196,7 @@ def read_matrix(
     comment
         Lines starting with this string are ignored.
     """
-    return _umotif._read_matrix(
+    return _core._read_matrix(
         _read_text(file, skip), positions, alphabet, type, sep, headers, rownames, comment
     )
 
@@ -224,7 +224,7 @@ def write_meme(
     ms = _motif_list(motifs)
     _warn_gaps(ms, "MEME")
     header = not (append and Path(file).exists())
-    text = _umotif._write_meme(
+    text = _core._write_meme(
         ms, version, None if bkg is None else [float(b) for b in bkg], strand, cwm, header
     )
     _write_text(file, text, overwrite, append)
@@ -236,7 +236,7 @@ def write_jaspar(
     """Write DNA, RNA or amino acid motifs as JASPAR count matrices."""
     ms = _motif_list(motifs)
     _warn_gaps(ms, "JASPAR")
-    _write_text(file, _umotif._write_jaspar(ms), overwrite, append)
+    _write_text(file, _core._write_jaspar(ms), overwrite, append)
 
 
 def write_homer(
@@ -258,7 +258,7 @@ def write_homer(
     ms = _motif_list(motifs)
     _warn_gaps(ms, "HOMER")
     t = [float(threshold)] if isinstance(threshold, (int, float)) else [float(x) for x in threshold]
-    _write_text(file, _umotif._write_homer(ms, t, threshold_type), overwrite, append)
+    _write_text(file, _core._write_homer(ms, t, threshold_type), overwrite, append)
 
 
 def write_transfac(
@@ -273,7 +273,7 @@ def write_transfac(
     ``altname_tag`` choose the fields used for the name and alternate name."""
     ms = _motif_list(motifs)
     _warn_gaps(ms, "TRANSFAC")
-    _write_text(file, _umotif._write_transfac(ms, name_tag, altname_tag), overwrite, append)
+    _write_text(file, _core._write_transfac(ms, name_tag, altname_tag), overwrite, append)
 
 
 def write_cisbp(
@@ -282,12 +282,12 @@ def write_cisbp(
     """Write DNA or RNA motifs in CIS-BP format, as probability matrices.
 
     The name, alternate name, family and organism go in the ``TF``,
-    ``TF Name``, ``Family`` and ``Species`` fields. universalmotif has no
+    ``TF Name``, ``Family`` and ``Species`` fields. The R package has no
     CIS-BP writer; files written here can be read by its ``read_cisbp()``.
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "CIS-BP")
-    _write_text(file, _umotif._write_cisbp(ms), overwrite, append)
+    _write_text(file, _core._write_cisbp(ms), overwrite, append)
 
 
 def write_uniprobe(
@@ -296,12 +296,12 @@ def write_uniprobe(
     """Write DNA motifs in the minimal UniPROBE format: a name line followed
     by ``A:``, ``C:``, ``G:`` and ``T:`` rows of probabilities.
 
-    universalmotif has no UniPROBE writer; files written here can be read by
+    The R package has no UniPROBE writer; files written here can be read by
     its ``read_uniprobe()``.
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "UniPROBE")
-    _write_text(file, _umotif._write_uniprobe(ms), overwrite, append)
+    _write_text(file, _core._write_uniprobe(ms), overwrite, append)
 
 
 def write_matrix(
@@ -325,7 +325,7 @@ def write_matrix(
     """
     ms = _motif_list(motifs)
     _warn_gaps(ms, "Raw matrix")
-    text = _umotif._write_matrix(ms, positions, rownames, type, sep, headers, digits)
+    text = _core._write_matrix(ms, positions, rownames, type, sep, headers, digits)
     _write_text(file, text, overwrite, append)
 
 

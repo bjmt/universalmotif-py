@@ -1,11 +1,11 @@
-"""Motif file readers and writers against universalmotif, plus file
+"""Motif file readers and writers against the R package, plus file
 handling."""
 
 import warnings
 
 import pytest
 
-import pyumotif as um
+import universalmotif as um
 
 from conftest import (
     args,
@@ -71,7 +71,7 @@ def test_readers():
             w = case["combined"]
             assert comb["sequence"].to_list() == _strs(w["sequence"]), ctx
             assert comb["pvalue"].to_list() == pytest.approx(nums(w["pvalue"])), ctx
-            # universalmotif truncates diagrams spanning three or more lines.
+            # The R package truncates diagrams spanning three or more lines.
             for g, d in zip(comb["diagram"].to_list(), _strs(w["diagram"])):
                 assert g == d or (g.startswith(d) and d.endswith("_")), ctx
 

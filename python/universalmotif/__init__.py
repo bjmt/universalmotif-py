@@ -1,7 +1,7 @@
-"""pyumotif: sequence motif manipulation and analysis.
+"""universalmotif: sequence motif manipulation and analysis.
 
-A Python port of the universalmotif R/Bioconductor package, built on the
-umotif Rust library.
+A Python port of the universalmotif R/Bioconductor package, built on its
+Rust counterpart.
 """
 
 from importlib.metadata import PackageNotFoundError, version
@@ -37,10 +37,10 @@ from ._io import (
     write_transfac,
     write_uniprobe,
 )
-from ._umotif import Motif
+from ._core import Motif
 
 try:
-    __version__ = version("pyumotif")
+    __version__ = version("universalmotif")
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 

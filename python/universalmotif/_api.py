@@ -1,5 +1,5 @@
-"""User-facing functions. The work is done by the compiled umotif
-bindings in ``pyumotif._umotif``; this module handles argument checking
+"""User-facing functions. The work is done by the compiled Rust
+bindings in ``universalmotif._core``; this module handles argument checking
 and lets most functions take either a single motif or a list of them."""
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from typing import Literal, TypeVar, overload
 import numpy as np
 import polars as pl
 
-from . import _umotif
-from ._umotif import Motif
+from . import _core
+from ._core import Motif
 
 MotifType = Literal["PCM", "PPM", "PWM", "ICM", "CWM"]
 TrimFrom = Literal["both", "left", "right"]
@@ -122,18 +122,18 @@ def create_motif(
         width = 10 if input is None else int(input)
         if width <= 0:
             raise ValueError("width must be greater than 0")
-        return _umotif._create_random(width, alphabet or "DNA", seed, **opts)
+        return _core._create_random(width, alphabet or "DNA", seed, **opts)
     if isinstance(input, str):
-        return _umotif._create_from_strings([input], alphabet, **opts)
+        return _core._create_from_strings([input], alphabet, **opts)
     if isinstance(input, Sequence) and len(input) > 0 and all(isinstance(s, str) for s in input):
         if letters is not None:
             raise TypeError("letters is only used for matrix input")
-        return _umotif._create_from_strings(list(input), alphabet, **opts)
+        return _core._create_from_strings(list(input), alphabet, **opts)
 
     matrix = np.asarray(input, dtype=np.float64)
     if matrix.ndim != 2:
         raise ValueError(f"matrix input must be 2-D, got {matrix.ndim} dimensions")
-    return _umotif._create_from_matrix(
+    return _core._create_from_matrix(
         matrix, None if letters is None else list(letters), alphabet, **opts
     )
 
@@ -170,11 +170,11 @@ def convert_type(motifs, type, pseudocount=None, relative_entropy=False):
     Notes
     -----
     A motif without ``nsites`` is treated as having 100 sites when counts are
-    needed. As in universalmotif, the consensus and total IC are kept from
+    needed. As in the R package, the consensus and total IC are kept from
     the input motif.
     """
     return _apply(
-        motifs, lambda m: _umotif._convert_type(m, type, pseudocount, relative_entropy)
+        motifs, lambda m: _core._convert_type(m, type, pseudocount, relative_entropy)
     )
 
 
@@ -184,7 +184,7 @@ def motif_rc(motifs, ignore_alphabet: bool = False):
     With ``ignore_alphabet=True`` other alphabets are accepted, and their
     rows and columns are simply reversed.
     """
-    return _apply(motifs, lambda m: _umotif._motif_rc(m, ignore_alphabet))
+    return _apply(motifs, lambda m: _core._motif_rc(m, ignore_alphabet))
 
 
 def _drop_trimmed(motifs, f: Callable[[Motif], Motif | None]):
@@ -213,7 +213,7 @@ def trim_motifs(motifs, min_ic: float = 0.25, trim_from: TrimFrom = "both"):
     trimmed away completely are dropped from a list with a warning; a single
     motif that is trimmed away raises ``ValueError``.
     """
-    return _drop_trimmed(motifs, lambda m: _umotif._trim_motif(m, min_ic, trim_from))
+    return _drop_trimmed(motifs, lambda m: _core._trim_motif(m, min_ic, trim_from))
 
 
 def trim_cwm(
@@ -230,7 +230,7 @@ def trim_cwm(
     columns is retained.
     """
     return _drop_trimmed(
-        motifs, lambda m: _umotif._trim_cwm(m, trim_threshold, abs_threshold, trim_from)
+        motifs, lambda m: _core._trim_cwm(m, trim_threshold, abs_threshold, trim_from)
     )
 
 
@@ -243,7 +243,7 @@ def round_motif(motifs, pct_tolerance: float | str = 0.05):
     """
     if isinstance(pct_tolerance, str):
         pct_tolerance = float(pct_tolerance.strip().rstrip("%")) / 100
-    return _apply(motifs, lambda m: _umotif._round_motif(m, pct_tolerance))
+    return _apply(motifs, lambda m: _core._round_motif(m, pct_tolerance))
 
 
 def normalize(motifs):
@@ -251,7 +251,7 @@ def normalize(motifs):
 
     A pseudocount of zero is replaced by 1. PCMs are returned unchanged.
     """
-    return _apply(motifs, _umotif._normalize)
+    return _apply(motifs, _core._normalize)
 
 
 def position_icscore(
@@ -263,7 +263,7 @@ def position_icscore(
     relative_entropy: bool = False,
 ) -> float:
     """Information content of a single motif column."""
-    return _umotif._position_icscore(
+    return _core._position_icscore(
         [float(x) for x in position],
         [] if bkg is None else [float(x) for x in bkg],
         type,
@@ -282,7 +282,7 @@ def get_consensus(
     """IUPAC consensus letter of a DNA or RNA column (A, C, G, T/U order)."""
     if alphabet not in ("DNA", "RNA"):
         raise ValueError("alphabet must be one of DNA, RNA")
-    return _umotif._get_consensus(
+    return _core._get_consensus(
         [float(x) for x in position], alphabet == "RNA", type, pseudocount
     )
 
@@ -291,17 +291,17 @@ def get_consensus_aa(
     position: Sequence[float], type: MotifType = "PPM", pseudocount: float = 0.0
 ) -> str:
     """Consensus letter of an amino acid column, including B, Z, J and X."""
-    return _umotif._get_consensus_aa([float(x) for x in position], type, pseudocount)
+    return _core._get_consensus_aa([float(x) for x in position], type, pseudocount)
 
 
 def consensus_to_ppm(letter: str) -> np.ndarray:
     """The DNA probability column for an IUPAC letter."""
-    return np.array(_umotif._consensus_to_ppm(letter))
+    return np.array(_core._consensus_to_ppm(letter))
 
 
 def consensus_to_ppm_aa(letter: str) -> np.ndarray:
     """The amino acid probability column for a consensus letter."""
-    return np.array(_umotif._consensus_to_ppm_aa(letter))
+    return np.array(_core._consensus_to_ppm_aa(letter))
 
 
 _SUMMARY_SCHEMA = {
@@ -329,7 +329,7 @@ def summarise_motifs(motifs, na_rm: bool = True) -> pl.DataFrame:
     if isinstance(motifs, Motif):
         motifs = [motifs]
     motifs = [_check_motif(m) for m in motifs]
-    df = pl.DataFrame(_umotif._summarise(motifs), schema=_SUMMARY_SCHEMA)
+    df = pl.DataFrame(_core._summarise(motifs), schema=_SUMMARY_SCHEMA)
     if na_rm and df.height > 0:
         df = df.select(c for c in df.columns if df[c].null_count() < df.height)
     return df

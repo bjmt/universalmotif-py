@@ -1,6 +1,7 @@
-//! Python bindings for umotif. This layer only converts between Python and
-//! Rust types; the motif logic lives in umotif, and the user-facing Python
-//! API (argument handling, lists of motifs) lives in `python/pyumotif`.
+//! Python bindings for the universalmotif Rust crate. This layer only
+//! converts between Python and Rust types; the motif logic lives in the crate,
+//! and the user-facing Python
+//! API (argument handling, lists of motifs) lives in `python/universalmotif`.
 
 use numpy::ndarray::{Array2, ShapeBuilder};
 use numpy::{PyArray2, PyReadonlyArray2};
@@ -8,13 +9,13 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use rand::SeedableRng;
-use umotif::create::{self, CreateOptions};
-use umotif::ops::{self, TrimFrom};
-use umotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, Strand, convert};
+use universalmotif::create::{self, CreateOptions};
+use universalmotif::ops::{self, TrimFrom};
+use universalmotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, Strand, convert};
 
 mod io;
 
-pub(crate) fn err(e: umotif::Error) -> PyErr {
+pub(crate) fn err(e: universalmotif::Error) -> PyErr {
     PyValueError::new_err(e.to_string())
 }
 
@@ -117,10 +118,10 @@ fn matrix_to_numpy<'py>(py: Python<'py>, m: &Matrix) -> PyResult<Bound<'py, PyAr
 
 /// A sequence motif.
 ///
-/// Motifs are immutable. Use the functions in pyumotif (such as
+/// Motifs are immutable. Use the functions in universalmotif (such as
 /// `convert_type` or `trim_motifs`) to derive new motifs, or `replace()` to
 /// change metadata.
-#[pyclass(name = "Motif", module = "pyumotif", frozen)]
+#[pyclass(name = "Motif", module = "universalmotif", frozen)]
 #[derive(Clone)]
 pub struct PyMotif {
     pub(crate) inner: Motif,
@@ -331,7 +332,7 @@ impl PyMotif {
 
     fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let f = py
-            .import("pyumotif._umotif")?
+            .import("universalmotif._core")?
             .getattr("_motif_from_state")?;
         let args = PyTuple::new(py, [self._state(py)?])?;
         PyTuple::new(py, [f, args.into_any()])
@@ -639,7 +640,7 @@ fn _summarise<'py>(
 }
 
 #[pymodule]
-fn _umotif(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMotif>()?;
     m.add_function(wrap_pyfunction!(_motif_from_state, m)?)?;
     m.add_function(wrap_pyfunction!(_create_from_matrix, m)?)?;

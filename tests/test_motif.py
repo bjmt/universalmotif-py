@@ -8,7 +8,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-import pyumotif as um
+import universalmotif as um
 
 
 @pytest.fixture
