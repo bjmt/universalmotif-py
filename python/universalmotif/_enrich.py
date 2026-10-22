@@ -159,6 +159,7 @@ def motif_coocc(
     whose nearest pair of hits (comparing start positions) is within
     ``max_distance``, and ``median_distance``, the median of those nearest
     distances. ``self_pairs`` also pairs each motif with itself.
+    ``nthreads`` applies to the scan and to testing the pairs.
 
     Returns a DataFrame sorted by q-value then P-value, with untested pairs
     (null P-values) last: ``motif_a``, ``motif_b``, ``a_only``, ``b_only``,
@@ -185,15 +186,14 @@ def motif_coocc(
         if n_sequences is None or n_sequences < 1:
             raise ValueError("n_sequences must be a positive integer when hits are given")
         motif, sequence, start = _coocc_hits(hits, names, n_sequences, max_distance is not None)
-    cols = _core._coocc(
-        motif, sequence, start, len(ms), n_sequences, max_distance, min_coocc, pseudocount, self_pairs
+    pairs = _core._coocc(
+        motif, sequence, start, len(ms), n_sequences, max_distance, min_coocc, pseudocount, self_pairs,
+        nthreads, names,
     )
-    cols["motif_a"] = [names[i] for i in cols["a"]]
-    cols["motif_b"] = [names[i] for i in cols["b"]]
     schema = dict(_COOCC_SCHEMA)
     if max_distance is not None:
         schema.update(both_clustered=pl.Int64, median_distance=pl.Float64)
-    return pl.DataFrame({k: cols[k] for k in schema}, schema=schema)
+    return pl.DataFrame(pairs).cast(schema)
 
 
 _PEAKS_SCHEMA = {

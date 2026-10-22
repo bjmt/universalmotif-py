@@ -2,6 +2,7 @@
 //! cutting.
 
 use pyo3::prelude::*;
+use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyDict;
 use universalmotif::Motif;
 use universalmotif::cluster::Tree;
@@ -9,6 +10,9 @@ use universalmotif::coocc::{self, CooccHit, CooccOptions};
 use universalmotif::enrich::{self, EnrichOptions, EnrichTest};
 use universalmotif::peaks::{self, PeakHit, PeaksMode, PeaksOptions};
 
+use pyo3_arrow::PyTable;
+
+use crate::arrow::{i64s, opt_f64s, opt_i64s, strs, table};
 use crate::{PyMotif, err};
 
 #[pyfunction]
@@ -17,8 +21,8 @@ use crate::{PyMotif, err};
 fn _enrich<'py>(
     py: Python<'py>,
     motifs: Vec<PyRef<'py, PyMotif>>,
-    sequences: Vec<String>,
-    background: Option<Vec<String>>,
+    sequences: Vec<PyBackedStr>,
+    background: Option<Vec<PyBackedStr>>,
     pvalue: f64,
     test: &str,
     rc: bool,
@@ -80,10 +84,10 @@ fn _enrich<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motif, sequence, start, n_motifs, n_sequences, max_distance, min_coocc, pseudocount, self_pairs))]
+#[pyo3(signature = (motif, sequence, start, n_motifs, n_sequences, max_distance, min_coocc, pseudocount, self_pairs, nthreads, names))]
 #[allow(clippy::too_many_arguments)]
-fn _coocc<'py>(
-    py: Python<'py>,
+fn _coocc(
+    py: Python<'_>,
     motif: Vec<usize>,
     sequence: Vec<usize>,
     start: Vec<i64>,
@@ -93,7 +97,9 @@ fn _coocc<'py>(
     min_coocc: u64,
     pseudocount: u64,
     self_pairs: bool,
-) -> PyResult<Bound<'py, PyDict>> {
+    nthreads: usize,
+    names: Vec<String>,
+) -> PyResult<PyTable> {
     let hits: Vec<CooccHit> = (0..motif.len())
         .map(|i| CooccHit {
             motif: motif[i],
@@ -106,35 +112,33 @@ fn _coocc<'py>(
         min_coocc,
         pseudocount,
         self_pairs,
+        nthreads,
     };
     let rows = py
         .detach(|| coocc::motif_coocc(&hits, n_motifs, n_sequences, &opts))
         .map_err(err)?;
-    let d = PyDict::new(py);
-    d.set_item("a", rows.iter().map(|r| r.a).collect::<Vec<_>>())?;
-    d.set_item("b", rows.iter().map(|r| r.b).collect::<Vec<_>>())?;
-    d.set_item("a_only", rows.iter().map(|r| r.a_only).collect::<Vec<_>>())?;
-    d.set_item("b_only", rows.iter().map(|r| r.b_only).collect::<Vec<_>>())?;
-    d.set_item("both", rows.iter().map(|r| r.both).collect::<Vec<_>>())?;
-    d.set_item(
-        "neither",
-        rows.iter().map(|r| r.neither).collect::<Vec<_>>(),
-    )?;
-    d.set_item(
-        "odds_ratio",
-        rows.iter().map(|r| r.odds_ratio).collect::<Vec<_>>(),
-    )?;
-    d.set_item("pvalue", rows.iter().map(|r| r.pvalue).collect::<Vec<_>>())?;
-    d.set_item("qvalue", rows.iter().map(|r| r.qvalue).collect::<Vec<_>>())?;
-    d.set_item(
-        "both_clustered",
-        rows.iter().map(|r| r.both_clustered).collect::<Vec<_>>(),
-    )?;
-    d.set_item(
-        "median_distance",
-        rows.iter().map(|r| r.median_distance).collect::<Vec<_>>(),
-    )?;
-    Ok(d)
+    let mut cols = vec![
+        ("motif_a", strs(rows.iter().map(|r| names[r.a].as_str()))),
+        ("motif_b", strs(rows.iter().map(|r| names[r.b].as_str()))),
+        ("a_only", i64s(rows.iter().map(|r| r.a_only as i64))),
+        ("b_only", i64s(rows.iter().map(|r| r.b_only as i64))),
+        ("both", i64s(rows.iter().map(|r| r.both as i64))),
+        ("neither", i64s(rows.iter().map(|r| r.neither as i64))),
+        ("odds_ratio", opt_f64s(rows.iter().map(|r| r.odds_ratio))),
+        ("pvalue", opt_f64s(rows.iter().map(|r| r.pvalue))),
+        ("qvalue", opt_f64s(rows.iter().map(|r| r.qvalue))),
+    ];
+    if max_distance.is_some() {
+        cols.push((
+            "both_clustered",
+            opt_i64s(rows.iter().map(|r| r.both_clustered.map(|x| x as i64))),
+        ));
+        cols.push((
+            "median_distance",
+            opt_f64s(rows.iter().map(|r| r.median_distance)),
+        ));
+    }
+    table(cols)
 }
 
 #[pyfunction]

@@ -186,11 +186,9 @@ def scan_sequences(
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
     names, seqs = _sequence_pairs(sequences)
     overlaps = (no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif) if no_overlaps else None
-    cols = _core._scan_sequences(ms, seqs, pvalue, rc, overlaps, nthreads)
     motif_names = _make_unique([m.name for m in ms])
-    cols["motif"] = [motif_names[i] for i in cols["motif_i"]]
-    cols["sequence"] = [names[i] for i in cols["sequence_i"]]
-    return pl.DataFrame({k: cols[k] for k in _HIT_SCHEMA}, schema=_HIT_SCHEMA)
+    hits = _core._scan_sequences(ms, seqs, pvalue, rc, overlaps, nthreads, motif_names, names)
+    return pl.DataFrame(hits).cast(_HIT_SCHEMA)
 
 
 def dedup_hits(

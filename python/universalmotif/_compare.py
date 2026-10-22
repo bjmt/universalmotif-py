@@ -77,7 +77,7 @@ def compare_motifs(
     if compare_to is None:
         if qvalue != 0.1:
             warnings.warn("qvalue is ignored without compare_to", stacklevel=2)
-        d = _core._compare(ms, None, min_overlap, rc, null, b, matrix_out != "score", nthreads)
+        d = _core._compare_matrix(ms, min_overlap, rc, null, b, matrix_out != "score", nthreads)
         return np.array(d[matrix_out], dtype=float)
 
     targets = [compare_to] if isinstance(compare_to, (int, str)) else list(compare_to)
@@ -91,17 +91,9 @@ def compare_motifs(
             if not 0 <= int(t) < len(ms):
                 raise ValueError(f"compare_to index {t} is out of range")
             queries.append(int(t))
-    d = _core._compare(ms, queries, min_overlap, rc, null, b, True, nthreads)
-    df = pl.DataFrame(d).with_columns(
-        pl.Series("subject", [names[i] for i in d["subject_i"]], dtype=pl.String),
-        pl.Series("target", [names[i] for i in d["target_i"]], dtype=pl.String),
-    )
+    df = pl.DataFrame(_core._compare_table(ms, queries, min_overlap, rc, null, b, nthreads, names))
     df = df.filter((pl.col("qvalue") <= qvalue) & (pl.col("overlap") > 0))
-    df = df.sort(["qvalue", "pvalue", "target_i"], maintain_order=True)
-    return df.select(
-        "subject", "subject_i", "target", "target_i", "offset", "strand", "overlap",
-        "score", "subject_consensus", "target_consensus", "pvalue", "qvalue",
-    )
+    return df.sort(["qvalue", "pvalue", "target_i"], maintain_order=True)
 
 
 def merge_motifs(

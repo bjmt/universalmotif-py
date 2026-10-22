@@ -3,6 +3,7 @@
 
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
+use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyBool;
 use universalmotif::Motif;
 use universalmotif::io::{cisbp, fasta, homer, jaspar, matrix, meme, transfac, uniprobe};
@@ -238,12 +239,22 @@ fn _read_fasta(text: &str) -> PyResult<Vec<(String, String)>> {
 }
 
 #[pyfunction]
-fn _write_fasta(records: Vec<(String, String)>, width: usize) -> String {
+fn _read_fasta_path(
+    py: Python<'_>,
+    path: std::path::PathBuf,
+    skip: usize,
+) -> PyResult<Vec<(String, String)>> {
+    py.detach(|| fasta::read_path(&path, skip)).map_err(err)
+}
+
+#[pyfunction]
+fn _write_fasta(records: Vec<(PyBackedStr, PyBackedStr)>, width: usize) -> String {
     fasta::write(&records, width)
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_read_fasta, m)?)?;
+    m.add_function(wrap_pyfunction!(_read_fasta_path, m)?)?;
     m.add_function(wrap_pyfunction!(_write_fasta, m)?)?;
     m.add_function(wrap_pyfunction!(_read_jaspar, m)?)?;
     m.add_function(wrap_pyfunction!(_read_homer, m)?)?;

@@ -4,6 +4,12 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+class ArrowTable:
+    """An Arrow table, readable by polars, pandas and pyarrow through the
+    Arrow PyCapsule interface."""
+
+    def __arrow_c_stream__(self, requested_schema: object | None = None) -> object: ...
+
 class Motif:
     """A sequence motif. Motifs are immutable."""
 
@@ -155,6 +161,7 @@ def _write_matrix(
 def _write_cisbp(motifs: list[Motif]) -> str: ...
 def _write_uniprobe(motifs: list[Motif]) -> str: ...
 def _read_fasta(text: str) -> list[tuple[str, str]]: ...
+def _read_fasta_path(path: str, skip: int) -> list[tuple[str, str]]: ...
 def _write_fasta(records: list[tuple[str, str]], width: int) -> str: ...
 def _motif_pvalue(
     motifs: list[Motif],
@@ -170,7 +177,9 @@ def _scan_sequences(
     rc: bool,
     no_overlaps: tuple[str, bool, bool] | None,
     nthreads: int,
-) -> dict[str, list[Any]]: ...
+    motif_names: list[str],
+    sequence_names: list[str],
+) -> ArrowTable: ...
 def _dedup(
     sequence: list[int],
     motif: list[int],
@@ -181,9 +190,8 @@ def _dedup(
     ignore_strand: bool,
     ignore_motif: bool,
 ) -> list[bool]: ...
-def _compare(
+def _compare_matrix(
     motifs: list[Motif],
-    queries: list[int] | None,
     min_overlap: int,
     rc: bool,
     null: str,
@@ -191,6 +199,16 @@ def _compare(
     need_pvalues: bool,
     nthreads: int,
 ) -> dict[str, Any]: ...
+def _compare_table(
+    motifs: list[Motif],
+    queries: list[int],
+    min_overlap: int,
+    rc: bool,
+    null: str,
+    bkg: list[float] | None,
+    nthreads: int,
+    names: list[str],
+) -> ArrowTable: ...
 def _merge_motifs(
     motifs: list[Motif],
     min_overlap: int,
@@ -224,13 +242,14 @@ def _windows(len: int, window: int, overlap: int, incomplete: bool) -> list[tupl
 def _complexity(seqs: list[str], method: str, alph: str | None, max_word: int) -> list[float]: ...
 def _sequence_complexity(
     seqs: list[str],
+    names: list[str],
     method: str,
     window: float,
     overlap: float | None,
     alphabet: str | None,
     max_word: int,
     nthreads: int,
-) -> dict[str, Any]: ...
+) -> ArrowTable: ...
 def _get_bkg(
     seqs: list[str],
     names: list[str],
@@ -241,7 +260,7 @@ def _get_bkg(
     merge: bool,
     window: tuple[float, float] | None,
     nthreads: int,
-) -> dict[str, Any]: ...
+) -> ArrowTable: ...
 def _shuffle_sequences(
     seqs: list[str],
     k: int,
@@ -305,7 +324,9 @@ def _coocc(
     min_coocc: int,
     pseudocount: int,
     self_pairs: bool,
-) -> dict[str, Any]: ...
+    nthreads: int,
+    names: list[str],
+) -> ArrowTable: ...
 def _peaks(
     motif: list[int],
     sequence: list[int],

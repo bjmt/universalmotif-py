@@ -1,6 +1,7 @@
 //! Bindings for proximity to genomic anchors and background matching.
 
 use pyo3::prelude::*;
+use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyDict;
 use universalmotif::background::{self, BinType, Covariate, MatchOptions};
 use universalmotif::proximity::{
@@ -117,7 +118,7 @@ fn _proximity<'py>(
 }
 
 #[pyfunction]
-fn _gc_fraction(seqs: Vec<String>) -> Vec<f64> {
+fn _gc_fraction(seqs: Vec<PyBackedStr>) -> Vec<f64> {
     seqs.iter().map(|s| background::gc_fraction(s)).collect()
 }
 
@@ -129,8 +130,8 @@ type CovariateSpec = (String, Vec<f64>, Vec<f64>, usize, String);
 #[allow(clippy::too_many_arguments)]
 fn _match_bkg(
     py: Python<'_>,
-    targets: Vec<String>,
-    universe: Vec<String>,
+    targets: Vec<PyBackedStr>,
+    universe: Vec<PyBackedStr>,
     covariates: Vec<CovariateSpec>,
     n_per_target: usize,
     n_bins_gc: usize,

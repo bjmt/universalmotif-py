@@ -14,6 +14,7 @@ use universalmotif::ops::{self, TrimFrom};
 use universalmotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, Strand, convert};
 
 mod analysis;
+mod arrow;
 mod enrichment;
 mod genomic;
 mod io;

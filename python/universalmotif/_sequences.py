@@ -152,17 +152,11 @@ def sequence_complexity(
     if method not in _COMPLEXITY_METHODS:
         raise ValueError(f"method must be one of {', '.join(_COMPLEXITY_METHODS)}")
     names, seqs = _sequence_pairs(sequences)
-    cols = _core._sequence_complexity(
-        seqs, method, float(window_size), window_overlap, None, trifonov_max_word_size, nthreads
+    windows = _core._sequence_complexity(
+        seqs, names, method, float(window_size), window_overlap, None, trifonov_max_word_size, nthreads
     )
-    return pl.DataFrame(
-        {
-            "sequence": [names[i] for i in cols["sequence_i"]],
-            "start": cols["start"],
-            "stop": cols["stop"],
-            "complexity": cols["complexity"],
-        },
-        schema={"sequence": pl.String, "start": pl.Int64, "stop": pl.Int64, "complexity": pl.Float64},
+    return pl.DataFrame(windows).cast(
+        {"sequence": pl.String, "start": pl.Int64, "stop": pl.Int64, "complexity": pl.Float64}
     )
 
 
@@ -252,19 +246,7 @@ def get_bkg(
         raise ValueError("pseudocount must be non-negative")
     letters = _default_alphabet(seqs) if alphabet is None else _letters(alphabet)
     win = (float(window_size), float(window_overlap)) if window else None
-    cols = _core._get_bkg(seqs, names, ks, pseudocount, letters, rc, merge, win, nthreads)
-    data: dict[str, object] = {}
-    schema: dict[str, pl.DataType] = {}
-    if not merge:
-        n = len(names)
-        data["sequence"] = [names[i % n] for i in cols["sequence_i"]]
-        schema["sequence"] = pl.String
-    if window:
-        data["start"], data["stop"] = cols["start"], cols["stop"]
-        schema["start"] = schema["stop"] = pl.Int64
-    data["klet"], data["count"], data["probability"] = cols["klet"], cols["count"], cols["probability"]
-    schema.update(klet=pl.String, count=pl.Int64, probability=pl.Float64)
-    df = pl.DataFrame(data, schema=schema)
+    df = pl.DataFrame(_core._get_bkg(seqs, names, ks, pseudocount, letters, rc, merge, win, nthreads))
     if to_meme is None:
         return df
     if pseudocount < 1 and df["probability"].is_in([0.0, 1.0]).any():

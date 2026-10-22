@@ -308,8 +308,11 @@ def write_uniprobe(
 
 def read_fasta(file: PathLike, skip: int = 0) -> dict[str, str]:
     """Read a FASTA file into a dict from names (the whole header line after
-    ``>``) to sequences."""
-    return dict(_core._read_fasta(_read_text(file, skip)))
+    ``>``) to sequences. The file is read line by line, so a genome needs
+    little more memory than its sequences."""
+    if skip < 0:
+        raise ValueError("skip must be zero or positive")
+    return dict(_core._read_fasta_path(os.fspath(file), skip))
 
 
 def write_fasta(

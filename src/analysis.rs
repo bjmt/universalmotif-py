@@ -1,6 +1,7 @@
 //! Bindings for P-values, scanning and hit deduplication.
 
 use pyo3::prelude::*;
+use pyo3::pybacked::PyBackedStr;
 use pyo3::types::{PyDict, PyList};
 use universalmotif::Motif;
 use universalmotif::cluster::{self, Method, Tree, TreeOptions};
@@ -8,8 +9,15 @@ use universalmotif::compare::{self, CompareOptions, NullModel};
 use universalmotif::dedup::{Interval, dedup};
 use universalmotif::merge::{self, MergeOptions, MergeSimilarOptions};
 use universalmotif::pvalue::{self, PvalueOptions};
-use universalmotif::scan::{NoOverlaps, OverlapPriority, ScanOptions, scan_sequences};
+use universalmotif::scan::{NoOverlaps, OverlapPriority, ScanOptions, scan_table};
 
+use pyo3_arrow::PyTable;
+
+use std::sync::Arc;
+
+use arrow_array::builder::StringViewBuilder;
+
+use crate::arrow::{f64_vec, f64s, i64_vec, i64s, names_at, strs, table};
 use crate::{PyMotif, err, parse_bkg};
 
 fn unwrap(motifs: &[PyRef<'_, PyMotif>]) -> Vec<Motif> {
@@ -69,16 +77,19 @@ fn _motif_pvalue(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, sequences, pvalue, rc, no_overlaps, nthreads))]
+#[pyo3(signature = (motifs, sequences, pvalue, rc, no_overlaps, nthreads, motif_names, sequence_names))]
+#[allow(clippy::too_many_arguments)]
 fn _scan_sequences<'py>(
     py: Python<'py>,
     motifs: Vec<PyRef<'py, PyMotif>>,
-    sequences: Vec<String>,
+    sequences: Vec<PyBackedStr>,
     pvalue: f64,
     rc: bool,
     no_overlaps: Option<(String, bool, bool)>,
     nthreads: usize,
-) -> PyResult<Bound<'py, PyDict>> {
+    motif_names: Vec<String>,
+    sequence_names: Vec<String>,
+) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
     let no_overlaps = no_overlaps
         .map(|(by, ignore_strand, ignore_motif)| {
@@ -104,32 +115,33 @@ fn _scan_sequences<'py>(
         no_overlaps,
         nthreads,
     };
-    let hits = py
-        .detach(|| scan_sequences(&motifs, &sequences, &opts))
+    let t = py
+        .detach(|| scan_table(&motifs, &sequences, &opts))
         .map_err(err)?;
-    let d = PyDict::new(py);
-    d.set_item("motif_i", hits.iter().map(|h| h.motif).collect::<Vec<_>>())?;
-    d.set_item(
-        "sequence_i",
-        hits.iter().map(|h| h.sequence).collect::<Vec<_>>(),
-    )?;
-    d.set_item("start", hits.iter().map(|h| h.start).collect::<Vec<_>>())?;
-    d.set_item("end", hits.iter().map(|h| h.end).collect::<Vec<_>>())?;
-    d.set_item(
-        "strand",
-        hits.iter().map(|h| h.strand.as_str()).collect::<Vec<_>>(),
-    )?;
-    d.set_item("score", hits.iter().map(|h| h.score).collect::<Vec<_>>())?;
-    d.set_item(
-        "score_pct",
-        hits.iter().map(|h| h.score_pct).collect::<Vec<_>>(),
-    )?;
-    d.set_item(
-        "match",
-        hits.iter().map(|h| h.matched.as_str()).collect::<Vec<_>>(),
-    )?;
-    d.set_item("pvalue", hits.iter().map(|h| h.pvalue).collect::<Vec<_>>())?;
-    Ok(d)
+    let mut matched = StringViewBuilder::with_capacity(t.len());
+    let mut buf = Vec::new();
+    for i in 0..t.len() {
+        t.matched_into(i, &sequences, &mut buf);
+        matched.append_value(String::from_utf8_lossy(&buf));
+    }
+    let strand = strs(t.minus.iter().map(|&m| if m { "-" } else { "+" }));
+    let (motif, sequence) = (
+        names_at(&t.motif, &motif_names),
+        names_at(&t.sequence, &sequence_names),
+    );
+    table(vec![
+        ("motif", motif),
+        ("motif_i", i64_vec(t.motif)),
+        ("sequence", sequence),
+        ("sequence_i", i64_vec(t.sequence)),
+        ("start", i64_vec(t.start)),
+        ("end", i64_vec(t.end)),
+        ("strand", strand),
+        ("score", f64_vec(t.score)),
+        ("score_pct", f64_vec(t.score_pct)),
+        ("match", Arc::new(matched.finish())),
+        ("pvalue", f64_vec(t.pvalue)),
+    ])
 }
 
 #[pyfunction]
@@ -187,13 +199,28 @@ fn bkg4(bkg: Option<Vec<f64>>) -> PyResult<[f64; 4]> {
     }
 }
 
+fn compare_options(
+    min_overlap: usize,
+    rc: bool,
+    null: &str,
+    bkg: Option<Vec<f64>>,
+    nthreads: usize,
+) -> PyResult<CompareOptions> {
+    Ok(CompareOptions {
+        min_overlap,
+        rc,
+        null: null_model(null)?,
+        bkg: bkg4(bkg)?,
+        nthreads,
+    })
+}
+
 #[pyfunction]
-#[pyo3(signature = (motifs, queries, min_overlap, rc, null, bkg, need_pvalues, nthreads))]
+#[pyo3(signature = (motifs, min_overlap, rc, null, bkg, need_pvalues, nthreads))]
 #[allow(clippy::too_many_arguments)]
-fn _compare<'py>(
+fn _compare_matrix<'py>(
     py: Python<'py>,
     motifs: Vec<PyRef<'py, PyMotif>>,
-    queries: Option<Vec<usize>>,
     min_overlap: usize,
     rc: bool,
     null: &str,
@@ -202,63 +229,62 @@ fn _compare<'py>(
     nthreads: usize,
 ) -> PyResult<Bound<'py, PyDict>> {
     let motifs = unwrap(&motifs);
-    let opts = CompareOptions {
-        min_overlap,
-        rc,
-        null: null_model(null)?,
-        bkg: bkg4(bkg)?,
-        nthreads,
-    };
+    let opts = compare_options(min_overlap, rc, null, bkg, nthreads)?;
+    let m = py
+        .detach(|| compare::compare_matrix(&motifs, &opts, need_pvalues))
+        .map_err(err)?;
     let d = PyDict::new(py);
-    match queries {
-        None => {
-            let m = py
-                .detach(|| compare::compare_matrix(&motifs, &opts, need_pvalues))
-                .map_err(err)?;
-            d.set_item("score", m.scores)?;
-            d.set_item("pvalue", m.pvalues)?;
-            d.set_item("qvalue", m.qvalues)?;
-        }
-        Some(q) => {
-            let rows = py
-                .detach(|| compare::compare_motifs(&motifs, &q, &opts))
-                .map_err(err)?;
-            let col = |f: fn(&compare::Comparison) -> f64| rows.iter().map(f).collect::<Vec<_>>();
-            d.set_item(
-                "subject_i",
-                rows.iter().map(|c| c.query).collect::<Vec<_>>(),
-            )?;
-            d.set_item(
-                "target_i",
-                rows.iter().map(|c| c.target).collect::<Vec<_>>(),
-            )?;
-            d.set_item("offset", rows.iter().map(|c| c.offset).collect::<Vec<_>>())?;
-            d.set_item(
-                "strand",
-                rows.iter().map(|c| c.strand.as_str()).collect::<Vec<_>>(),
-            )?;
-            d.set_item(
-                "overlap",
-                rows.iter().map(|c| c.overlap).collect::<Vec<_>>(),
-            )?;
-            d.set_item("score", col(|c| c.score))?;
-            d.set_item(
-                "subject_consensus",
-                rows.iter()
-                    .map(|c| c.query_consensus.as_str())
-                    .collect::<Vec<_>>(),
-            )?;
-            d.set_item(
-                "target_consensus",
-                rows.iter()
-                    .map(|c| c.target_consensus.as_str())
-                    .collect::<Vec<_>>(),
-            )?;
-            d.set_item("pvalue", col(|c| c.pvalue))?;
-            d.set_item("qvalue", col(|c| c.qvalue))?;
-        }
-    }
+    d.set_item("score", m.scores)?;
+    d.set_item("pvalue", m.pvalues)?;
+    d.set_item("qvalue", m.qvalues)?;
     Ok(d)
+}
+
+#[pyfunction]
+#[pyo3(signature = (motifs, queries, min_overlap, rc, null, bkg, nthreads, names))]
+#[allow(clippy::too_many_arguments)]
+fn _compare_table(
+    py: Python<'_>,
+    motifs: Vec<PyRef<'_, PyMotif>>,
+    queries: Vec<usize>,
+    min_overlap: usize,
+    rc: bool,
+    null: &str,
+    bkg: Option<Vec<f64>>,
+    nthreads: usize,
+    names: Vec<String>,
+) -> PyResult<PyTable> {
+    let motifs = unwrap(&motifs);
+    let opts = compare_options(min_overlap, rc, null, bkg, nthreads)?;
+    let rows = py
+        .detach(|| compare::compare_motifs(&motifs, &queries, &opts))
+        .map_err(err)?;
+    table(vec![
+        (
+            "subject",
+            strs(rows.iter().map(|c| names[c.query].as_str())),
+        ),
+        ("subject_i", i64s(rows.iter().map(|c| c.query as i64))),
+        (
+            "target",
+            strs(rows.iter().map(|c| names[c.target].as_str())),
+        ),
+        ("target_i", i64s(rows.iter().map(|c| c.target as i64))),
+        ("offset", i64s(rows.iter().map(|c| c.offset))),
+        ("strand", strs(rows.iter().map(|c| c.strand.as_str()))),
+        ("overlap", i64s(rows.iter().map(|c| c.overlap as i64))),
+        ("score", f64s(rows.iter().map(|c| c.score))),
+        (
+            "subject_consensus",
+            strs(rows.iter().map(|c| c.query_consensus.as_str())),
+        ),
+        (
+            "target_consensus",
+            strs(rows.iter().map(|c| c.target_consensus.as_str())),
+        ),
+        ("pvalue", f64s(rows.iter().map(|c| c.pvalue))),
+        ("qvalue", f64s(rows.iter().map(|c| c.qvalue))),
+    ])
 }
 
 #[pyfunction]
@@ -375,7 +401,8 @@ fn _motif_tree<'py>(
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(_compare, m)?)?;
+    m.add_function(wrap_pyfunction!(_compare_matrix, m)?)?;
+    m.add_function(wrap_pyfunction!(_compare_table, m)?)?;
     m.add_function(wrap_pyfunction!(_merge_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_merge_similar, m)?)?;
     m.add_function(wrap_pyfunction!(_hclust, m)?)?;

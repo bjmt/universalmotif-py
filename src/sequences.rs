@@ -2,6 +2,7 @@
 //! implanting and motif discovery.
 
 use pyo3::prelude::*;
+use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyDict;
 use universalmotif::Motif;
 use universalmotif::complexity::{self, ComplexityOptions, Method};
@@ -10,6 +11,9 @@ use universalmotif::kmer::{self, BkgOptions, WindowOptions};
 use universalmotif::sample::{self, ImplantMode, ImplantOptions};
 use universalmotif::shuffle::{self, ShuffleMethod, ShuffleOptions};
 
+use pyo3_arrow::PyTable;
+
+use crate::arrow::{f64s, i64s, strs, table};
 use crate::{PyMotif, err};
 
 fn chars(s: &str) -> Vec<char> {
@@ -38,7 +42,7 @@ fn _windows(len: usize, window: usize, overlap: usize, incomplete: bool) -> Vec<
 #[pyfunction]
 #[pyo3(signature = (seqs, method, alph, max_word))]
 fn _complexity(
-    seqs: Vec<String>,
+    seqs: Vec<PyBackedStr>,
     method: &str,
     alph: Option<String>,
     max_word: usize,
@@ -51,18 +55,19 @@ fn _complexity(
 }
 
 #[pyfunction]
-#[pyo3(signature = (seqs, method, window, overlap, alphabet, max_word, nthreads))]
+#[pyo3(signature = (seqs, names, method, window, overlap, alphabet, max_word, nthreads))]
 #[allow(clippy::too_many_arguments)]
-fn _sequence_complexity<'py>(
-    py: Python<'py>,
-    seqs: Vec<String>,
+fn _sequence_complexity(
+    py: Python<'_>,
+    seqs: Vec<PyBackedStr>,
+    names: Vec<String>,
     method: &str,
     window: f64,
     overlap: Option<f64>,
     alphabet: Option<String>,
     max_word: usize,
     nthreads: usize,
-) -> PyResult<Bound<'py, PyDict>> {
+) -> PyResult<PyTable> {
     let opts = ComplexityOptions {
         method: Method::parse(method).map_err(err)?,
         window,
@@ -74,26 +79,25 @@ fn _sequence_complexity<'py>(
     let rows = py
         .detach(|| complexity::sequence_complexity(&seqs, &opts))
         .map_err(err)?;
-    let d = PyDict::new(py);
-    d.set_item(
-        "sequence_i",
-        rows.iter().map(|r| r.sequence).collect::<Vec<_>>(),
-    )?;
-    d.set_item("start", rows.iter().map(|r| r.start).collect::<Vec<_>>())?;
-    d.set_item("stop", rows.iter().map(|r| r.stop).collect::<Vec<_>>())?;
-    d.set_item(
-        "complexity",
-        rows.iter().map(|r| r.complexity).collect::<Vec<_>>(),
-    )?;
-    Ok(d)
+    table(vec![
+        (
+            "sequence",
+            strs(rows.iter().map(|r| names[r.sequence].as_str())),
+        ),
+        ("start", i64s(rows.iter().map(|r| r.start as i64))),
+        ("stop", i64s(rows.iter().map(|r| r.stop as i64))),
+        ("complexity", f64s(rows.iter().map(|r| r.complexity))),
+    ])
 }
 
+/// k-let counts as a table: `sequence` for per-sequence counts (reverse
+/// complements take their sequence's name) and `start`/`stop` for windows.
 #[pyfunction]
 #[pyo3(signature = (seqs, names, k, pseudocount, alphabet, rc, merge, window, nthreads))]
 #[allow(clippy::too_many_arguments)]
-fn _get_bkg<'py>(
-    py: Python<'py>,
-    seqs: Vec<String>,
+fn _get_bkg(
+    py: Python<'_>,
+    seqs: Vec<PyBackedStr>,
     names: Vec<String>,
     k: Vec<usize>,
     pseudocount: u64,
@@ -102,7 +106,7 @@ fn _get_bkg<'py>(
     merge: bool,
     window: Option<(f64, f64)>,
     nthreads: usize,
-) -> PyResult<Bound<'py, PyDict>> {
+) -> PyResult<PyTable> {
     let opts = BkgOptions {
         k,
         pseudocount,
@@ -115,30 +119,38 @@ fn _get_bkg<'py>(
     let rows = py
         .detach(|| kmer::get_bkg(&seqs, &names, &opts))
         .map_err(err)?;
-    let d = PyDict::new(py);
-    d.set_item(
-        "sequence_i",
-        rows.iter().map(|r| r.sequence).collect::<Vec<_>>(),
-    )?;
-    d.set_item("start", rows.iter().map(|r| r.start).collect::<Vec<_>>())?;
-    d.set_item("stop", rows.iter().map(|r| r.stop).collect::<Vec<_>>())?;
-    d.set_item(
-        "klet",
-        rows.iter().map(|r| r.klet.as_str()).collect::<Vec<_>>(),
-    )?;
-    d.set_item("count", rows.iter().map(|r| r.count).collect::<Vec<_>>())?;
-    d.set_item(
-        "probability",
-        rows.iter().map(|r| r.probability).collect::<Vec<_>>(),
-    )?;
-    Ok(d)
+    let mut cols = Vec::new();
+    if !merge {
+        let n = names.len().max(1);
+        cols.push((
+            "sequence",
+            strs(
+                rows.iter()
+                    .map(|r| names[r.sequence.unwrap_or(0) % n].as_str()),
+            ),
+        ));
+    }
+    if opts.window.is_some() {
+        cols.push((
+            "start",
+            i64s(rows.iter().map(|r| r.start.unwrap_or(0) as i64)),
+        ));
+        cols.push((
+            "stop",
+            i64s(rows.iter().map(|r| r.stop.unwrap_or(0) as i64)),
+        ));
+    }
+    cols.push(("klet", strs(rows.iter().map(|r| r.klet.as_str()))));
+    cols.push(("count", i64s(rows.iter().map(|r| r.count as i64))));
+    cols.push(("probability", f64s(rows.iter().map(|r| r.probability))));
+    table(cols)
 }
 
 #[pyfunction]
 #[pyo3(signature = (seqs, k, method, seed, window, nthreads))]
 fn _shuffle_sequences(
     py: Python<'_>,
-    seqs: Vec<String>,
+    seqs: Vec<PyBackedStr>,
     k: usize,
     method: &str,
     seed: u64,
@@ -191,7 +203,7 @@ fn _sample_sites(motif: PyRef<'_, PyMotif>, n: usize, seed: u64) -> PyResult<Vec
 fn _implant_motifs<'py>(
     py: Python<'py>,
     motifs: Vec<PyRef<'py, PyMotif>>,
-    seqs: Vec<String>,
+    seqs: Vec<PyBackedStr>,
     n_per_seq: usize,
     rate: Option<f64>,
     positions: Option<Vec<Vec<usize>>>,
@@ -245,8 +257,8 @@ fn _implant_motifs<'py>(
 #[allow(clippy::too_many_arguments)]
 fn _motif_finder<'py>(
     py: Python<'py>,
-    seqs: Vec<String>,
-    negatives: Option<Vec<String>>,
+    seqs: Vec<PyBackedStr>,
+    negatives: Option<Vec<PyBackedStr>>,
     min_width: usize,
     max_width: usize,
     nmotifs: usize,
