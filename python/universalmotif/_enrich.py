@@ -7,7 +7,7 @@ from collections.abc import Iterable, Mapping, Sequence
 import polars as pl
 
 from . import _core
-from ._analysis import _make_unique, _sequence_pairs, scan_sequences
+from ._analysis import _make_unique, _sequence_pairs, _warn_unreachable, scan_sequences
 from ._api import _check_motif
 from ._core import Motif
 from ._sequences import _seed
@@ -30,7 +30,9 @@ _ENRICH_SCHEMA = {
     "enrichment": pl.Float64,
     "log2_enrichment": pl.Float64,
     "pvalue": pl.Float64,
+    "log10_pvalue": pl.Float64,
     "qvalue": pl.Float64,
+    "log10_qvalue": pl.Float64,
 }
 
 
@@ -65,9 +67,11 @@ def enrich_motifs(
     order of P-value, with the columns ``motif``, ``motif_i``,
     ``consensus``, ``target_seq_n``, ``target_seq_hits``,
     ``target_site_hits``, ``bkg_seq_n``, ``bkg_seq_hits``, ``bkg_site_hits``,
-    ``enrichment``, ``log2_enrichment``, ``pvalue`` and ``qvalue``.
-    ``motif_i`` is 0-based, and ``enrichment`` is the ratio of hit rates,
-    with a floor of half a hit on the background rate.
+    ``enrichment``, ``log2_enrichment``, ``pvalue``, ``log10_pvalue``,
+    ``qvalue`` and ``log10_qvalue``. ``motif_i`` is 0-based, ``enrichment``
+    is the ratio of hit rates, with a floor of half a hit on the background
+    rate, and the log columns stay finite when the P-values are too small
+    for a double.
 
     Examples
     --------
@@ -93,6 +97,7 @@ def enrich_motifs(
     if pseudocount < 0:
         raise ValueError("pseudocount must be non-negative")
     ms = _motif_list(motifs)
+    _warn_unreachable(ms, pvalue)
     _, seqs = _sequence_pairs(sequences)
     bkg = None if bkg_sequences is None else _sequence_pairs(bkg_sequences)[1]
     cols = _core._enrich(ms, seqs, bkg, pvalue, test, rc, shuffle_k, _seed(seed), pseudocount, nthreads)

@@ -3,6 +3,7 @@ and motif discovery."""
 
 from __future__ import annotations
 
+import os
 import random
 import warnings
 from collections.abc import Iterable, Mapping, Sequence
@@ -65,7 +66,8 @@ def count_klets(string: str, k: int = 1, alph: str | Sequence[str] | None = None
 
     Every k-let of ``alph``, which defaults to the letters in the string,
     gets a row in sorted order; k-lets with letters outside ``alph`` are not
-    counted. Returns a DataFrame with columns ``klets`` and ``counts``.
+    counted. Returns a DataFrame with columns ``klet`` and ``count``, as in
+    [`get_bkg()`][universalmotif.get_bkg].
 
     Examples
     --------
@@ -75,7 +77,7 @@ def count_klets(string: str, k: int = 1, alph: str | Sequence[str] | None = None
     >>> counts = um.count_klets("AACGTTAC", k=2)
     >>> counts.shape
     (16, 2)
-    >>> counts.filter(counts["counts"] > 0).rows()
+    >>> counts.filter(counts["count"] > 0).rows()
     [('AA', 1), ('AC', 2), ('CG', 1), ('GT', 1), ('TA', 1), ('TT', 1)]
     """
     if k < 1:
@@ -86,8 +88,8 @@ def count_klets(string: str, k: int = 1, alph: str | Sequence[str] | None = None
     if not letters:
         raise ValueError("alph cannot be empty")
     return pl.DataFrame(
-        {"klets": _core._klets(letters, k), "counts": _core._count_klets(string, k, letters)},
-        schema={"klets": pl.String, "counts": pl.Int64},
+        {"klet": _core._klets(letters, k), "count": _core._count_klets(string, k, letters)},
+        schema={"klet": pl.String, "count": pl.Int64},
     )
 
 
@@ -157,9 +159,11 @@ def calc_complexity(
     ``"WoottonFederhenFast"``, ``"Trifonov"``, ``"TrifonovFast"`` or
     ``"DUST"``. The methods come from Wootton and Federhen 1993, Trifonov
     1990 and Morgulis et al. 2006, and lower DUST values mean higher
-    complexity. ``alph`` gives the possible letters, by default those in the
-    string. Returns a float for
-    one string and a numpy array for several.
+    complexity. ``alph`` gives the possible letters. By default it is ``ACGT``
+    when the strings hold only those letters and N, ``ACGU`` likewise for RNA,
+    and otherwise every letter found in the strings, so that all strings are
+    scored against the same alphabet. Returns a float for one string and a
+    numpy array for several.
 
     Examples
     --------
@@ -175,7 +179,7 @@ def calc_complexity(
         raise ValueError("trifonov_max_word_size must be a positive integer")
     single = isinstance(string, str)
     strings = [string] if single else [str(s) for s in string]
-    a = None if alph is None else "".join(alph)
+    a = _default_alphabet(strings) if alph is None else "".join(alph)
     out = np.array(_core._complexity(strings, complexity_method, a, trifonov_max_word_size))
     return float(out[0]) if single else out
 
@@ -210,7 +214,8 @@ def sequence_complexity(
         raise ValueError(f"method must be one of {', '.join(_COMPLEXITY_METHODS)}")
     names, seqs = _sequence_pairs(sequences)
     windows = _core._sequence_complexity(
-        seqs, names, method, float(window_size), window_overlap, None, trifonov_max_word_size, nthreads
+        seqs, names, method, float(window_size), window_overlap, _default_alphabet(seqs),
+        trifonov_max_word_size, nthreads,
     )
     return pl.DataFrame(windows).cast(
         {"sequence": pl.String, "start": pl.Int64, "stop": pl.Int64, "complexity": pl.Float64}
@@ -226,16 +231,16 @@ def _default_alphabet(seqs: list[str]) -> str:
     return _letters(letters)
 
 
-def _write_meme_bkg(df: pl.DataFrame, file: str | IO[str]) -> None:
+def _write_meme_bkg(df: pl.DataFrame, file: str | os.PathLike[str] | IO[str]) -> None:
     lines = []
     order = -1
     for klet, p in zip(df["klet"], df["probability"]):
         if len(klet) - 1 != order:
             order = len(klet) - 1
             lines.append(f"#   order {order}")
-        lines.append(f"{klet:<8}{p:.3e} ")
+        lines.append(f"{klet:<8}{p:.3e}")
     text = "\n".join(lines) + "\n"
-    if isinstance(file, str):
+    if isinstance(file, (str, os.PathLike)):
         with open(file, "w") as f:
             f.write(text)
     else:
@@ -252,7 +257,7 @@ def get_bkg(
     window: bool = False,
     window_size: float = 0.1,
     window_overlap: float = 0,
-    to_meme: str | IO[str] | None = None,
+    to_meme: str | os.PathLike[str] | IO[str] | None = None,
     nthreads: int = 1,
 ) -> pl.DataFrame | None:
     """k-let counts and frequencies of sequences.
@@ -556,8 +561,11 @@ _FINDER_SCHEMA = {
     "sites_neg": pl.Int64,
     "n_pos": pl.Int64,
     "n_neg": pl.Int64,
+    "candidates": pl.Int64,
     "pvalue": pl.Float64,
+    "log10_pvalue": pl.Float64,
     "qvalue": pl.Float64,
+    "log10_qvalue": pl.Float64,
 }
 
 
@@ -569,7 +577,7 @@ def motif_finder(
     nmotifs: int = 10,
     hit_pvalue: float = 1e-4,
     stop_pvalue: float = 1e-3,
-    qvalue: float = 1e-3,
+    qvalue: float = 0.05,
     dedup_overlap: float = 0.5,
     rc: bool = True,
     shuffle_k: int = 2,
@@ -591,6 +599,15 @@ def motif_finder(
     low-information flanks are trimmed, and motifs with q-values above
     ``qvalue`` are dropped.
 
+    Each motif is the best of many candidate words, so its P-value, from
+    Fisher's exact test on the sequences with hits, is multiplied by the
+    number of words tested in the search that found it, given in
+    ``candidates``, and the q-values count every word tested at every width.
+    This keeps random sequences from giving motifs, though the refinement of
+    each motif from its word is not accounted for, so the P-values are still
+    somewhat optimistic. ``log10_pvalue`` and ``log10_qvalue`` stay finite
+    when the P-values are too small for a double.
+
     Without ``bkg_sequences``, the background is the positives shuffled
     with [`shuffle_sequences()`][universalmotif.shuffle_sequences] using the
     Euler method with ``k=shuffle_k`` and ``seed``. Parallelism is across
@@ -599,7 +616,8 @@ def motif_finder(
     Returns a DataFrame in order of P-value, with the motifs in an object
     column ``motif`` alongside ``name``, ``consensus``, ``rank``, ``width``,
     ``nsites``, ``seqs_pos``, ``seqs_neg``, ``sites_pos``, ``sites_neg``,
-    ``n_pos``, ``n_neg``, ``pvalue`` and ``qvalue``. The motifs are PPMs
+    ``n_pos``, ``n_neg``, ``candidates``, ``pvalue``, ``log10_pvalue``,
+    ``qvalue`` and ``log10_qvalue``. The motifs are PPMs
     named ``motif_1``, ``motif_2`` and so on, with their q-values as
     E-values. ``seqs_pos`` and ``seqs_neg`` count sequences with a hit, and
     ``sites_pos`` and ``sites_neg`` count hits.

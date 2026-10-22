@@ -313,8 +313,20 @@ fn _motif_finder<'py>(
     )?;
     d.set_item("n_pos", found.iter().map(|f| f.n_pos).collect::<Vec<_>>())?;
     d.set_item("n_neg", found.iter().map(|f| f.n_neg).collect::<Vec<_>>())?;
+    d.set_item(
+        "candidates",
+        found.iter().map(|f| f.candidates).collect::<Vec<_>>(),
+    )?;
     d.set_item("pvalue", found.iter().map(|f| f.pvalue).collect::<Vec<_>>())?;
+    d.set_item(
+        "log10_pvalue",
+        found.iter().map(|f| f.log10_pvalue).collect::<Vec<_>>(),
+    )?;
     d.set_item("qvalue", found.iter().map(|f| f.qvalue).collect::<Vec<_>>())?;
+    d.set_item(
+        "log10_qvalue",
+        found.iter().map(|f| f.log10_qvalue).collect::<Vec<_>>(),
+    )?;
     Ok((
         found.into_iter().map(|f| PyMotif::from(f.motif)).collect(),
         d,

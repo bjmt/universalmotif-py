@@ -165,8 +165,11 @@ def motif_proximity(
         ``count``, ``orientation``, ``nhits``, ``best_dist``, ``hits_near``,
         ``hits_far``, ``frac_near``, ``expected_near``, ``enrichment``,
         ``log2_enrichment``, ``pvalue``, ``qvalue``, ``ks_d`` and
-        ``dist_to_nearest``. ``motif_i`` is the 0-based rank of the name,
-        and ``dist_to_nearest`` holds the number of positions from each
+        ``dist_to_nearest``. ``motif_i`` is the motif's 0-based index among
+        ``motifs``, or in ``hits`` the ``motif_i`` from
+        [`scan_sequences()`][universalmotif.scan_sequences] if it is there and
+        otherwise the order in which motifs first appear, and
+        ``dist_to_nearest`` holds the number of positions from each
         hit's middle to its nearest anchor, which is 0 inside it and
         negative upstream in the anchor's orientation.
 
@@ -242,7 +245,13 @@ def motif_proximity(
     index = {c: i for i, c in enumerate(names)}
     chrom_lengths = [lengths.get(c) for c in names]
     motif_names = [str(m) for m in hits["motif"].to_list()]
-    ids = sorted(set(motif_names))
+    # Motifs keep the numbers scan_sequences() gave them, or else are
+    # numbered in order of first appearance.
+    if "motif_i" in hits.columns:
+        given = dict(zip(motif_names, hits["motif_i"].to_list()))
+        ids = sorted(given, key=lambda m: given[m])
+    else:
+        ids = list(dict.fromkeys(motif_names))
     motif_index = {m: i for i, m in enumerate(ids)}
     cols = _core._proximity(
         _cols(h, index),
@@ -262,8 +271,11 @@ def motif_proximity(
         nthreads,
     )
     n = len(cols["motif"])
-    cols["motif_i"] = cols["motif"]
-    cols["motif"] = [ids[i] for i in cols["motif_i"]]
+    cols["motif"] = [ids[i] for i in cols["motif"]]
+    cols["motif_i"] = (
+        [given[m] for m in cols["motif"]] if "motif_i" in hits.columns
+        else [motif_index[m] for m in cols["motif"]]
+    )
     cols["method"], cols["count"], cols["orientation"] = [method] * n, [count] * n, [orientation] * n
     df = pl.DataFrame({k: cols[k] for k in _PROXIMITY_SCHEMA}, schema=_PROXIMITY_SCHEMA)
     return df.filter(pl.col("qvalue") <= qvalue).sort("pvalue", "motif_i", maintain_order=True)

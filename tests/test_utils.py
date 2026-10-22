@@ -8,7 +8,14 @@ import pytest
 
 import universalmotif as um
 
-from conftest import args, assert_motif_matches, load_reference, motif_from_record, nums
+from conftest import (
+    args,
+    assert_motif_matches,
+    load_reference,
+    motif_from_record,
+    nums,
+    r_rounding_differs,
+)
 
 
 def _ref(key):
@@ -30,9 +37,23 @@ def test_column_conversions():
            "icm_to_ppm": lambda a: um.icm_to_ppm(nums(a["pos"]))}
     n = 0
     for case in load_reference("columns.json"):
+        if case["fn"] == "ppm_to_pcm":
+            pos, nsites = nums(case["args"]["pos"]), nums(case["args"]["nsites"])[0]
+            if r_rounding_differs(pos, nsites):
+                # R adds the whole rounding error to the largest count (see
+                # DIVERGENCES.md in the Rust crate).
+                got = um.ppm_to_pcm(pos, nsites)
+                assert got.sum() == nsites
+                assert np.all(np.abs(got - np.array(pos) * nsites) < 1)
+                n += 1
+                continue
         if case["fn"] in fns:
             got = fns[case["fn"]](case["args"])
-            np.testing.assert_allclose(got, nums(case["out"]), rtol=1e-12, atol=1e-15,
+            want = np.array(nums(case["out"]), dtype=float)
+            if case["fn"] == "ppm_to_icm":
+                # R's NaN for zero probabilities in relative entropy is 0 here.
+                want[np.isnan(want) & (np.array(nums(case["args"]["pos"])) == 0)] = 0.0
+            np.testing.assert_allclose(got, want, rtol=1e-12, atol=1e-15,
                                        err_msg=f"{case['fn']} {case['args']}")
             n += 1
     assert n > 100
@@ -86,8 +107,22 @@ def test_column_metrics_and_averages():
         if "error" in case:
             with pytest.raises(ValueError):
                 call()
+        elif case["method"] == "WPCC":
+            # The R package does not normalise the WPCC weights (see
+            # DIVERGENCES.md in the Rust crate), so check against a weighted
+            # correlation computed here.
+            w = np.add(nums(case["bkg1"]), nums(case["bkg2"]))
+            x, y = np.array(nums(case["x"])), np.array(nums(case["y"]))
+            mx, my = np.average(x, weights=w), np.average(y, weights=w)
+            bot = np.sqrt(np.sum(w * (x - mx) ** 2) * np.sum(w * (y - my) ** 2))
+            want = 1.0 if bot == 0 else np.sum(w * (x - mx) * (y - my)) / bot
+            assert call() == pytest.approx(want, rel=1e-12, abs=1e-15), case
         else:
             assert call() == pytest.approx(case["value"], rel=1e-12, abs=1e-15), case
+    u = [0.25] * 4
+    x, y = [0.5, 0.1, 0.1, 0.3], [0.7, 0.1, 0.1, 0.1]
+    assert um.compare_columns(x, y, "WPCC", u, u) == pytest.approx(um.compare_columns(x, y, "PCC"))
+    assert um.compare_columns([0.5, 0.5, 0, 0], [0.5, 0.5, 0, 0], "KL") == 0
     with pytest.raises(ValueError, match="method"):
         um.compare_columns([0.5, 0.5], [0.5, 0.5], "IS")
     avg = _ref("average_ic")
@@ -168,7 +203,17 @@ def test_small_helpers(tmp_path):
                                     alph_name=a.get("alph.name"), letter_names=a.get("letter.names"),
                                     colours=a.get("colours"))
         if "value" in case:
-            assert call().rstrip("\n") == case["value"], a
+            # The R package declares each complementary pair twice, once from
+            # each letter; the port declares it once.
+            seen, want = set(), []
+            for line in case["value"].split("\n"):
+                if " ~ " in line:
+                    x, y = line[0], line.split(" ~ ")[1][0]
+                    if (y, x) in seen:
+                        continue
+                    seen.add((x, y))
+                want.append(line)
+            assert call().rstrip("\n") == "\n".join(want), a
         else:
             with pytest.raises(ValueError):
                 call()

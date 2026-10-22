@@ -54,7 +54,8 @@ def motif_from_record(r):
         "organism": r["organism"],
         "alphabet": r["alphabet"],
         "type": r["type"],
-        "icscore": num(r["icscore"]),
+        # The port gives CWMs no total IC (see DIVERGENCES.md).
+        "icscore": math.nan if r["type"] == "CWM" else num(r["icscore"]),
         "nsites": num(r["nsites"]),
         "pseudocount": num(r["pseudocount"]),
         "bkg": nums(r["bkg"]),
@@ -76,11 +77,42 @@ def motif_from_record(r):
     return _core._motif_from_state(state)
 
 
-def assert_motif_matches(got, record, ctx="", skip_nsites=False):
+def r_rounding_differs(pos, nsites):
+    """Whether R's rounding of a column of probabilities to ``nsites`` counts
+    overshoots by more than one count, in which case the port rounds
+    differently (see DIVERGENCES.md)."""
+    n = 100.0 if nsites is None or math.isnan(nsites) or nsites <= 1 else nsites
+    total = sum(math.floor(p * n + 0.5) for p in pos)
+    return total - n > 1
+
+
+def ic_rounds_differently(m):
+    """Whether the total IC of a PPM motif goes through a column that R rounds
+    differently."""
+    return m.type == "PPM" and any(r_rounding_differs(c, m.nsites) for c in m.matrix.T)
+
+
+def own_icscore(m):
+    """The total IC computed afresh from a motif's own matrix and settings."""
+    import universalmotif as um
+
+    bkg = list(m.bkg.values())
+    return sum(um.position_icscore(c, bkg=bkg, type=m.type, pseudocount=m.pseudocount,
+                                   nsites=m.nsites or 0) for c in m.matrix.T)
+
+
+def assert_motif_matches(got, record, ctx="", skip_nsites=False, skip_derived=False,
+                         skip_matrix=False):
+    """Compare a motif with a record from R. ``skip_derived`` skips the total IC
+    and consensus, which the R package leaves as they were after some
+    operations where the port recomputes them, and ``skip_matrix`` the matrix
+    too, where R rounds counts differently (see DIVERGENCES.md)."""
     want = motif_from_record(record)
-    for field in ("name", "altname", "family", "organism", "alphabet", "type",
-                  "consensus", "strand", "extrainfo", "isgapped", "gaploc",
-                  "mingap", "maxgap"):
+    fields = ["name", "altname", "family", "organism", "alphabet", "type", "strand",
+              "extrainfo", "isgapped", "gaploc", "mingap", "maxgap"]
+    if not (skip_derived or skip_matrix):
+        fields.append("consensus")
+    for field in fields:
         assert getattr(got, field) == getattr(want, field), f"{ctx}: {field}"
     # Numbers read from files can differ from R in the last bit, because R's
     # parser is not always correctly rounded.
@@ -90,8 +122,12 @@ def assert_motif_matches(got, record, ctx="", skip_nsites=False):
             assert g == w, f"{ctx}: {field}"
         else:
             assert math.isclose(g, w, rel_tol=1e-12), f"{ctx}: {field}"
-    assert math.isclose(got.icscore, want.icscore, rel_tol=1e-12, abs_tol=1e-12), ctx
+    if got.type == "CWM":
+        assert math.isnan(got.icscore), ctx
+    elif not (skip_derived or skip_matrix or ic_rounds_differently(want)):
+        assert math.isclose(got.icscore, want.icscore, rel_tol=1e-12, abs_tol=1e-12), ctx
     assert math.isclose(got.pseudocount, want.pseudocount), ctx
     np.testing.assert_allclose(list(got.bkg.values()), list(want.bkg.values()),
                                rtol=1e-12, err_msg=ctx)
-    np.testing.assert_allclose(got.matrix, want.matrix, rtol=1e-12, atol=1e-12, err_msg=ctx)
+    if not skip_matrix:
+        np.testing.assert_allclose(got.matrix, want.matrix, rtol=1e-12, atol=1e-12, err_msg=ctx)

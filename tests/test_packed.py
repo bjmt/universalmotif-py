@@ -14,6 +14,7 @@ def _scan_motifs():
     return [motif_from_record(r) for r in load_reference("scan.json", "motifs")]
 
 
+@pytest.mark.filterwarnings("ignore:.*cannot reach a P-value")
 def test_three_inputs_scan_alike():
     motifs = _scan_motifs()
     for i, case in enumerate(load_reference("scan.json")):
@@ -49,6 +50,7 @@ def test_other_alphabets_scan_alike(tmp_path):
         assert um.scan_sequences(motifs, packed, pvalue=0.01).equals(want)
 
 
+@pytest.mark.filterwarnings("ignore:.*cannot reach a P-value")
 def test_packed_mapping(tmp_path):
     p = um.pack_sequences({"a": "acgtNNACGTnry", "b": "", "c": "TTTT"})
     assert p.alphabet == "DNA"
@@ -76,6 +78,7 @@ def test_packed_mapping(tmp_path):
         um.scan_sequences(um.create_motif("ACGT"), tmp_path / "missing.fa")
 
 
+@pytest.mark.filterwarnings("ignore:.*cannot reach a P-value")
 def test_packed_sequences_work_as_a_mapping():
     # Functions without a packed path decode the sequences as they go.
     seqs = um.read_fasta(reference_file("promoters.fa"))
@@ -94,6 +97,7 @@ def _write(path, text):
     return path
 
 
+@pytest.mark.filterwarnings("ignore:.*cannot reach a P-value")
 def test_gzipped_fasta(tmp_path):
     plain = reference_file("promoters.fa")
     gz = tmp_path / "promoters.fa.gz"

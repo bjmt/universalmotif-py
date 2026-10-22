@@ -79,7 +79,15 @@ fn _enrich<'py>(
         rows.iter().map(|r| r.log2_enrichment).collect::<Vec<_>>(),
     )?;
     d.set_item("pvalue", rows.iter().map(|r| r.pvalue).collect::<Vec<_>>())?;
+    d.set_item(
+        "log10_pvalue",
+        rows.iter().map(|r| r.log10_pvalue).collect::<Vec<_>>(),
+    )?;
     d.set_item("qvalue", rows.iter().map(|r| r.qvalue).collect::<Vec<_>>())?;
+    d.set_item(
+        "log10_qvalue",
+        rows.iter().map(|r| r.log10_qvalue).collect::<Vec<_>>(),
+    )?;
     Ok(d)
 }
 

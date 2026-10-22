@@ -2,12 +2,14 @@
 the R package manages; the crate checks both strands against plain scoring)."""
 
 import numpy as np
+import pytest
 
 import universalmotif as um
 
 from conftest import load_reference, motif_from_record, nums
 
 
+@pytest.mark.filterwarnings("ignore:.*cannot reach a P-value")
 def test_gapped_scans_match_r(tmp_path):
     motifs = [motif_from_record(r) for r in load_reference("gapped.json", "motifs")]
     seqs = {f"s{i + 1}": s for i, s in enumerate(load_reference("gapped.json", "sequences"))}

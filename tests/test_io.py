@@ -122,6 +122,12 @@ def test_writers(tmp_path):
                     ]
 
                 got, want = strip(got), strip(want)
+            if case["format"] == "meme":
+                # The R package leaves trailing spaces and writes E= 0 for
+                # motifs without an E-value; the port does neither.
+                want = "".join(
+                    line.rstrip().removesuffix(" E= 0") + "\n" for line in want.splitlines()
+                )
             assert got == want, ctx
 
 

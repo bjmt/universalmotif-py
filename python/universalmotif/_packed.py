@@ -89,8 +89,16 @@ class PackedSequences(Mapping[str, str]):
         total = sum(self._inner.lengths())
         return (
             f"PackedSequences({len(self)} {self.alphabet} sequences, {total:,} letters, "
-            f"{self.nbytes / 1e6:,.1f} MB)"
+            f"{_size(self.nbytes)})"
         )
+
+
+def _size(nbytes: int) -> str:
+    """A number of bytes in the largest unit that keeps it at 1 or more."""
+    for unit, scale in (("GB", 1e9), ("MB", 1e6), ("kB", 1e3)):
+        if nbytes >= scale:
+            return f"{nbytes / scale:,.1f} {unit}"
+    return f"{nbytes} bytes"
 
 
 def pack_sequences(

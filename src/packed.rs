@@ -86,16 +86,21 @@ impl PyPacked {
 }
 
 #[pyfunction]
+#[pyo3(signature = (path, alphabet, skip, trim_names=false))]
 fn _read_fasta_packed(
     py: Python<'_>,
     path: std::path::PathBuf,
     alphabet: &str,
     skip: usize,
+    trim_names: bool,
 ) -> PyResult<PyPacked> {
     let alphabet = parse_alphabet(alphabet)?;
-    let (names, seqs) = py
+    let (mut names, seqs) = py
         .detach(|| fasta::read_encoded(&path, &alphabet, skip))
         .map_err(err)?;
+    if trim_names {
+        names = names.into_iter().map(crate::io::first_word).collect();
+    }
     PyPacked::new(names, seqs)
 }
 

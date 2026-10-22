@@ -41,7 +41,7 @@ def _apply(motifs, f):
 def create_motif(
     input: object = None,
     alphabet: str | None = None,
-    type: MotifType = "PPM",
+    type: MotifType | None = None,
     *,
     letters: Sequence[str] | None = None,
     name: str = "motif",
@@ -81,7 +81,9 @@ def create_motif(
         ``"DNA"``, ``"RNA"``, ``"AA"``, or a string of letters for a custom
         alphabet. Guessed from the input when omitted.
     type
-        Type of the returned motif.
+        Type of the returned motif, a PPM by default. A matrix with negative
+        values needs its type given, as ``"PWM"`` or ``"CWM"``, since the two
+        are read differently.
     letters
         Row letters of a matrix ``input``.
     name, altname, family, organism, nsites, bkgsites, strand, pval, qval, eval, extrainfo
@@ -126,7 +128,7 @@ def create_motif(
     [[0.0, 3.0, 0.0, 3.0, 2.0, 2.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [3.0, 0.0, 3.0, 0.0, 1.0, 1.0]]
     """
     opts = dict(
-        type=type,
+        type=type or "PPM",
         name=name,
         pseudocount=pseudocount,
         bkg=bkg,
@@ -164,6 +166,11 @@ def create_motif(
     matrix = np.asarray(input, dtype=np.float64)
     if matrix.ndim != 2:
         raise ValueError(f"matrix input must be 2-D, got {matrix.ndim} dimensions")
+    if type is None and (matrix < 0).any():
+        raise ValueError(
+            "the matrix has negative values, so it holds log-odds scores or contribution "
+            'weights; say which with type="PWM" or type="CWM"'
+        )
     return _core._create_from_matrix(
         matrix, None if letters is None else list(letters), alphabet, **opts
     )
@@ -360,6 +367,12 @@ def position_icscore(
 ) -> float:
     """Information content of a single motif column.
 
+    PPM columns are rounded to ``nsites`` counts and given the pseudocount
+    before their information content is taken, as they are for a motif's
+    total IC, so with the defaults a column of pure A gives about 1.93 bits
+    rather than 2; set ``pseudocount=0`` for the information content of the
+    column as it is. PCM columns get the pseudocount directly.
+
     Examples
     --------
     >>> import universalmotif as um
@@ -425,7 +438,10 @@ def get_consensus_aa(
 
 
 def consensus_to_ppm(letter: str) -> np.ndarray:
-    """The DNA probability column for an IUPAC letter.
+    """The DNA probability column for an IUPAC letter. A single base gets
+    0.997, leaving 0.001 for each of the others, unlike a motif made by
+    [`create_motif()`][universalmotif.create_motif] from a consensus string,
+    whose columns hold exact zeros.
 
     Examples
     --------

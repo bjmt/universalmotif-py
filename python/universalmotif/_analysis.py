@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numbers
 import os
+import warnings
 from collections.abc import Iterable, Mapping, Sequence
 
 import numpy as np
@@ -31,8 +32,10 @@ def motif_pvalue(
     Give either ``score`` or ``pvalue``. A motif's P-value for a score is the
     probability that a random site, drawn from the background, scores at
     least that much; it is computed exactly from the motif's score
-    distribution. Going the other way gives the lowest score reached with at
-    most that probability, or infinity if no score is that unlikely.
+    distribution. A score above the motif's highest possible score has a
+    P-value of 0, with a warning. Going the other way gives the lowest score
+    reached with at most that probability, or infinity if no score is that
+    unlikely.
 
     Scores are computed on an integer grid, with PWM entries multiplied by
     1000 and truncated, so they are exact to 0.001.
@@ -85,9 +88,19 @@ def motif_pvalue(
     n = len(ms)
 
     def run(queries):
-        return np.array(
+        out = np.array(
             _core._motif_pvalue(ms, queries, bkg_probs, nthreads, score is None), dtype=float
         )
+        if score is not None:
+            # A P-value of 0 only comes from a score that no site can reach.
+            above = sorted({ms[queries[k][0]].name for k in np.flatnonzero(out == 0)})
+            if above:
+                warnings.warn(
+                    f"scores above the highest possible score get a P-value of 0 "
+                    f"(motifs: {', '.join(above[:5])}{', ...' if len(above) > 5 else ''})",
+                    stacklevel=3,
+                )
+        return out
 
     if _is_number(values):
         if single:
@@ -157,6 +170,40 @@ _HIT_SCHEMA = {
 }
 
 
+def _warn_unreachable(ms: list[Motif], pvalue: float, stacklevel: int = 3) -> None:
+    """Warn about motifs that cannot give a P-value as small as ``pvalue``,
+    and so can have no hits, with the smallest P-value each can give."""
+    best = _core._min_pvalues(ms)
+    bad = [i for i, p in enumerate(best) if p > pvalue]
+    if not bad:
+        return
+    listed = ", ".join(f"{ms[i].name} ({best[i]:.3g})" for i in bad[:5])
+    more = f" and {len(bad) - 5} more" if len(bad) > 5 else ""
+    warnings.warn(
+        f"{len(bad)} motif{'s' if len(bad) > 1 else ''} cannot reach a P-value of {pvalue:g} and "
+        f"will have no hits; the smallest P-value each can give is: {listed}{more}",
+        stacklevel=stacklevel,
+    )
+
+
+def _sample_letters(seqs: list[str], n_seqs: int = 100, n_letters: int = 10_000) -> set[str]:
+    """The letters, in upper case, of the start of the first few sequences."""
+    return set("".join(s[:n_letters] for s in seqs[:n_seqs]).upper())
+
+
+def _warn_alphabet_mismatch(ms: list[Motif], letters: set[str], stacklevel: int = 3) -> None:
+    """Warn when DNA motifs meet sequences that look like RNA, or the other
+    way round, judging the sequences by the letters given."""
+    for alph, own, other in (("DNA", "T", "U"), ("RNA", "U", "T")):
+        if any(m.alphabet == alph for m in ms) and other in letters and own not in letters:
+            warnings.warn(
+                f"{alph} motifs are scanned against sequences that contain {other} but not "
+                f"{own}, so they can only match where {own} is not needed; convert the motifs "
+                "with switch_alph() or the sequences first",
+                stacklevel=stacklevel,
+            )
+
+
 def scan_sequences(
     motifs: Motif | Iterable[Motif],
     sequences: str | Sequence[str] | Mapping[str, str] | os.PathLike[str],
@@ -176,6 +223,12 @@ def scan_sequences(
     threshold comes from the ``pvalue`` cutoff, and every window scoring at
     least that much is reported with its P-value. Only DNA and RNA have a
     reverse strand, which is scanned with ``rc``.
+
+    A motif too short or too degenerate to reach the ``pvalue`` cutoff can
+    have no hits, and is named in a warning with the smallest P-value it can
+    give. There are warnings too when DNA motifs meet sequences that look
+    like RNA or the other way round, and when a string that names a file is
+    given as the sequence.
 
     Parameters
     ----------
@@ -239,6 +292,13 @@ def scan_sequences(
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
     overlaps = (no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif) if no_overlaps else None
     motif_names = _make_unique([m.name for m in ms])
+    if isinstance(sequences, str) and len(sequences) < 4096 and os.path.isfile(sequences):
+        warnings.warn(
+            f"the string {sequences!r} names a file but is scanned as a sequence; pass "
+            "pathlib.Path(...) to scan the file",
+            stacklevel=2,
+        )
+    _warn_unreachable(ms, pvalue)
     if isinstance(sequences, PackedSequences):
         hits = _core._scan_packed(ms, sequences._inner, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names)
     elif isinstance(sequences, os.PathLike):
@@ -246,6 +306,7 @@ def scan_sequences(
         hits = _core._scan_fasta(ms, path, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names)
     else:
         names, seqs = _sequence_pairs(sequences)
+        _warn_alphabet_mismatch(ms, _sample_letters(seqs))
         hits = _core._scan_sequences(ms, seqs, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names, names)
     return pl.DataFrame(hits).cast(_HIT_SCHEMA)
 

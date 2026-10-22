@@ -272,13 +272,17 @@ impl PyMotif {
     }
 
     /// Return a copy with some metadata replaced. The matrix, type,
-    /// alphabet, consensus and total IC cannot be changed this way.
+    /// alphabet, consensus and total IC cannot be changed this way, but the
+    /// total IC and consensus are recomputed when the pseudocount,
+    /// background or nsites change.
     #[pyo3(signature = (**changes))]
     fn replace(&self, changes: Option<&Bound<'_, PyDict>>) -> PyResult<PyMotif> {
         let mut p = self.inner.clone().into_parts();
+        let mut refresh = false;
         if let Some(changes) = changes {
             for (k, v) in changes.iter() {
                 let k: String = k.extract()?;
+                refresh |= matches!(k.as_str(), "pseudocount" | "bkg" | "nsites");
                 match k.as_str() {
                     "name" => p.name = v.extract()?,
                     "altname" => p.altname = v.extract()?,
@@ -300,6 +304,9 @@ impl PyMotif {
                     }
                 }
             }
+        }
+        if refresh {
+            p.recompute_derived();
         }
         Motif::from_parts(p).map(PyMotif::from).map_err(err)
     }

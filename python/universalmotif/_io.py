@@ -3,6 +3,7 @@ this module deals with files, line skipping and appending."""
 
 from __future__ import annotations
 
+import gzip
 import os
 import warnings
 from collections.abc import Iterable, Mapping, Sequence
@@ -21,7 +22,9 @@ PathLike = str | os.PathLike[str]
 
 
 def _read_text(file: PathLike, skip: int) -> str:
-    text = Path(file).read_text()
+    raw = Path(file).read_bytes()
+    # Gzipped files are recognised from their first bytes.
+    text = (gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw).decode()
     if skip:
         if skip < 0:
             raise ValueError("skip must be zero or positive")
@@ -47,7 +50,10 @@ def _write_text(file: PathLike, text: str, overwrite: bool, append: bool) -> Non
     path = Path(file)
     if path.exists() and not overwrite and not append:
         raise FileExistsError(f"{path} exists; set overwrite=True or append=True")
-    with open(path, "a" if append else "w") as f:
+    # A .gz path is written gzipped; appending adds a gzip member, which
+    # readers treat as a continuation of the file.
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "at" if append else "wt") as f:
         f.write(text)
 
 
@@ -469,13 +475,19 @@ def write_uniprobe(
 
 
 def read_fasta(
-    file: PathLike, skip: int = 0, packed: bool = False, alphabet: str = "DNA"
+    file: PathLike,
+    skip: int = 0,
+    packed: bool = False,
+    alphabet: str = "DNA",
+    trim_names: bool = False,
 ) -> dict[str, str] | PackedSequences:
     """Read a FASTA file into a dict from names to sequences, where each name
-    is the whole header line after ``>``. The file is read line by line, so a
+    is the whole header line after ``>``, or with ``trim_names`` only its
+    first word, as most tools use. The file is read line by line, so a
     genome needs little more memory than its sequences, and the first
     ``skip`` lines are ignored. Gzipped files, bgzip included, are recognised
-    from their first bytes and decompressed as they are read.
+    from their first bytes and decompressed as they are read. When names
+    repeat, the last sequence with each name is kept, with a warning.
 
     With ``packed``, the sequences are packed for scanning as they are read
     and returned as [`PackedSequences`][universalmotif.PackedSequences] for
@@ -497,8 +509,18 @@ def read_fasta(
     if skip < 0:
         raise ValueError("skip must be zero or positive")
     if packed:
-        return PackedSequences(_core._read_fasta_packed(os.fspath(file), alphabet, skip))
-    return dict(_core._read_fasta_path(os.fspath(file), skip))
+        return PackedSequences(
+            _core._read_fasta_packed(os.fspath(file), alphabet, skip, trim_names)
+        )
+    records = _core._read_fasta_path(os.fspath(file), skip, trim_names)
+    out = dict(records)
+    if len(out) < len(records):
+        warnings.warn(
+            f"{len(records) - len(out)} sequence names appear more than once; only the last "
+            "sequence with each name is kept",
+            stacklevel=2,
+        )
+    return out
 
 
 def write_fasta(
@@ -510,7 +532,8 @@ def write_fasta(
 ) -> None:
     """Write sequences to a FASTA file, wrapping lines at ``width``
     characters, or not at all when it is 0. Unnamed sequences are called
-    ``seq1``, ``seq2`` and so on.
+    ``seq1``, ``seq2`` and so on. A path ending in ``.gz`` is written
+    gzipped, as it is for every writer in the package.
 
     Examples
     --------

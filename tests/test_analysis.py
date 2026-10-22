@@ -10,6 +10,7 @@ import universalmotif as um
 from conftest import args, load_reference, motif_from_record, nums, reference_file
 
 
+@pytest.mark.filterwarnings("ignore:scores above the highest")
 def test_motif_pvalue_reference():
     for i, case in enumerate(load_reference("pvalue.json")):
         m = motif_from_record(case["input"])
@@ -26,6 +27,7 @@ def _scan_motifs():
     return [motif_from_record(r) for r in load_reference("scan.json", "motifs")]
 
 
+@pytest.mark.filterwarnings("ignore:.*cannot reach a P-value")
 def test_scan_sequences_reference():
     motifs = _scan_motifs()
     for i, case in enumerate(load_reference("scan.json")):

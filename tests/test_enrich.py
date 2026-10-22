@@ -25,6 +25,7 @@ def _as_list(x):
     return x if isinstance(x, list) else [x]
 
 
+@pytest.mark.filterwarnings("ignore:.*cannot reach a P-value")
 def test_enrich_reference():
     ms = _motifs()
     tgt, bkg = _ref("targets"), _ref("background")
@@ -51,6 +52,7 @@ def test_enrich_reference():
             _close(got[col].to_list(), t[col.replace("_", ".")], f"{a} {col}")
 
 
+@pytest.mark.filterwarnings("ignore:.*cannot reach a P-value")
 def test_enrich_shuffled_background():
     ms = _motifs()
     tgt = _ref("targets")
@@ -62,13 +64,37 @@ def test_enrich_shuffled_background():
         um.enrich_motifs([um.create_motif("MKVL", alphabet="AA"), ms[0]], tgt)
 
 
+def _bh(p):
+    p = np.asarray(p, dtype=float)
+    order = np.argsort(p)[::-1]
+    q = np.minimum.accumulate(p[order] * len(p) / np.arange(len(p), 0, -1))
+    out = np.empty_like(p)
+    out[order] = np.minimum(q, 1)
+    return out
+
+
 def _check_coocc(got, t, ctx):
+    # The port does not test a motif against itself (see DIVERGENCES.md), so
+    # self pairs are checked on their own and left out of the comparison with
+    # R, whose q-values are recomputed without them.
+    own = got.filter(pl.col("motif_a") == pl.col("motif_b"))
+    assert own["pvalue"].null_count() == own.height, ctx
+    assert (own["b_only"] == 0).all(), ctx
+    got = got.filter(pl.col("motif_a") != pl.col("motif_b"))
+    t = {k: _as_list(v) for k, v in t.items()}
+    keep = [k for k in range(len(t["motif_a"])) if t["motif_a"][k] != t["motif_b"][k]]
+    t = {k: [v[i] for i in keep] if len(v) == len(t["motif_a"]) else v for k, v in t.items()}
     for col in ("motif_a", "motif_b"):
         assert got[col].to_list() == t[col], (ctx, col)
     for col in ("a_only", "b_only", "both", "neither"):
         assert got[col].to_list() == nums(t[col]), (ctx, col)
-    for col in ("odds_ratio", "pvalue", "qvalue"):
+    for col in ("odds_ratio", "pvalue"):
         _close(got[col].to_list(), t[col], f"{ctx} {col}")
+    p = np.array(nums(t["pvalue"]), dtype=float)
+    q = np.full(len(p), np.nan)
+    tested = ~np.isnan(p)
+    q[tested] = _bh(p[tested])
+    _close(got["qvalue"].to_list(), list(q), f"{ctx} qvalue")
     if "both.clustered" in t:
         assert got["both_clustered"].to_list() == nums(t["both.clustered"]), ctx
         _close(got["median_distance"].to_list(), t["median.distance"], f"{ctx} median")

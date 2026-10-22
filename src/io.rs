@@ -238,13 +238,29 @@ fn _read_fasta(text: &str) -> PyResult<Vec<(String, String)>> {
     fasta::read(text).map_err(err)
 }
 
+/// The first word of a FASTA header, or the whole header if it is blank.
+pub(crate) fn first_word(name: String) -> String {
+    match name.split_whitespace().next() {
+        Some(w) if w.len() < name.len() => w.to_string(),
+        _ => name,
+    }
+}
+
 #[pyfunction]
+#[pyo3(signature = (path, skip, trim_names=false))]
 fn _read_fasta_path(
     py: Python<'_>,
     path: std::path::PathBuf,
     skip: usize,
+    trim_names: bool,
 ) -> PyResult<Vec<(String, String)>> {
-    py.detach(|| fasta::read_path(&path, skip)).map_err(err)
+    let mut out = py.detach(|| fasta::read_path(&path, skip)).map_err(err)?;
+    if trim_names {
+        for r in out.iter_mut() {
+            r.0 = first_word(std::mem::take(&mut r.0));
+        }
+    }
+    Ok(out)
 }
 
 #[pyfunction]

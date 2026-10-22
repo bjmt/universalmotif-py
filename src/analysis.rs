@@ -80,6 +80,21 @@ fn _motif_pvalue(
     .map_err(err)
 }
 
+#[pyfunction]
+#[pyo3(signature = (motifs, nthreads=1))]
+fn _min_pvalues(
+    py: Python<'_>,
+    motifs: Vec<PyRef<'_, PyMotif>>,
+    nthreads: usize,
+) -> PyResult<Vec<f64>> {
+    let motifs = unwrap(&motifs);
+    let opts = PvalueOptions {
+        bkg: Vec::new(),
+        nthreads,
+    };
+    py.detach(|| pvalue::min_pvalues(&motifs, &opts)).map_err(err)
+}
+
 fn scan_options(
     pvalue: f64,
     rc: bool,
@@ -386,7 +401,7 @@ fn _merge_motifs(
     name: Option<String>,
     weighted: bool,
     nthreads: usize,
-) -> PyResult<PyMotif> {
+) -> PyResult<(PyMotif, Vec<usize>)> {
     let motifs = unwrap(&motifs);
     let opts = MergeOptions {
         min_overlap,
@@ -395,8 +410,8 @@ fn _merge_motifs(
         weighted,
         nthreads,
     };
-    py.detach(|| merge::merge_motifs(&motifs, &opts))
-        .map(PyMotif::from)
+    py.detach(|| merge::merge_motifs_used(&motifs, &opts))
+        .map(|(m, used)| (PyMotif::from(m), used))
         .map_err(err)
 }
 
@@ -497,6 +512,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_hclust, m)?)?;
     m.add_function(wrap_pyfunction!(_motif_tree, m)?)?;
     m.add_function(wrap_pyfunction!(_motif_pvalue, m)?)?;
+    m.add_function(wrap_pyfunction!(_min_pvalues, m)?)?;
     m.add_function(wrap_pyfunction!(_scan_sequences, m)?)?;
     m.add_function(wrap_pyfunction!(_scan_packed, m)?)?;
     m.add_function(wrap_pyfunction!(_scan_fasta, m)?)?;

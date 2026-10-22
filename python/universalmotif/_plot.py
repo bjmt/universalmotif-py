@@ -308,7 +308,7 @@ def view_motifs(
         ``"similarity"``.
     show_names, names_pos
         Name each logo, either above it with ``"top"`` or beside it with
-        ``"right"``.
+        ``"right"``. A single logo is named above it.
     show_positions, show_positions_once
         Number the positions, either once under the last logo or under
         every logo with each motif counting its own positions.
@@ -363,7 +363,10 @@ def view_motifs(
     if return_raw:
         return dict(zip(names, mats))
     if use_type == "PWM" and any(not np.isfinite(m).all() for m in mats):
-        raise ValueError("found non-finite values in a motif")
+        raise ValueError(
+            "found non-finite values in a motif, as a PWM made without a pseudocount has; "
+            "give it a pseudocount, for example with normalize(), before drawing it"
+        )
     rows = list(motifs[0].letters)
     colours = colour_scheme if colour_scheme is not None else _default_colours(alphabet, rows)
     if colour_scheme is not None:
@@ -391,8 +394,10 @@ def view_motifs(
             labels = [str(i - off + 1) if off <= i < off + w else "" for i in range(width)]
         show = show_positions and (not shared or k == n - 1)
         _style_axes(ax, _YLABELS[use_type], ticks, ylim, width, show, labels, text_size)
-        if n > 1 and show_names:
-            if names_pos == "top":
+        if show_names:
+            # A single logo is always named above, as the figure is sized
+            # for names beside the logos only when there are several.
+            if names_pos == "top" or n == 1:
                 ax.set_title(name, fontsize=text_size)
             else:
                 ax.text(1.02, 0.5, name, transform=ax.transAxes, va="center", ha="left", fontsize=text_size)
@@ -510,6 +515,11 @@ def _tree_values(tree: MotifTree, value, what: str) -> list | None:
         if value in ("pval", "qval", "eval"):
             vals = [None if v is None else -math.log10(v) for v in vals]
         return vals
+    if isinstance(value, Mapping):
+        missing = [lab for lab in tree.labels if lab not in value]
+        if missing:
+            raise ValueError(f"{what} has no value for {', '.join(map(str, missing[:5]))}")
+        return [value[lab] for lab in tree.labels]
     vals = list(value)
     if len(vals) != len(tree.labels):
         raise ValueError(f"{what} must have one value per motif")
@@ -557,6 +567,7 @@ def plot_tree(
         g = node_group[node]
         return palette.get(g, "black") if g is not None else "black"
 
+    own_figure = ax is None
     if ax is None:
         _, ax = _pyplot().subplots(figsize=(6, max(3.0, 0.3 * n)) if layout in ("rectangular", "slanted")
                                    else (6, 6))
@@ -642,6 +653,7 @@ def plot_tree(
             else:
                 texts.append(ax.text(label_x, tip_y[i], lab, ha="left", va="center", fontsize=text_size))
 
+    legends = []
     if legend and (palette or size_vals is not None):
         from matplotlib.lines import Line2D
         from matplotlib.ticker import MaxNLocator
@@ -651,6 +663,7 @@ def plot_tree(
             groups_legend = ax.legend(handles, [str(g) for g in palette], frameon=False,
                                       loc="upper left", bbox_to_anchor=(1.0, 1.0))
             ax.add_artist(groups_legend)
+            legends.append(groups_legend)
         if size_vals is not None and hi > lo:
             # A few round values across the range of tip sizes, drawn at the
             # sizes their tips would have.
@@ -660,9 +673,9 @@ def plot_tree(
             title = None
             if isinstance(tip_size, str):
                 title = f"-log10({tip_size})" if tip_size in ("pval", "qval", "eval") else tip_size
-            ax.legend(handles, [f"{b:g}" for b in breaks], title=title, frameon=False,
-                      loc="lower left", bbox_to_anchor=(1.0, 0.0), title_fontsize=text_size,
-                      fontsize=text_size)
+            legends.append(ax.legend(handles, [f"{b:g}" for b in breaks], title=title,
+                                     frameon=False, loc="lower left", bbox_to_anchor=(1.0, 0.0),
+                                     title_fontsize=text_size, fontsize=text_size))
 
     if polar:
         r = xmax * 1.05 or 1.0
@@ -678,8 +691,30 @@ def plot_tree(
             renderer = ax.figure.canvas.get_renderer()
             right = max(t.get_window_extent(renderer).x1 for t in texts)
             ax.set_xlim(right=ax.transData.inverted().transform((right, 0))[0])
+    if legends:
+        _fit_legends(ax, legends, own_figure)
     ax.set_axis_off()
     return ax
+
+
+def _fit_legends(ax: Axes, legends: list, own_figure: bool) -> None:
+    """Make room for legends drawn beside the axes that would otherwise run
+    off the figure: a figure made here is widened, and axes passed in are
+    narrowed."""
+    fig = ax.figure
+    renderer = fig.canvas.get_renderer()
+    over = max(leg.get_window_extent(renderer).x1 for leg in legends) - fig.bbox.x1
+    if over <= 0:
+        return
+    pos = ax.get_position()
+    if own_figure:
+        w, h = fig.get_size_inches()
+        new_w = w + over / fig.dpi + 0.1
+        ax.set_position([pos.x0 * w / new_w, pos.y0, pos.width * w / new_w, pos.height])
+        fig.set_size_inches(new_w, h)
+    else:
+        shrink = (over + 0.1 * fig.dpi) / fig.bbox.width
+        ax.set_position([pos.x0, pos.y0, max(pos.width - shrink, 0.1), pos.height])
 
 
 def plot_motif_proximity(

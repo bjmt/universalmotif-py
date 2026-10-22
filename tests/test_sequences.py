@@ -7,7 +7,7 @@ import pytest
 
 import universalmotif as um
 
-from conftest import args, assert_motif_matches, load_reference, nums
+from conftest import args, load_reference, motif_from_record, nums
 
 
 def _ref(key):
@@ -23,8 +23,8 @@ def test_klets_reference():
         assert um.get_klets(case["letters"], case["k"]) == case["klets"]
     for case in _ref("count"):
         got = um.count_klets(case["string"], case["k"], case["alph"])
-        assert got["klets"].to_list() == _as_list(case["klets"])
-        assert got["counts"].to_list() == nums(case["counts"])
+        assert got["klet"].to_list() == _as_list(case["klets"])
+        assert got["count"].to_list() == nums(case["counts"])
 
 
 def test_windows_reference():
@@ -46,10 +46,17 @@ def test_windows_reference():
 
 def test_complexity_reference():
     for case in _ref("complexity"):
-        got = um.calc_complexity(case["string"], case["method"], case["alph"], case["max_word"])
+        # Without an alphabet, the R package uses the letters of the string
+        # itself; the port uses ACGT for DNA (see DIVERGENCES.md in the Rust
+        # crate), so R's default is passed explicitly.
+        alph = case["alph"] or "".join(sorted(set(case["string"])))
+        got = um.calc_complexity(case["string"], case["method"], alph, case["max_word"])
         assert got == pytest.approx(nums(case["value"])[0], rel=1e-12, abs=1e-15, nan_ok=True), case
     got = um.calc_complexity(["ACGT", "AAAA"], "WoottonFederhen")
     assert isinstance(got, np.ndarray) and got.shape == (2,)
+    assert got[1] == 0
+    at = um.calc_complexity(["ATATATATAT"])
+    assert at[0] == pytest.approx(um.calc_complexity("ATATATATAT", alph="ACGT"))
 
 
 def test_sequence_complexity_reference():
@@ -100,10 +107,14 @@ def test_meme_background_reference(tmp_path):
     seqs = _ref("bkg_sequences")
     f = io.StringIO()
     assert um.get_bkg(seqs, k=[1, 2, 3], pseudocount=1, to_meme=f) is None
-    assert f.getvalue() == _ref("meme_bkg") + "\n"
+    # The R package leaves a trailing space on each line.
+    want = "".join(line.rstrip() + "\n" for line in _ref("meme_bkg").splitlines())
+    assert f.getvalue() == want
     path = tmp_path / "bkg.txt"
     um.get_bkg(seqs, k=[1, 2, 3], pseudocount=1, to_meme=str(path))
     assert path.read_text() == f.getvalue()
+    um.get_bkg(seqs, k=[1, 2, 3], pseudocount=1, to_meme=tmp_path / "bkg2.txt")
+    assert (tmp_path / "bkg2.txt").read_text() == f.getvalue()
     with pytest.raises(ValueError, match="pseudocount"):
         um.get_bkg(["AAAA"], k=1, alphabet="ACGT", to_meme=io.StringIO())
     with pytest.raises(ValueError, match="from 1"):
@@ -120,16 +131,29 @@ def test_motif_finder_reference():
             for k, v in a.items()
             if k not in ("RC",)
         }
+        # The port corrects P-values for the words searched and counts every
+        # word in the q-values, where the R package does neither (see
+        # DIVERGENCES.md in the Rust crate). The motifs found are the same,
+        # so each one R reports is looked for among all of the port's.
+        kw.setdefault("qvalue", 1e-3)
+        kept = um.motif_finder(pos, neg, rc=a.get("RC", True), **kw)
+        assert kept.height <= len(case["motifs"]), a
+        assert (kept["qvalue"] <= kw["qvalue"]).all(), a
+        kw["qvalue"] = 1
         got = um.motif_finder(pos, neg, rc=a.get("RC", True), **kw)
-        assert got.height == len(case["motifs"]), a
         s = case["stats"]
-        for col in ("rank", "width", "seqs_pos", "seqs_neg", "sites_pos", "sites_neg", "n_pos", "n_neg"):
-            assert got[col].to_list() == nums(s.get(col)), (a, col)
-        for col in ("pvalue", "qvalue"):
-            np.testing.assert_allclose(got[col].to_numpy(), nums(s.get(col)), rtol=1e-10)
-        for m, rec in zip(got["motif"], case["motifs"]):
-            assert_motif_matches(m, rec, str(a))
-        assert got["name"].to_list() == [r["name"] for r in case["motifs"]]
+        for i, rec in enumerate(case["motifs"]):
+            want = motif_from_record(rec)
+            k = next(j for j, m in enumerate(got["motif"]) if np.array_equal(m.matrix, want.matrix))
+            row = got.row(k, named=True)
+            for col in ("width", "seqs_pos", "seqs_neg", "sites_pos", "sites_neg", "n_pos", "n_neg"):
+                assert row[col] == nums(s.get(col))[i], (a, col)
+            p = min(1.0, nums(s["pvalue"])[i] * row["candidates"])
+            assert row["pvalue"] == pytest.approx(p, rel=1e-9), a
+            assert row["qvalue"] >= nums(s["qvalue"])[i] * (1 - 1e-9), a
+            assert row["log10_pvalue"] == pytest.approx(np.log10(row["pvalue"]), rel=1e-9), a
+        assert got["rank"].to_list() == list(range(1, got.height + 1))
+        assert got["pvalue"].is_sorted()
 
 
 def test_motif_finder_shuffled_background():

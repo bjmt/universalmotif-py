@@ -96,7 +96,8 @@ def ppm_to_icm(
     position: Sequence[float], bkg: Sequence[float] | None = None, relative_entropy: bool = False
 ) -> npt.NDArray[np.float64]:
     """Convert a column of probabilities to information content, as relative
-    entropy against ``bkg`` if asked.
+    entropy against ``bkg`` if asked. With relative entropy, letters less
+    common than in the background get 0 rather than a negative height.
 
     Examples
     --------
@@ -181,7 +182,11 @@ def score_match(
     motif: Motif, match: str | Sequence[str], allow_nonfinite: bool = False
 ) -> float | npt.NDArray[np.float64]:
     """The score of each word, which must be as long as the motif, with each
-    PWM entry and the total truncated to three decimals.
+    PWM entry and the total truncated to three decimals. As in
+    [`motif_pvalue()`][universalmotif.motif_pvalue], a motif whose PWM would
+    have infinite values, such as a count matrix without a pseudocount, gets
+    its pseudocount reapplied first, or 1 if it has none, unless
+    ``allow_nonfinite``.
 
     Examples
     --------
@@ -233,7 +238,8 @@ def get_matches(motif: Motif, score: float, allow_nonfinite: bool = False) -> li
 def prob_match(
     motif: Motif, match: str | Sequence[str], allow_zero: bool = True
 ) -> float | npt.NDArray[np.float64]:
-    """The probability of each word under the motif's background. Unless
+    """The probability of each word under the motif's background. Each word
+    must have as many letters as the motif has positions. Unless
     ``allow_zero``, a background with zeros gets a small pseudocount first.
 
     Examples
@@ -352,8 +358,10 @@ def add_gap(motifs, gaploc: int | Sequence[int] | None = None, mingap: int | Seq
 
 
 def ungap(motifs, delete: bool = False):
-    """Turn motifs' gaps off. The gap positions and sizes are kept, so
-    [`add_gap()`][universalmotif.add_gap] can restore them, unless ``delete``.
+    """Turn motifs' gaps off. Unless ``delete``, the gap positions and sizes
+    are kept, and passing them back to [`add_gap()`][universalmotif.add_gap],
+    as in ``add_gap(m, gaploc=m.gaploc, mingap=m.mingap, maxgap=m.maxgap)``,
+    turns the gaps on again.
 
     Examples
     --------
@@ -476,9 +484,13 @@ def mask_ranges(sequences: Mapping[str, str], ranges, letter: str = "-") -> dict
     """Replace the positions in ``ranges`` with ``letter``.
 
     ``sequences`` maps names to sequences and ``ranges`` names 1-based,
-    inclusive positions on them, as a DataFrame with ``chrom``, ``start``
-    and ``end`` columns or as ``(chrom, start, end)`` tuples. Ranges may
-    overlap; ranges on unknown sequences or past their ends are errors.
+    inclusive positions on them, either as ``(chrom, start, end)`` tuples or
+    as a DataFrame with a ``start`` column, an ``end``, ``stop`` or
+    ``width`` column, and the sequence names in a column called ``chrom``,
+    ``seqnames``, ``sequence``, ``chr`` or ``chromosome``, so that the hits
+    from [`scan_sequences()`][universalmotif.scan_sequences] can be masked
+    directly. Ranges may overlap; ranges on unknown sequences or past their
+    ends are errors.
 
     Examples
     --------
@@ -583,8 +595,6 @@ def meme_alph(
     # Core symbols
     A ~ T
     C ~ G
-    G ~ C
-    T ~ A
     """
     def pairs(m: Mapping[str, str] | None) -> list[tuple[str, str]]:
         return [] if m is None else [(str(k), str(v)) for k, v in m.items()]

@@ -178,3 +178,10 @@ def test_summarise_motifs(tata):
     full = um.summarise_motifs(tata, na_rm=False)
     assert full.height == 1 and "altname" in full.columns
     assert full.schema["nsites"] == pl.Float64
+
+
+def test_replace_recomputes_derived_values():
+    m = um.create_motif(["TTGACC", "TTGACT", "ATGACC"], type="PCM", pseudocount=0)
+    more = m.replace(pseudocount=10)
+    assert more.icscore < m.icscore
+    assert m.replace(name="x").icscore == m.icscore

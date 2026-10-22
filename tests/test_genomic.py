@@ -72,7 +72,11 @@ def test_proximity_reference():
         )
         t = case["table"]
         ctx = (a, case["universe"])
-        assert got["motif"].to_list() == t["motif"], ctx
+        # Ties in P-value are ordered by motif index here and by name in the
+        # R package, so rows are matched by motif.
+        assert got["pvalue"].is_sorted(), ctx
+        assert sorted(got["motif"].to_list()) == sorted(t["motif"]), ctx
+        got = pl.concat([got.filter(pl.col("motif") == m) for m in t["motif"]])
         assert got["nhits"].to_list() == nums(t["nhits"]), ctx
         for col in ("best_dist", "hits_near", "hits_far", "frac_near", "expected_near", "enrichment",
                     "log2_enrichment", "pvalue", "qvalue", "ks_d"):

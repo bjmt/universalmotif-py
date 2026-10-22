@@ -78,8 +78,11 @@ def test_aligned_matrices_reference():
         got = um.view_motifs(ms, return_raw=True, **_raw_kwargs(a))
         assert list(got) == case["names"], a
         for (name, m), want in zip(got.items(), case["matrices"]):
-            np.testing.assert_allclose(m, np.array([nums(c) for c in want]).T, rtol=1e-12,
-                                       atol=1e-14, err_msg=f"{a} {name}")
+            want = np.array([nums(c) for c in want], dtype=float).T
+            # The R package's relative entropy is NaN for zero probabilities,
+            # which the port takes as 0 (see DIVERGENCES.md in the Rust crate).
+            want[np.isnan(want)] = 0.0
+            np.testing.assert_allclose(m, want, rtol=1e-12, atol=1e-14, err_msg=f"{a} {name}")
 
 
 def test_single_motif_polygons_reference():

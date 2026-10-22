@@ -46,7 +46,8 @@ def compare_motifs(
     Motifs of any alphabet can be compared. Each target is slid along the
     query, and with ``rc`` along the reverse complement of a DNA or RNA
     query too, and the alignment with the highest sum of column correlations
-    is kept, among those overlapping at least ``min_overlap`` columns. Column
+    is kept, among those overlapping at least ``min_overlap`` columns, or all of
+    the shorter motif's columns when it is narrower than that. Column
     correlations are Pearson correlations of the probabilities. Each P-value
     comes from the exact distribution of that sum under a null model of
     columns, Bonferroni-corrected for the alignments tried. The
@@ -128,7 +129,8 @@ def merge_motifs(
     IC is the anchor. The others are aligned to it, with DNA and RNA motifs
     reverse complemented under ``rc`` where that fits better, and the aligned
     probabilities are averaged, weighted by ``nsites`` if ``weighted``. Motifs
-    that cannot overlap the anchor by ``min_overlap`` columns are left out.
+    that cannot overlap the anchor by ``min_overlap`` columns are left out,
+    with a warning.
     The default name joins the merged motifs' names.
 
     Examples
@@ -140,7 +142,17 @@ def merge_motifs(
     >>> merged.name, merged.consensus, merged.type
     ('W-box merged', 'STTTGACYAAW', 'PPM')
     """
-    return _core._merge_motifs(_motif_list(motifs), min_overlap, rc, new_name, weighted, nthreads)
+    ms = _motif_list(motifs)
+    merged, used = _core._merge_motifs(ms, min_overlap, rc, new_name, weighted, nthreads)
+    if len(used) < len(ms):
+        left = [ms[i].name for i in sorted(set(range(len(ms))) - set(used))]
+        warnings.warn(
+            f"{len(left)} motif{'s' if len(left) > 1 else ''} could not overlap the anchor by "
+            f"{min_overlap} columns and {'were' if len(left) > 1 else 'was'} left out: "
+            f"{', '.join(left[:5])}{', ...' if len(left) > 5 else ''}",
+            stacklevel=2,
+        )
+    return merged
 
 
 def merge_similar(
@@ -311,11 +323,13 @@ class MotifTree:
             Label the tips with ``self.labels``.
         groups
             Colour branches by group: a motif attribute such as
-            ``"family"``, or one value per motif. A branch takes a group's
+            ``"family"``, one value per motif in the order of the tree's
+            labels, or a mapping from labels to values. A branch takes a group's
             colour when every motif below it is in that group; ``colours``
             maps groups to colours.
         tip_size
-            Size the tips by one number per motif or by a motif attribute,
+            Size the tips by one number per motif, given as for ``groups``,
+            or by a motif attribute,
             either ``"icscore"`` or one of ``"pval"``, ``"qval"`` and
             ``"eval"``, which are taken as their -log10.
         tip_logos

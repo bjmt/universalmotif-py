@@ -25,6 +25,19 @@ def _opts(a):
     return out
 
 
+def _beyond_null(got, want, a):
+    """The R package gives a P-value of 0 to scores beyond what the parametric
+    null can reach, where the port gives the null's highest score's (see
+    DIVERGENCES.md in the Rust crate); such values must be small and positive
+    and are then set to R's 0."""
+    got = np.array(got, dtype=float)
+    if a.get("null") == "parametric":
+        fix = (want == 0) & (got != 0)
+        assert np.all((got[fix] > 0) & (got[fix] < 1e-6))
+        got[fix] = 0.0
+    return got
+
+
 def test_compare_motifs_reference():
     for i, case in enumerate(load_reference("compare.json", "compare")):
         a = args(case["args"])
@@ -33,6 +46,7 @@ def test_compare_motifs_reference():
         if "matrix" in case:
             got = um.compare_motifs(motifs, matrix_out=a.get("matrix.out", "score"), **_opts(a))
             want = np.array([nums(r) for r in case["matrix"]])
+            got = _beyond_null(got, want, a)
             np.testing.assert_allclose(got, want, rtol=1e-12, atol=1e-300, err_msg=ctx)
         else:
             to = [int(x) - 1 for x in nums(a["compare.to"])]
@@ -45,13 +59,23 @@ def test_compare_motifs_reference():
             # The R package writes T in RNA consensus strings; the port
             # writes U (see DIVERGENCES.md).
             fix = (lambda s: s.replace("T", "U")) if case["set"] == "rna" else str
+            # The R package builds these with its own 75% rule rather than
+            # the motif consensus rule the port uses (see DIVERGENCES.md). A
+            # single base under the 75% rule is also one under the motif rule,
+            # so those letters must agree.
             for col in ("subject_consensus", "target_consensus"):
-                assert got[col].to_list() == [fix(s) for s in np.atleast_1d(w[col])], ctx
+                want = [fix(s) for s in np.atleast_1d(w[col])]
+                assert len(got[col]) == len(want), ctx
+                for g, r in zip(got[col].to_list(), want):
+                    assert len(g) == len(r), (ctx, g, r)
+                    assert all(a == b for a, b in zip(g, r) if b in "ACGTU"), (ctx, g, r)
             for col in ("score", "pvalue", "qvalue"):
-                np.testing.assert_allclose(got[col].to_numpy(), nums(w[col]), rtol=1e-12,
-                                           err_msg=f"{ctx}: {col}")
+                want = np.array(nums(w[col]), dtype=float)
+                np.testing.assert_allclose(_beyond_null(got[col].to_numpy(), want, a), want,
+                                           rtol=1e-12, err_msg=f"{ctx}: {col}")
 
 
+@pytest.mark.filterwarnings("ignore:.*could not overlap the anchor")
 def test_merge_motifs_reference():
     for i, case in enumerate(load_reference("compare.json", "merge")):
         a = args(case["args"])
