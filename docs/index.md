@@ -39,6 +39,8 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
   them.
 - **Files:** MEME, JASPAR, HOMER, TRANSFAC, CIS-BP, UniPROBE and plain
   matrices, plus gzipped or plain FASTA for sequences.
+- **Databases:** motifs fetched from JASPAR, HOCOMOCO and CIS-BP and kept
+  in a local cache, and conversion to and from Biopython.
 - **Scanning:** exact P-value thresholds, both strands, any alphabet, gapped
   motifs, and whole genomes scanned straight from a FASTA file in a few
   hundred MB.
@@ -58,7 +60,9 @@ set up, and the [getting started](guides/getting-started.ipynb) guide walks
 through the basics. The guides that follow it go from what the different
 motif types mean in [sequence motifs](guides/motif-basics.ipynb) through to
 a full analysis of real peaks in [a ChIP-seq
-workflow](guides/chipseq-workflow.ipynb). Every function is described in the
+workflow](guides/chipseq-workflow.ipynb), and [building a motif
+library](guides/building-a-library.ipynb) shows how to combine motifs from
+several databases. Every function is described in the
 [API reference](reference/index.md).
 
 If you already know the R package, the function names will be familiar,

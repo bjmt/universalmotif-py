@@ -1,0 +1,3 @@
+Model	Transcription factor	Model length	Quality	Model rank	Consensus	Model release	Data source	Best auROC (human)	Best auROC (mouse)	Peak sets in benchmark (human)	Peak sets in benchmark (mouse)	Aligned words	TF family	TF subfamily	HGNC	EntrezGene	UniProt ID	UniProt AC
+AHR_HUMAN.H11MO.0.B	AHR	9	B	0	dKhGCGTGh	HOCOMOCOv9	Integrative					157	PAS domain factors{1.2.5}	Ahr-like factors{1.2.5.1}	348	196	AHR_HUMAN	P35869
+AIRE_HUMAN.H11MO.0.C	AIRE	18	C	0	hnnGGWWnddWWGGdbWh	HOCOMOCOv9	Integrative					41	AIRE{5.3.1}	AIRE{5.3.1.0.1}	360	326	AIRE_HUMAN	O43918

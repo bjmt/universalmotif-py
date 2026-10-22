@@ -20,11 +20,12 @@ classifiers = [
 dependencies = ["numpy>=1.24", "polars>=1.0"]
 
 [project.optional-dependencies]
+biopython = ["biopython>=1.81"]
 pandas = ["pandas>=2.0", "pyarrow>=14"]
 plot = ["matplotlib>=3.8"]
 
 [dependency-groups]
-dev = ["maturin>=1.9,<2", "matplotlib>=3.8", "pytest>=8", "scipy>=1.15.3"]
+dev = ["biopython>=1.81", "maturin>=1.9,<2", "matplotlib>=3.8", "pytest>=8", "scipy>=1.15.3"]
 docs = [
     "maturin>=1.9,<2",
     "matplotlib>=3.8",

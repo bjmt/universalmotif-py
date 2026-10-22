@@ -21,7 +21,10 @@ universalmotif[plot]`. Scanning, comparison, merging, clustering,
 enrichment and logos work for amino acid and custom alphabets as well as
 DNA and RNA, and scanning handles gapped motifs. For genome-sized inputs, `scan_sequences` can scan a gzipped or
 plain FASTA file given as a path a batch at a time, and `read_fasta(..., packed=True)` keeps
-sequences packed at two bits per base for repeated use.
+sequences packed at two bits per base for repeated use. Motifs can be
+fetched from JASPAR, HOCOMOCO and CIS-BP with `universalmotif.databases`,
+which caches its downloads, and converted to and from Biopython's
+`Bio.motifs` with `pip install universalmotif[biopython]`.
 
 ## Example
 

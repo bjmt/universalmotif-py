@@ -1,0 +1,204 @@
+{
+ "MA0570.3": {
+  "matrix_id": "MA0570.3",
+  "name": "ABF1",
+  "base_id": "MA0570",
+  "version": 3,
+  "collection": "CORE",
+  "sequence_logo": "https://jaspar.elixir.no/static/logos/svg/MA0570.3.svg",
+  "versions_url": "https://jaspar.elixir.no/api/v1/matrix/MA0570/versions",
+  "sites_url": null,
+  "pfm": {
+   "A": [
+    593.0,
+    83.0,
+    1123.0,
+    10.0,
+    16.0,
+    4.0,
+    9.0,
+    39.0,
+    81.0,
+    909.0
+   ],
+   "C": [
+    284.0,
+    793.0,
+    4.0,
+    1099.0,
+    9.0,
+    8.0,
+    3.0,
+    11.0,
+    999.0,
+    36.0
+   ],
+   "G": [
+    60.0,
+    124.0,
+    11.0,
+    15.0,
+    1107.0,
+    1.0,
+    1123.0,
+    707.0,
+    28.0,
+    117.0
+   ],
+   "T": [
+    204.0,
+    141.0,
+    3.0,
+    17.0,
+    9.0,
+    1128.0,
+    6.0,
+    384.0,
+    33.0,
+    79.0
+   ]
+  },
+  "class": [
+   "Basic leucine zipper factors (bZIP)"
+  ],
+  "family": [
+   "Group A"
+  ],
+  "tfe_id": [],
+  "medline": [
+   "10636868"
+  ],
+  "pazar_tf_id": [],
+  "remap_tf_name": "ABF1",
+  "source": "30445619",
+  "tax_group": "plants",
+  "type": "ChIP-seq",
+  "tfe_ids": [],
+  "pubmed_ids": [
+   "10636868"
+  ],
+  "pazar_tf_ids": [],
+  "uniprot_ids": [
+   "Q9M7Q5"
+  ],
+  "species": [
+   {
+    "tax_id": 3702,
+    "name": "Arabidopsis thaliana"
+   }
+  ],
+  "tffm": null
+ },
+ "MA0548.3": {
+  "matrix_id": "MA0548.3",
+  "name": "AGL15",
+  "base_id": "MA0548",
+  "version": 3,
+  "collection": "CORE",
+  "sequence_logo": "https://jaspar.elixir.no/static/logos/svg/MA0548.3.svg",
+  "versions_url": "https://jaspar.elixir.no/api/v1/matrix/MA0548/versions",
+  "sites_url": null,
+  "pfm": {
+   "A": [
+    48.0,
+    16.0,
+    84.0,
+    0.0,
+    0.0,
+    200.0,
+    88.0,
+    162.0,
+    7.0,
+    89.0,
+    138.0,
+    125.0,
+    0.0,
+    325.0,
+    543.0,
+    475.0
+   ],
+   "C": [
+    33.0,
+    5.0,
+    8.0,
+    596.0,
+    435.0,
+    80.0,
+    85.0,
+    0.0,
+    8.0,
+    45.0,
+    42.0,
+    1.0,
+    0.0,
+    50.0,
+    13.0,
+    7.0
+   ],
+   "G": [
+    5.0,
+    3.0,
+    21.0,
+    0.0,
+    0.0,
+    50.0,
+    53.0,
+    4.0,
+    0.0,
+    31.0,
+    168.0,
+    473.0,
+    585.0,
+    28.0,
+    5.0,
+    29.0
+   ],
+   "T": [
+    513.0,
+    575.0,
+    486.0,
+    3.0,
+    164.0,
+    269.0,
+    373.0,
+    433.0,
+    584.0,
+    434.0,
+    251.0,
+    0.0,
+    14.0,
+    196.0,
+    38.0,
+    88.0
+   ]
+  },
+  "class": [
+   "MADS box factors"
+  ],
+  "family": [
+   "Type II"
+  ],
+  "tfe_id": [],
+  "medline": [
+   "12743119"
+  ],
+  "pazar_tf_id": [],
+  "remap_tf_name": "AGL15",
+  "tax_group": "plants",
+  "tfe_ids": [],
+  "pubmed_ids": [
+   "12743119"
+  ],
+  "pazar_tf_ids": [],
+  "uniprot_ids": [
+   "Q38847"
+  ],
+  "species": [
+   {
+    "tax_id": 3702,
+    "name": "Arabidopsis thaliana"
+   }
+  ],
+  "tffm": null
+ }
+}

@@ -171,7 +171,10 @@ def merge_similar(
     Motifs are linked when [`compare_motifs()`][universalmotif.compare_motifs]
     gives them a q-value of at most ``qvalue`` in either direction, clusters
     are the connected groups, and each cluster of several motifs is merged with
-    [`merge_motifs()`][universalmotif.merge_motifs].
+    [`merge_motifs()`][universalmotif.merge_motifs]. Since a single link is
+    enough, motifs that are only alike in part, such as those of one family of
+    transcription factors, can chain into one large cluster; cutting a
+    [`motif_tree()`][universalmotif.motif_tree] at a fixed height avoids that.
 
     Returns one motif per cluster, or with ``return_clusters`` a summary
     DataFrame of the input motifs with 0-based ``motif_i`` and ``cluster``

@@ -7,6 +7,8 @@ a Rust crate of the same name.
 from importlib.metadata import PackageNotFoundError, version
 
 from ._analysis import dedup_hits, motif_pvalue, scan_sequences
+from ._biopython import from_biopython, to_biopython
+from . import databases
 from ._data import example_file, example_motifs, example_sequences
 from ._packed import PackedSequences, pack_sequences
 from ._utils import (
@@ -117,6 +119,7 @@ __all__ = [
     "example_motifs",
     "example_sequences",
     "filter_motifs",
+    "from_biopython",
     "get_bkg",
     "get_consensus",
     "get_consensus_aa",
@@ -173,6 +176,7 @@ __all__ = [
     "slide_fun",
     "summarise_motifs",
     "switch_alph",
+    "to_biopython",
     "trim_cwm",
     "trim_motifs",
     "ungap",

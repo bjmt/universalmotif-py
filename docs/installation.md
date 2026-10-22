@@ -30,6 +30,9 @@ optimisations.
 ## Optional dependencies
 
 - `plot`: matplotlib, for logos and the other plotting functions.
+- `biopython`: Biopython, for converting motifs to and from `Bio.motifs`
+  with `to_biopython()` and `from_biopython()`. The database functions need
+  no extra, since they download with the standard library.
 - `pandas`: pandas and pyarrow, for anyone who prefers pandas DataFrames,
   so that any table the package returns can be converted with
   `.to_pandas()`.
