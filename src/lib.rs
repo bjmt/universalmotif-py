@@ -15,6 +15,7 @@ use universalmotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, St
 
 mod analysis;
 mod enrichment;
+mod genomic;
 mod io;
 mod plot;
 mod sequences;
@@ -667,5 +668,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sequences::register(m)?;
     enrichment::register(m)?;
     plot::register(m)?;
+    genomic::register(m)?;
     Ok(())
 }

@@ -13,8 +13,9 @@ reading and writing motif files (MEME, JASPAR, HOMER, TRANSFAC, CIS-BP,
 UniPROBE, plain matrices and FASTA), exact P-values, scanning sequences for
 hits, comparing, merging and clustering motifs, k-let backgrounds,
 sequence complexity, shuffling, random sequences, implanting sites and
-*de novo* motif discovery, enrichment testing, co-occurrence and
-positional enrichment, along with sequence logos, motif trees and motif
+*de novo* motif discovery, enrichment testing, co-occurrence, positional
+enrichment, proximity to genomic anchors and composition-matched
+backgrounds, along with sequence logos, motif trees and motif
 peak plots drawn with matplotlib (install with `pip install
 universalmotif[plot]`).
 
@@ -53,6 +54,10 @@ groups = tree.cutree(k=5)
 um.view_motifs(motifs[:4]).savefig("logos.png")  # aligned logos
 tree.plot(groups="family", tip_logos=True)        # matplotlib axes
 um.plot_motif_peaks(peaks)
+
+genome = um.read_fasta("genome.fa")
+background = um.match_bkg(sequences, genome=genome, exclude=peak_table)
+near = um.motif_proximity(anchors=summits, motifs=motifs, sequences=genome)
 ```
 
 Functions that use random numbers take a `seed`; without one they draw a

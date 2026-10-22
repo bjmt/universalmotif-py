@@ -43,7 +43,8 @@ from ._io import (
 )
 from ._core import Motif
 from ._enrich import enrich_motifs, motif_coocc, motif_peaks
-from ._plot import plot_motif_peaks, view_logo, view_motifs
+from ._genomic import match_bkg, motif_proximity
+from ._plot import plot_match_bkg, plot_motif_peaks, plot_motif_proximity, view_logo, view_motifs
 from ._sequences import (
     calc_complexity,
     calc_windows,
@@ -84,16 +85,20 @@ __all__ = [
     "get_consensus_aa",
     "get_klets",
     "implant_motifs",
+    "match_bkg",
     "merge_motifs",
     "merge_similar",
     "motif_coocc",
     "motif_finder",
     "motif_peaks",
+    "motif_proximity",
     "motif_pvalue",
     "motif_rc",
     "motif_tree",
     "normalize",
+    "plot_match_bkg",
     "plot_motif_peaks",
+    "plot_motif_proximity",
     "position_icscore",
     "read_cisbp",
     "read_fasta",

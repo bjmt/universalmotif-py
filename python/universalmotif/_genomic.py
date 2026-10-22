@@ -1,0 +1,415 @@
+"""Motif proximity to genomic anchors, and composition-matched backgrounds."""
+
+from __future__ import annotations
+
+import warnings
+from collections.abc import Iterable, Mapping, Sequence
+
+import numpy as np
+import polars as pl
+
+from . import _core
+from ._analysis import _make_unique, _sequence_pairs, scan_sequences
+from ._core import Motif
+from ._sequences import _seed
+
+_CHROM_COLUMNS = ("chrom", "seqnames", "sequence", "chr", "chromosome")
+
+
+def _range_table(x, what: str) -> pl.DataFrame:
+    """Ranges as a DataFrame with chrom, start, end and strand columns, from
+    a DataFrame (with a chromosome column named chrom, seqnames, sequence,
+    chr or chromosome, start, and end or width) or (chrom, start, end[,
+    strand]) tuples."""
+    if isinstance(x, pl.DataFrame):
+        chrom = next((c for c in _CHROM_COLUMNS if c in x.columns), None)
+        if chrom is None or "start" not in x.columns:
+            raise ValueError(f"{what} needs a chromosome column ({', '.join(_CHROM_COLUMNS)}) and start")
+        if "end" in x.columns:
+            end = x["end"]
+        elif "stop" in x.columns:
+            end = x["stop"]
+        elif "width" in x.columns:
+            end = x["start"] + x["width"] - 1
+        else:
+            raise ValueError(f"{what} needs an end, stop or width column")
+        strand = x["strand"].cast(pl.String) if "strand" in x.columns else pl.Series(["*"] * x.height)
+        df = pl.DataFrame({
+            "chrom": x[chrom].cast(pl.String),
+            "start": x["start"].cast(pl.Int64),
+            "end": end.cast(pl.Int64),
+            "strand": strand,
+        })
+    else:
+        rows = [tuple(r) for r in x]
+        if any(len(r) not in (3, 4) for r in rows):
+            raise ValueError(f"{what} must be (chrom, start, end) or (chrom, start, end, strand) tuples")
+        df = pl.DataFrame(
+            {
+                "chrom": [str(r[0]) for r in rows],
+                "start": [int(r[1]) for r in rows],
+                "end": [int(r[2]) for r in rows],
+                "strand": [r[3] if len(r) == 4 else "*" for r in rows],
+            },
+            schema={"chrom": pl.String, "start": pl.Int64, "end": pl.Int64, "strand": pl.String},
+        )
+    df = df.with_columns(pl.col("strand").fill_null("*").replace({"+-": "*", "": "*"}))
+    if df["start"].null_count() or df["end"].null_count():
+        raise ValueError(f"{what} has missing coordinates")
+    return df
+
+
+def _cols(df: pl.DataFrame, index: dict[str, int]):
+    return ([index[c] for c in df["chrom"]], df["start"].to_list(), df["end"].to_list(),
+            df["strand"].to_list())
+
+
+_PROXIMITY_SCHEMA = {
+    "motif": pl.String,
+    "motif_i": pl.Int64,
+    "method": pl.String,
+    "count": pl.String,
+    "orientation": pl.String,
+    "nhits": pl.Int64,
+    "best_dist": pl.Int64,
+    "hits_near": pl.Int64,
+    "hits_far": pl.Int64,
+    "frac_near": pl.Float64,
+    "expected_near": pl.Float64,
+    "enrichment": pl.Float64,
+    "log2_enrichment": pl.Float64,
+    "pvalue": pl.Float64,
+    "qvalue": pl.Float64,
+    "ks_d": pl.Float64,
+    "dist_to_nearest": pl.List(pl.Float64),
+}
+
+
+def motif_proximity(
+    hits: pl.DataFrame | None = None,
+    anchors=None,
+    motifs: Motif | Iterable[Motif] | None = None,
+    sequences: Mapping[str, str] | None = None,
+    universe=None,
+    method: str = "binomial",
+    count: str = "hits",
+    orientation: str = "undirected",
+    scan_pvalue: float = 1e-4,
+    rc: bool = True,
+    dist_thresholds: Sequence[int] | None = None,
+    n_perm: int = 1000,
+    perm_per_chrom: bool = True,
+    ignore_strand: bool = True,
+    qvalue: float = 0.1,
+    seed: int | None = None,
+    nthreads: int = 1,
+) -> pl.DataFrame:
+    """Test whether motif hits sit closer to genomic anchors than chance.
+
+    The genome-wide counterpart of :func:`motif_peaks`. Each hit counts at
+    its middle position. For each distance ``d`` in ``dist_thresholds`` (by
+    default 10, 25, 50, 100 and so on, up to half the smallest universe
+    region), the near zone is every scanned position within ``d`` of an
+    anchor. Three nulls are available:
+
+    ``"binomial"``
+        Hits uniform over the universe, so the number in the near zone is
+        binomial; the best distance is Bonferroni-corrected for the
+        distances tried. Fast, but blind to composition bias.
+    ``"permutation"``
+        Anchors placed at random in the universe ``n_perm`` times (on their
+        own chromosomes with ``perm_per_chrom``), which absorbs composition
+        and mappability bias. Reproducible with ``seed``.
+    ``"ks"``
+        A one-sided Kolmogorov-Smirnov test of each hit's distance to the
+        nearest anchor (undirected zones and ``count="hits"`` only).
+
+    Parameters
+    ----------
+    hits
+        Hits from :func:`scan_sequences` (``sequence`` holds the chromosome
+        names), with ``motif``, ``score``, ``start``, ``end`` and
+        ``strand``. Give this, or ``motifs`` and ``sequences`` (a mapping
+        from chromosome names to sequences) to scan with ``scan_pvalue`` and
+        ``rc``; only chromosomes with anchors are scanned.
+    anchors
+        The anchor coordinates, as a DataFrame with ``chrom``, ``start``,
+        ``end`` (or ``width``) and optionally ``strand`` columns, or as
+        (chrom, start, end[, strand]) tuples. Use 1 bp anchors for point
+        hypotheses: wide anchors widen every zone.
+    universe
+        The regions scanned: a mapping from chromosome names to lengths
+        (whole chromosomes) or a range table. Required with ``hits``; by
+        default the whole of ``sequences``. Zones are clipped at chromosome
+        ends when lengths are known. Only chromosomes carrying anchors are
+        used.
+    count
+        ``"hits"`` counts hits in the zone (overlapping hits of a motif
+        count once, keeping the best score; across strands unless
+        ``ignore_strand`` is false); ``"anchors"`` counts anchors with a
+        hit nearby (its binomial null is a Poisson approximation, so the
+        permutation test is preferred).
+    orientation
+        ``"undirected"``, or ``"upstream"``/``"downstream"`` of stranded
+        anchors.
+
+    Returns
+    -------
+    A DataFrame of motifs with q-values up to ``qvalue``, in order of
+    P-value: ``motif``, ``motif_i`` (0-based rank of the name), ``method``,
+    ``count``, ``orientation``, ``nhits``, ``best_dist``, ``hits_near``,
+    ``hits_far``, ``frac_near``, ``expected_near``, ``enrichment``,
+    ``log2_enrichment``, ``pvalue``, ``qvalue``, ``ks_d`` and
+    ``dist_to_nearest`` (the number of positions from each hit's middle to
+    its nearest anchor, 0 inside it and negative upstream in the anchor's
+    orientation).
+    """
+    if method not in ("binomial", "permutation", "ks"):
+        raise ValueError("method must be 'binomial', 'permutation' or 'ks'")
+    if count not in ("hits", "anchors"):
+        raise ValueError("count must be 'hits' or 'anchors'")
+    if orientation not in ("undirected", "upstream", "downstream"):
+        raise ValueError("orientation must be 'undirected', 'upstream' or 'downstream'")
+    if not 0 < qvalue <= 1:
+        raise ValueError("qvalue must be in (0, 1]")
+    if anchors is None:
+        raise ValueError("anchors are required")
+    anc = _range_table(anchors, "anchors")
+    have_scan = motifs is not None or sequences is not None
+    if (hits is not None) == have_scan:
+        raise ValueError("give either hits, or motifs and sequences")
+    lengths: dict[str, int] = {}
+    if hits is None:
+        if motifs is None or sequences is None:
+            raise ValueError("scanning needs both motifs and sequences")
+        if not isinstance(sequences, Mapping):
+            raise ValueError("sequences must map chromosome names to sequences")
+        anchored = set(anc["chrom"])
+        chroms = {k: v for k, v in sequences.items() if k in anchored}
+        if not chroms:
+            raise ValueError("none of the anchor chromosomes are in sequences")
+        hits = scan_sequences(motifs, chroms, pvalue=scan_pvalue, rc=rc, nthreads=nthreads)
+        lengths = {k: len(v) for k, v in sequences.items()}
+    for col in ("motif", "score", "start"):
+        if col not in hits.columns:
+            raise ValueError(f"hits must have a {col!r} column")
+    h = _range_table(hits, "hits")
+    if universe is None:
+        if not lengths:
+            raise ValueError("give the universe (chromosome lengths or scanned regions) with hits")
+        universe = lengths
+    if isinstance(universe, Mapping):
+        lengths = {str(k): int(v) for k, v in universe.items()}
+        uni = pl.DataFrame(
+            {"chrom": list(lengths), "start": [1] * len(lengths), "end": list(lengths.values()),
+             "strand": ["*"] * len(lengths)},
+            schema={"chrom": pl.String, "start": pl.Int64, "end": pl.Int64, "strand": pl.String},
+        )
+    else:
+        uni = _range_table(universe, "universe")
+        lengths = {}
+    names = list(dict.fromkeys([*uni["chrom"], *anc["chrom"], *h["chrom"]]))
+    index = {c: i for i, c in enumerate(names)}
+    chrom_lengths = [lengths.get(c) for c in names]
+    motif_names = [str(m) for m in hits["motif"].to_list()]
+    ids = sorted(set(motif_names))
+    motif_index = {m: i for i, m in enumerate(ids)}
+    cols = _core._proximity(
+        _cols(h, index),
+        [motif_index[m] for m in motif_names],
+        hits["score"].cast(pl.Float64).to_list(),
+        _cols(anc, index),
+        _cols(uni, index),
+        chrom_lengths,
+        method,
+        count,
+        orientation,
+        None if dist_thresholds is None else [int(d) for d in dist_thresholds],
+        n_perm,
+        perm_per_chrom,
+        ignore_strand,
+        _seed(seed),
+        nthreads,
+    )
+    n = len(cols["motif"])
+    cols["motif_i"] = cols["motif"]
+    cols["motif"] = [ids[i] for i in cols["motif_i"]]
+    cols["method"], cols["count"], cols["orientation"] = [method] * n, [count] * n, [orientation] * n
+    df = pl.DataFrame({k: cols[k] for k in _PROXIMITY_SCHEMA}, schema=_PROXIMITY_SCHEMA)
+    return df.filter(pl.col("qvalue") <= qvalue).sort("pvalue", "motif_i", maintain_order=True)
+
+
+_NUCLEOTIDES = set("ACGTUNRYKMSWBDHV-acgtunrykmswbdhv")
+
+
+def _covariate_table(x, n: int, what: str) -> dict[str, list[float]]:
+    if isinstance(x, pl.DataFrame):
+        table = {c: x[c].cast(pl.Float64).to_list() for c in x.columns}
+    elif isinstance(x, Mapping):
+        table = {str(k): [float(v) for v in vals] for k, vals in x.items()}
+    else:
+        arr = np.asarray(x, dtype=float)
+        if arr.ndim == 1:
+            table = {"covariate1": arr.tolist()}
+        elif arr.ndim == 2:
+            table = {f"covariate{j + 1}": arr[:, j].tolist() for j in range(arr.shape[1])}
+        else:
+            raise ValueError(f"{what} must be a DataFrame, a mapping or a 1-D or 2-D array")
+    if not table:
+        raise ValueError(f"{what} must have at least one column")
+    if any(len(v) != n for v in table.values()):
+        raise ValueError(f"{what} must have one row per sequence ({n})")
+    return table
+
+
+def _per_covariate(x, names: list[str], what: str) -> list:
+    if isinstance(x, Mapping):
+        if set(x) != set(names):
+            raise ValueError(f"{what} must name every covariate exactly")
+        return [x[nm] for nm in names]
+    return [x] * len(names)
+
+
+def match_bkg(
+    sequences: Sequence[str] | Mapping[str, str],
+    universe: Sequence[str] | Mapping[str, str] | None = None,
+    genome: Mapping[str, str] | None = None,
+    exclude=None,
+    n_candidates: int | None = None,
+    chromosomes: Sequence[str] | None = None,
+    n_per_target: int = 1,
+    n_bins_gc: int = 20,
+    n_bins_length: int = 10,
+    covariates=None,
+    universe_covariates=None,
+    n_bins_covariates: int | Mapping[str, int] = 10,
+    bin_type_covariates: str | Mapping[str, str] = "quantile",
+    unique: bool = True,
+    seed: int | None = None,
+    return_indices: bool = False,
+):
+    """Draw background sequences matched to targets on GC content and length.
+
+    HOMER-style matching: the universe is binned by GC fraction
+    (``n_bins_gc`` equal-width bins), length (``n_bins_length`` quantile
+    bins) and any ``covariates``, and each target draws ``n_per_target``
+    sequences from its own bin. When the bin runs short, neighbouring bins
+    are searched ring by ring (up to two rings, or one per axis); after that
+    the remaining draws repeat sequences from the bins searched, with a
+    warning. With ``unique``, each universe sequence is otherwise drawn at
+    most once.
+
+    Parameters
+    ----------
+    universe
+        Candidate background sequences, as a list or a mapping from names.
+    genome
+        Instead of ``universe``, a mapping from chromosome names to
+        sequences (such as :func:`read_fasta` of a genome) to draw
+        ``n_candidates`` random windows from (by default
+        ``max(10000, 10 * len(sequences))``), with widths taken from the
+        targets, on ``chromosomes`` (all by default) and avoiding
+        ``exclude`` (a range table such as the target peaks).
+    covariates, universe_covariates
+        Extra values to match on, one row per target and per universe
+        sequence: DataFrames or mappings with the same columns, or arrays.
+        ``n_bins_covariates`` and ``bin_type_covariates`` (``"quantile"``
+        or ``"equalwidth"``) apply to all of them or are given per name.
+    return_indices
+        Return a DataFrame of the matches instead: ``target_i`` and
+        ``universe_i`` (0-based), the GC fraction and length of each, any
+        covariates, and ``universe_name`` when the universe has names.
+
+    Returns
+    -------
+    The matched sequences, ``n_per_target`` per target in target order: a
+    list, or a dict when the universe has names (repeats get ``.1``,
+    ``.2`` and so on; genome windows are named ``chrom:start-end``).
+    """
+    _, seqs = _sequence_pairs(sequences)
+    if not seqs:
+        raise ValueError("no target sequences given")
+    if (universe is None) == (genome is None):
+        raise ValueError("give exactly one of universe and genome")
+    if covariates is not None and genome is not None:
+        raise ValueError("covariates need an explicit universe with universe_covariates, not a genome")
+    if any(set(s) - _NUCLEOTIDES for s in seqs):
+        raise ValueError("match_bkg() only supports DNA and RNA sequences")
+    names: list[str] | None
+    if genome is not None:
+        chroms = list(genome) if chromosomes is None else [str(c) for c in chromosomes]
+        missing = [c for c in chroms if c not in genome]
+        if missing:
+            raise ValueError(f"chromosomes not in the genome: {', '.join(missing[:5])}")
+        index = {c: i for i, c in enumerate(chroms)}
+        excl = _range_table(exclude, "exclude").filter(pl.col("chrom").is_in(chroms)) \
+            if exclude is not None else None
+        exclude_cols = _cols(excl, index) if excl is not None else ([], [], [], [])
+        if n_candidates is None:
+            n_candidates = max(10000, 10 * len(seqs))
+        windows = _core._genome_windows([len(genome[c]) for c in chroms], [len(s) for s in seqs],
+                                        n_candidates, exclude_cols, _seed(seed))
+        uni = [genome[chroms[c]][s - 1 : e] for c, s, e in windows]
+        names = [f"{chroms[c]}:{s}-{e}" for c, s, e in windows]
+        seed = None if seed is None else seed + 1
+    else:
+        names_u, uni = _sequence_pairs(universe)
+        names = names_u if isinstance(universe, Mapping) else None
+    if not uni:
+        raise ValueError("the universe is empty")
+
+    cov_specs = []
+    cov_t: dict[str, list[float]] = {}
+    cov_u: dict[str, list[float]] = {}
+    if covariates is not None or universe_covariates is not None:
+        if covariates is None or universe_covariates is None:
+            raise ValueError("covariates and universe_covariates go together")
+        cov_t = _covariate_table(covariates, len(seqs), "covariates")
+        cov_u = _covariate_table(universe_covariates, len(uni), "universe_covariates")
+        if list(cov_t) != list(cov_u):
+            raise ValueError("covariates and universe_covariates must have the same columns in the same order")
+        reserved = {"i", "gc", "length", "name"} & set(cov_t)
+        if reserved:
+            raise ValueError(f"covariate names {sorted(reserved)} are reserved; rename them")
+        cn = list(cov_t)
+        bins = _per_covariate(n_bins_covariates, cn, "n_bins_covariates")
+        types = _per_covariate(bin_type_covariates, cn, "bin_type_covariates")
+        cov_specs = [(nm, cov_t[nm], cov_u[nm], int(b), t) for nm, b, t in zip(cn, bins, types)]
+
+    if unique and len(uni) < n_per_target * len(seqs):
+        warnings.warn(
+            f"the universe ({len(uni)}) is smaller than n_per_target * len(sequences) "
+            f"({n_per_target * len(seqs)}); some sequences will be drawn more than once",
+            stacklevel=2,
+        )
+    picked, fallbacks = _core._match_bkg(seqs, uni, cov_specs, n_per_target, n_bins_gc,
+                                         n_bins_length, unique, _seed(seed))
+    if fallbacks:
+        warnings.warn(
+            f"{fallbacks} target(s) ran out of matching sequences nearby and repeated some; "
+            "consider fewer bins or a bigger universe",
+            stacklevel=2,
+        )
+    if return_indices:
+        target_i = [t for t in range(len(seqs)) for _ in range(n_per_target)]
+        gc_t, gc_u = _core._gc_fraction(seqs), _core._gc_fraction(uni)
+        data: dict[str, list] = {
+            "target_i": target_i,
+            "target_gc": [gc_t[t] for t in target_i],
+            "target_length": [len(seqs[t]) for t in target_i],
+            "universe_i": picked,
+            "universe_gc": [gc_u[u] for u in picked],
+            "universe_length": [len(uni[u]) for u in picked],
+        }
+        for nm in cov_t:
+            data[f"target_{nm}"] = [cov_t[nm][t] for t in target_i]
+            data[f"universe_{nm}"] = [cov_u[nm][u] for u in picked]
+        if names is not None:
+            data["universe_name"] = [names[u] for u in picked]
+        return pl.DataFrame(data)
+    if names is None:
+        return [uni[u] for u in picked]
+    return dict(zip(_make_unique([names[u] for u in picked]), (uni[u] for u in picked)))
+
+
+__all__ = ["match_bkg", "motif_proximity"]

@@ -10,7 +10,7 @@ import numpy as np
 import polars as pl
 
 from . import _core
-from ._analysis import _make_unique
+from ._analysis import _make_unique, _sequence_pairs
 from ._api import _check_motif
 from ._core import Motif
 from ._logo import Glyph, matrix_glyphs, motif_glyphs
@@ -623,4 +623,142 @@ def plot_tree(
     return ax
 
 
-__all__ = ["DNA_COLOURS", "RNA_COLOURS", "plot_motif_peaks", "view_logo", "view_motifs"]
+def plot_motif_proximity(
+    proximity: pl.DataFrame,
+    motifs: Sequence[str] | None = None,
+    ncol: int = 2,
+    bins: int = 50,
+    fill_zone: str = "#ffe4a3",
+    log_x: bool = False,
+    figsize: tuple[float, float] | None = None,
+) -> Figure:
+    """Draw each motif's distances to the nearest anchor, from
+    :func:`motif_proximity`, with the most enriched zone shaded.
+
+    Distances are signed (negative upstream of stranded anchors); with
+    ``log_x`` the absolute distances plus one are drawn on a log scale.
+    """
+    if "dist_to_nearest" not in proximity.columns:
+        raise ValueError("proximity has no dist_to_nearest column; was it made by motif_proximity()?")
+    if proximity.height == 0:
+        raise ValueError("proximity has no rows to plot")
+    if motifs is not None:
+        proximity = proximity.filter(pl.col("motif").is_in(list(motifs)))
+        if proximity.height == 0:
+            raise ValueError("none of the requested motifs are in proximity")
+    plt = _pyplot()
+    n = proximity.height
+    ncol = max(1, min(ncol, n))
+    nrow = math.ceil(n / ncol)
+    fig, axes = plt.subplots(nrow, ncol, figsize=figsize or (4.0 * ncol, 2.8 * nrow), squeeze=False)
+    for k, row in enumerate(proximity.iter_rows(named=True)):
+        ax = axes[k // ncol, k % ncol]
+        d = np.array([x for x in (row["dist_to_nearest"] or []) if x is not None], dtype=float)
+        d = d[np.isfinite(d)]
+        if log_x:
+            d = np.abs(d) + 1
+        if row["best_dist"] is not None:
+            lo, hi = (1.0, row["best_dist"] + 1.0) if log_x else (-row["best_dist"], row["best_dist"])
+            ax.axvspan(lo, hi, color=fill_zone, alpha=0.5, linewidth=0)
+        if d.size:
+            edges = np.geomspace(1, d.max() * 1.01, bins + 1) if log_x and d.max() > 1 else bins
+            ax.hist(d, bins=edges, color="black")
+        if log_x:
+            ax.set_xscale("log")
+        ax.set_title(f"{row['motif']}  (p = {row['pvalue']:.2g})", fontsize=10)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        ax.set_xlabel("Distance to nearest anchor (bp, log10)" if log_x
+                      else "Signed distance to nearest anchor (bp)")
+        ax.set_ylabel("Count")
+    for k in range(n, nrow * ncol):
+        axes[k // ncol, k % ncol].set_visible(False)
+    fig.tight_layout()
+    return fig
+
+
+def _density(x: np.ndarray, n: int = 512) -> tuple[np.ndarray, np.ndarray]:
+    """Gaussian kernel density over the range of x, with R's bw.nrd0
+    bandwidth (as ggplot2's geom_density)."""
+    x = np.asarray(x, dtype=float)
+    if x.size < 2 or np.ptp(x) == 0:
+        return np.array([x.mean() if x.size else 0.0]), np.array([0.0])
+    sd = x.std(ddof=1)
+    iqr = np.subtract(*np.percentile(x, [75, 25]))
+    lo = min(sd, iqr / 1.34) if iqr > 0 else sd
+    bw = 0.9 * (lo if lo > 0 else abs(x[0]) or 1.0) * x.size ** -0.2
+    grid = np.linspace(x.min(), x.max(), n)
+    dens = np.exp(-0.5 * ((grid[:, None] - x[None, :]) / bw) ** 2).sum(axis=1)
+    return grid, dens / (x.size * bw * math.sqrt(2 * math.pi))
+
+
+def plot_match_bkg(
+    sequences: Sequence[str] | Mapping[str, str] | None = None,
+    bkg: Sequence[str] | Mapping[str, str] | None = None,
+    by: Sequence[str] | None = None,
+    indices: pl.DataFrame | None = None,
+    figsize: tuple[float, float] | None = None,
+) -> Figure:
+    """Compare the composition of targets and their matched background
+    from :func:`match_bkg`, as overlaid densities.
+
+    Give the targets and the background (GC fraction and length are drawn),
+    or the ``indices`` table from ``match_bkg(..., return_indices=True)``
+    to also see any covariates. ``by`` picks the axes to draw.
+    """
+    labels = {"gc": "GC fraction", "length": "Sequence length"}
+    panels: list[tuple[str, np.ndarray, np.ndarray]] = []
+    if indices is not None:
+        axes_names = [c[len("target_"):] for c in indices.columns
+                      if c.startswith("target_") and c != "target_i"
+                      and f"universe_{c[len('target_'):]}" in indices.columns]
+        if by is not None:
+            axes_names = [a for a in axes_names if a in by]
+        if not axes_names:
+            raise ValueError("indices has no target_*/universe_* column pairs to draw")
+        for a in axes_names:
+            panels.append((labels.get(a, a), indices[f"target_{a}"].to_numpy(),
+                           indices[f"universe_{a}"].to_numpy()))
+    else:
+        if sequences is None or bkg is None:
+            raise ValueError("give the targets and the background, or indices")
+        _, t = _sequence_pairs(sequences)
+        _, b = _sequence_pairs(bkg)
+        chosen = list(by) if by is not None else ["gc", "length"]
+        if set(chosen) - {"gc", "length"}:
+            raise ValueError("by must name 'gc' and/or 'length'")
+        for a in chosen:
+            if a == "gc":
+                panels.append((labels[a], np.array(_core._gc_fraction(t)), np.array(_core._gc_fraction(b))))
+            else:
+                panels.append((labels[a], np.array([len(s) for s in t], float),
+                               np.array([len(s) for s in b], float)))
+    plt = _pyplot()
+    fig, axes = plt.subplots(1, len(panels), figsize=figsize or (4.0 * len(panels), 3.2), squeeze=False)
+    for ax, (label, tv, uv) in zip(axes[0], panels):
+        for vals, name, colour in ((tv, "target", "#1f77b4"), (uv, "matched", "#ff7f0e")):
+            if len(vals) and np.ptp(vals) == 0:
+                # A constant has no density to draw; mark its value.
+                ax.axvline(float(vals[0]), color=colour, linewidth=1.2, label=name)
+                continue
+            gx, gy = _density(vals)
+            ax.fill_between(gx, gy, color=colour, alpha=0.25, linewidth=0)
+            ax.plot(gx, gy, color=colour, linewidth=1.2, label=name)
+        ax.set_title(label, fontsize=10)
+        ax.set_ylabel("Density")
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+    axes[0][0].legend(frameon=False, loc="lower left", bbox_to_anchor=(0.0, 1.08), ncol=2)
+    fig.tight_layout()
+    return fig
+
+
+__all__ = [
+    "DNA_COLOURS",
+    "RNA_COLOURS",
+    "plot_match_bkg",
+    "plot_motif_peaks",
+    "plot_motif_proximity",
+    "view_logo",
+    "view_motifs",
+]

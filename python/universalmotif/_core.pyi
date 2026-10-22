@@ -324,3 +324,38 @@ def _display_matrix(motif: Motif, use_type: str, relative_entropy: bool) -> list
 def _anchor_layout(
     motifs: list[Motif], anchor: int, min_overlap: int, rc: bool, nthreads: int
 ) -> tuple[list[tuple[int, bool]], int]: ...
+def _proximity(
+    hits: tuple[list[int], list[int], list[int], list[str]],
+    motif: list[int],
+    score: list[float],
+    anchors: tuple[list[int], list[int], list[int], list[str]],
+    universe: tuple[list[int], list[int], list[int], list[str]],
+    chrom_lengths: list[int | None],
+    method: str,
+    count: str,
+    orientation: str,
+    dist_thresholds: list[int] | None,
+    n_perm: int,
+    perm_per_chrom: bool,
+    ignore_strand: bool,
+    seed: int,
+    nthreads: int,
+) -> dict[str, Any]: ...
+def _gc_fraction(seqs: list[str]) -> list[float]: ...
+def _match_bkg(
+    targets: list[str],
+    universe: list[str],
+    covariates: list[tuple[str, list[float], list[float], int, str]],
+    n_per_target: int,
+    n_bins_gc: int,
+    n_bins_length: int,
+    unique: bool,
+    seed: int,
+) -> tuple[list[int], int]: ...
+def _genome_windows(
+    chrom_lengths: list[int],
+    target_widths: list[int],
+    n_candidates: int,
+    exclude: tuple[list[int], list[int], list[int], list[str]],
+    seed: int,
+) -> list[tuple[int, int, int]]: ...
