@@ -15,6 +15,7 @@ use universalmotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, St
 
 mod analysis;
 mod io;
+mod sequences;
 
 pub(crate) fn err(e: universalmotif::Error) -> PyErr {
     PyValueError::new_err(e.to_string())
@@ -661,5 +662,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_summarise, m)?)?;
     io::register(m)?;
     analysis::register(m)?;
+    sequences::register(m)?;
     Ok(())
 }

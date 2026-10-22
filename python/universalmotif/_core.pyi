@@ -218,3 +218,68 @@ def _motif_tree(
     labels: list[str],
     nthreads: int,
 ) -> dict[str, Any]: ...
+def _klets(letters: str, k: int) -> list[str]: ...
+def _count_klets(seq: str, k: int, alphabet: str) -> list[int]: ...
+def _windows(len: int, window: int, overlap: int, incomplete: bool) -> list[tuple[int, int]]: ...
+def _complexity(seqs: list[str], method: str, alph: str | None, max_word: int) -> list[float]: ...
+def _sequence_complexity(
+    seqs: list[str],
+    method: str,
+    window: float,
+    overlap: float | None,
+    alphabet: str | None,
+    max_word: int,
+    nthreads: int,
+) -> dict[str, Any]: ...
+def _get_bkg(
+    seqs: list[str],
+    names: list[str],
+    k: list[int],
+    pseudocount: int,
+    alphabet: str | None,
+    rc: bool,
+    merge: bool,
+    window: tuple[float, float] | None,
+    nthreads: int,
+) -> dict[str, Any]: ...
+def _shuffle_sequences(
+    seqs: list[str],
+    k: int,
+    method: str,
+    seed: int,
+    window: tuple[float, float] | None,
+    nthreads: int,
+) -> list[str]: ...
+def _create_sequences(
+    alphabet: str, n: int, len: int, freqs: list[float] | None, seed: int, nthreads: int
+) -> list[str]: ...
+def _shuffle_motifs(motifs: list[Motif], k: int, seed: int) -> list[Motif]: ...
+def _sample_sites(motif: Motif, n: int, seed: int) -> list[str]: ...
+def _implant_motifs(
+    motifs: list[Motif],
+    seqs: list[str],
+    n_per_seq: int,
+    rate: float | None,
+    positions: list[list[int]] | None,
+    both_strands: bool,
+    centre_bias: int,
+    min_spacing: int,
+    max_retries: int,
+    seed: int,
+) -> tuple[list[str], dict[str, Any], list[str]]: ...
+def _motif_finder(
+    seqs: list[str],
+    negatives: list[str] | None,
+    min_width: int,
+    max_width: int,
+    nmotifs: int,
+    hit_pvalue: float,
+    stop_pvalue: float,
+    qvalue: float,
+    dedup_overlap: float,
+    rc: bool,
+    shuffle_k: int,
+    seed: int,
+    pseudocount: int,
+    nthreads: int,
+) -> tuple[list[Motif], dict[str, Any]]: ...

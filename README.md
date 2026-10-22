@@ -11,8 +11,9 @@ The package is at an early stage. Creating motifs, converting between motif
 types, reverse complementing, trimming and summarising are available, as are
 reading and writing motif files (MEME, JASPAR, HOMER, TRANSFAC, CIS-BP,
 UniPROBE, plain matrices and FASTA), exact P-values, scanning sequences for
-hits, and comparing, merging and clustering motifs. Shuffling, enrichment,
-motif discovery and plotting will follow.
+hits, comparing, merging and clustering motifs, k-let backgrounds,
+sequence complexity, shuffling, random sequences, implanting sites and
+*de novo* motif discovery. Enrichment testing and plotting will follow.
 
 ## Example
 
@@ -36,7 +37,15 @@ hits = um.scan_sequences(motifs, sequences, pvalue=1e-4)
 similarity = um.compare_motifs(motifs)        # all-against-all matrix
 tree = um.motif_tree(motifs)                  # tree.newick, tree.linkage
 merged = um.merge_similar(motifs, qvalue=0.01)
+
+background = um.shuffle_sequences(sequences, k=2, seed=1)
+found = um.motif_finder(sequences, background, qvalue=0.05)
+new_motifs = found["motif"].to_list()
 ```
+
+Functions that use random numbers take a `seed`; without one they draw a
+fresh seed each time. Seeds do not reproduce the R package's results, since
+the two use different random number generators.
 
 Function names follow the R package, with dotted R argument names written
 with underscores (`min.ic` becomes `min_ic`). Where the R package has both a
