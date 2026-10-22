@@ -8,10 +8,10 @@ R/Bioconductor package, built on the Rust version
 matrices and polars DataFrames for tables.
 
 The package is at an early stage. Creating motifs, converting between motif
-types, reverse complementing, trimming and summarising are available, as is
-reading and writing MEME, JASPAR, HOMER, TRANSFAC, CIS-BP, UniPROBE and plain
-matrix files. P-values, scanning, comparison, shuffling and motif discovery
-will follow.
+types, reverse complementing, trimming and summarising are available, as are
+reading and writing motif files (MEME, JASPAR, HOMER, TRANSFAC, CIS-BP,
+UniPROBE, plain matrices and FASTA), exact P-values and scanning sequences
+for hits. Comparison, shuffling and motif discovery will follow.
 
 ## Example
 
@@ -28,6 +28,9 @@ print(um.summarise_motifs([motif, sites]))
 
 um.write_meme([motif, sites], "motifs.meme")
 motifs = um.read_meme("motifs.meme")
+
+sequences = um.read_fasta("promoters.fa")
+hits = um.scan_sequences(motifs, sequences, pvalue=1e-4)
 ```
 
 Function names follow the R package, with dotted R argument names written

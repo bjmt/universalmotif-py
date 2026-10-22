@@ -1,0 +1,254 @@
+"""P-values, sequence scanning and hit deduplication."""
+
+from __future__ import annotations
+
+import numbers
+from collections.abc import Iterable, Mapping, Sequence
+
+import numpy as np
+import polars as pl
+
+from . import _core
+from ._api import _check_motif
+from ._core import Motif
+
+
+def _is_number(x: object) -> bool:
+    return isinstance(x, numbers.Real) and not isinstance(x, bool)
+
+
+def motif_pvalue(
+    motifs: Motif | Iterable[Motif],
+    score: float | Sequence[float] | Sequence[Sequence[float]] | None = None,
+    pvalue: float | Sequence[float] | Sequence[Sequence[float]] | None = None,
+    bkg_probs: Sequence[float] | Mapping[str, float] | Sequence[object] | None = None,
+    nthreads: int = 1,
+):
+    """P-values for motif scores, or score thresholds for P-values.
+
+    Give either ``score`` or ``pvalue``. A motif's P-value for a score is the
+    probability that a random site, drawn from the background, scores at
+    least that much; it is computed exactly from the motif's score
+    distribution (universalmotif's ``method = "dynamic"``). Going the other
+    way gives the lowest score reached with at most that probability, or
+    infinity if no score is that unlikely.
+
+    Scores are on the integer grid the R package uses (PWM entries times
+    1000, truncated), so they are exact to 0.001.
+
+    Parameters
+    ----------
+    motifs
+        A motif or a list of motifs. They are converted to PWMs; a motif
+        whose PWM would have infinite values gets its pseudocount reapplied
+        first.
+    score, pvalue
+        For a single motif, a number or a sequence of numbers. For a list of
+        motifs, a number (used for every motif), one number per motif, or a
+        list of sequences (one per motif, or a single one for all).
+    bkg_probs
+        Background frequencies, either one set for all motifs (a sequence in
+        alphabet order or a mapping from letters) or a list with one per
+        motif. Each motif's own background by default.
+    nthreads
+        Threads to use; 0 means all available.
+
+    Returns
+    -------
+    A float for one motif and one value, a numpy array when values pair up
+    with motifs, or a list of arrays when each motif gets several values.
+    """
+    if (score is None) == (pvalue is None):
+        raise ValueError("give exactly one of score and pvalue")
+    values = score if score is not None else pvalue
+    single = isinstance(motifs, Motif)
+    ms = [motifs] if single else [_check_motif(m) for m in motifs]
+    if not ms:
+        raise ValueError("no motifs given")
+    n = len(ms)
+
+    def run(queries):
+        return np.array(
+            _core._motif_pvalue(ms, queries, bkg_probs, nthreads, score is None), dtype=float
+        )
+
+    if _is_number(values):
+        if single:
+            return float(run([(0, float(values))])[0])
+        return run([(i, float(values)) for i in range(n)])
+
+    values = list(values)
+    if values and not _is_number(values[0]):
+        groups = [list(map(float, v)) for v in values]
+        if len(groups) == 1:
+            groups = groups * n
+        elif len(groups) != n:
+            raise ValueError("give one sequence of values for all motifs or one per motif")
+        flat = run([(i, v) for i, g in enumerate(groups) for v in g])
+        out, k = [], 0
+        for g in groups:
+            out.append(flat[k : k + len(g)])
+            k += len(g)
+        return out
+
+    values = [float(v) for v in values]
+    if single:
+        return run([(0, v) for v in values])
+    if len(values) == 1:
+        values = values * n
+    if len(values) != n:
+        raise ValueError("give one value for all motifs, one per motif, or a list per motif")
+    return run(list(enumerate(values)))
+
+
+def _make_unique(names: list[str]) -> list[str]:
+    """R's make.unique(): later duplicates get ".1", ".2" and so on."""
+    seen: set[str] = set()
+    out = []
+    for name in names:
+        new, k = name, 0
+        while new in seen:
+            k += 1
+            new = f"{name}.{k}"
+        seen.add(new)
+        out.append(new)
+    return out
+
+
+def _sequence_pairs(sequences) -> tuple[list[str], list[str]]:
+    if isinstance(sequences, str):
+        return ["seq1"], [sequences]
+    if isinstance(sequences, Mapping):
+        return [str(k) for k in sequences], [str(v) for v in sequences.values()]
+    seqs = [str(s) for s in sequences]
+    return [f"seq{i + 1}" for i in range(len(seqs))], seqs
+
+
+_HIT_SCHEMA = {
+    "motif": pl.String,
+    "motif_i": pl.Int64,
+    "sequence": pl.String,
+    "sequence_i": pl.Int64,
+    "start": pl.Int64,
+    "end": pl.Int64,
+    "strand": pl.String,
+    "score": pl.Float64,
+    "score_pct": pl.Float64,
+    "match": pl.String,
+    "pvalue": pl.Float64,
+}
+
+
+def scan_sequences(
+    motifs: Motif | Iterable[Motif],
+    sequences: str | Sequence[str] | Mapping[str, str],
+    pvalue: float = 1e-4,
+    rc: bool = True,
+    nthreads: int = 1,
+    no_overlaps: bool = False,
+    no_overlaps_by: str = "pvalue",
+    no_overlaps_by_strand: bool = False,
+    no_overlaps_by_motif: bool = False,
+) -> pl.DataFrame:
+    """Scan DNA or RNA sequences for motif hits.
+
+    This is the port of universalmotif's ``scan_sequences_lite()``. Each
+    motif's score threshold comes from the ``pvalue`` cutoff, and every
+    window scoring at least that much is reported with its P-value.
+
+    Parameters
+    ----------
+    sequences
+        A sequence, a list of sequences, or a mapping from names to
+        sequences (such as the result of :func:`read_fasta`). Letters are
+        matched case-insensitively; anything else (such as ``N``) never
+        forms part of a hit.
+    rc
+        Also scan the reverse strand.
+    no_overlaps
+        Remove overlapping hits with :func:`dedup_hits`, keeping the best
+        by ``no_overlaps_by`` (``"pvalue"`` or ``"score"``).
+        ``no_overlaps_by_strand`` and ``no_overlaps_by_motif`` also compare
+        hits across strands and across motifs.
+    nthreads
+        Threads to use; 0 means all available.
+
+    Returns
+    -------
+    A DataFrame with one row per hit: ``motif``, ``motif_i``, ``sequence``,
+    ``sequence_i``, ``start``, ``end``, ``strand``, ``score``,
+    ``score_pct`` (percentage of the motif's maximum score), ``match`` (the
+    matched sequence, reverse complemented on the ``-`` strand) and
+    ``pvalue``. ``motif_i`` and ``sequence_i`` are 0-based indices into the
+    inputs; ``start`` and ``end`` are 1-based, inclusive and on the forward
+    strand. Rows are ordered by motif, sequence and start.
+    """
+    ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
+    names, seqs = _sequence_pairs(sequences)
+    overlaps = (no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif) if no_overlaps else None
+    cols = _core._scan_sequences(ms, seqs, pvalue, rc, overlaps, nthreads)
+    motif_names = _make_unique([m.name for m in ms])
+    cols["motif"] = [motif_names[i] for i in cols["motif_i"]]
+    cols["sequence"] = [names[i] for i in cols["sequence_i"]]
+    return pl.DataFrame({k: cols[k] for k in _HIT_SCHEMA}, schema=_HIT_SCHEMA)
+
+
+def dedup_hits(
+    hits: pl.DataFrame,
+    by: str = "pvalue",
+    reverse: bool = False,
+    ignore_strand: bool = False,
+    ignore_motif: bool = False,
+    seq: str = "sequence",
+    motif: str = "motif",
+    strand: str = "strand",
+) -> pl.DataFrame:
+    """Remove overlapping hits.
+
+    Hits are grouped by sequence, motif and strand. Within a group,
+    overlapping hits are taken in order of the ``by`` column (lower is
+    better for columns whose name starts with ``pval``, higher otherwise;
+    ``reverse`` flips this, and ties go to the earlier row) and each is kept
+    unless it overlaps one already kept. ``ignore_strand`` and
+    ``ignore_motif`` compare hits across strands and motifs. ``start`` and
+    ``end`` columns are required and are inclusive.
+    """
+    for col in (seq, motif, strand, "start", "end", by):
+        if col not in hits.columns:
+            raise ValueError(f"hits is missing the column {col!r}")
+    if hits.height == 0:
+        return hits
+    start = hits["start"].cast(pl.Int64).to_list()
+    end = hits["end"].cast(pl.Int64).to_list()
+    if any(s is None or e is None for s, e in zip(start, end)):
+        raise ValueError("start and end cannot contain nulls")
+    if any(s > e for s, e in zip(start, end)):
+        raise ValueError("all rows must satisfy start <= end")
+    priority = hits[by].cast(pl.Float64).to_list()
+    if any(p is None or p != p for p in priority):
+        raise ValueError(f"the column {by!r} cannot contain missing values")
+    lower_is_better = by.lower().startswith("pval")
+    if reverse:
+        lower_is_better = not lower_is_better
+    if lower_is_better:
+        priority = [-p for p in priority]
+
+    def codes(values):
+        index: dict[object, int] = {}
+        return [index.setdefault(v, len(index)) for v in values]
+
+    strand_codes = [{"+": 0, "-": 1, "*": 2}.get(s, -1) for s in hits[strand].to_list()]
+    keep = _core._dedup(
+        codes(hits[seq].to_list()),
+        codes(hits[motif].to_list()),
+        strand_codes,
+        start,
+        end,
+        priority,
+        ignore_strand,
+        ignore_motif,
+    )
+    return hits.filter(pl.Series(keep))
+
+
+__all__ = ["dedup_hits", "motif_pvalue", "scan_sequences"]

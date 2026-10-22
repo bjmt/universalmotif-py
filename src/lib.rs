@@ -13,6 +13,7 @@ use universalmotif::create::{self, CreateOptions};
 use universalmotif::ops::{self, TrimFrom};
 use universalmotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, Strand, convert};
 
+mod analysis;
 mod io;
 
 pub(crate) fn err(e: universalmotif::Error) -> PyErr {
@@ -45,7 +46,7 @@ fn one_char(s: &str, what: &str) -> PyResult<char> {
 /// letter, in alphabet order) or as a mapping from letters to values.
 /// Mapping keys longer than one letter (higher-order backgrounds) are
 /// ignored.
-fn parse_bkg(obj: &Bound<'_, PyAny>, alphabet: &Alphabet) -> PyResult<Vec<f64>> {
+pub(crate) fn parse_bkg(obj: &Bound<'_, PyAny>, alphabet: &Alphabet) -> PyResult<Vec<f64>> {
     if let Ok(d) = obj.cast::<PyDict>() {
         let mut out = vec![None; alphabet.len()];
         for (k, v) in d.iter() {
@@ -659,5 +660,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_consensus_to_ppm_aa, m)?)?;
     m.add_function(wrap_pyfunction!(_summarise, m)?)?;
     io::register(m)?;
+    analysis::register(m)?;
     Ok(())
 }

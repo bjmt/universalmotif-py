@@ -154,3 +154,30 @@ def _write_matrix(
 ) -> str: ...
 def _write_cisbp(motifs: list[Motif]) -> str: ...
 def _write_uniprobe(motifs: list[Motif]) -> str: ...
+def _read_fasta(text: str) -> list[tuple[str, str]]: ...
+def _write_fasta(records: list[tuple[str, str]], width: int) -> str: ...
+def _motif_pvalue(
+    motifs: list[Motif],
+    queries: list[tuple[int, float]],
+    bkg: object,
+    nthreads: int,
+    to_score: bool,
+) -> list[float]: ...
+def _scan_sequences(
+    motifs: list[Motif],
+    sequences: list[str],
+    pvalue: float,
+    rc: bool,
+    no_overlaps: tuple[str, bool, bool] | None,
+    nthreads: int,
+) -> dict[str, list[Any]]: ...
+def _dedup(
+    sequence: list[int],
+    motif: list[int],
+    strand: list[int],
+    start: list[int],
+    end: list[int],
+    priority: list[float],
+    ignore_strand: bool,
+    ignore_motif: bool,
+) -> list[bool]: ...

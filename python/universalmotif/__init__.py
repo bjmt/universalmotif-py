@@ -6,6 +6,7 @@ Rust counterpart.
 
 from importlib.metadata import PackageNotFoundError, version
 
+from ._analysis import dedup_hits, motif_pvalue, scan_sequences
 from ._api import (
     consensus_to_ppm,
     consensus_to_ppm_aa,
@@ -23,6 +24,7 @@ from ._api import (
 )
 from ._io import (
     read_cisbp,
+    read_fasta,
     read_homer,
     read_jaspar,
     read_matrix,
@@ -30,6 +32,7 @@ from ._io import (
     read_transfac,
     read_uniprobe,
     write_cisbp,
+    write_fasta,
     write_homer,
     write_jaspar,
     write_matrix,
@@ -50,12 +53,15 @@ __all__ = [
     "consensus_to_ppm_aa",
     "convert_type",
     "create_motif",
+    "dedup_hits",
     "get_consensus",
     "get_consensus_aa",
+    "motif_pvalue",
     "motif_rc",
     "normalize",
     "position_icscore",
     "read_cisbp",
+    "read_fasta",
     "read_homer",
     "read_jaspar",
     "read_matrix",
@@ -63,10 +69,12 @@ __all__ = [
     "read_transfac",
     "read_uniprobe",
     "round_motif",
+    "scan_sequences",
     "summarise_motifs",
     "trim_cwm",
     "trim_motifs",
     "write_cisbp",
+    "write_fasta",
     "write_homer",
     "write_jaspar",
     "write_matrix",

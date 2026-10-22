@@ -5,7 +5,7 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::PyBool;
 use universalmotif::Motif;
-use universalmotif::io::{cisbp, homer, jaspar, matrix, meme, transfac, uniprobe};
+use universalmotif::io::{cisbp, fasta, homer, jaspar, matrix, meme, transfac, uniprobe};
 
 use crate::{PyMotif, err, parse_alphabet, parse_type};
 
@@ -177,9 +177,10 @@ fn _write_homer(
     let t = match threshold_type {
         "logodds" => homer::Threshold::Logodds(threshold),
         "logodds_abs" => homer::Threshold::LogoddsAbs(threshold),
+        "pvalue" => homer::Threshold::Pvalue(threshold),
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(
-                "threshold_type must be 'logodds' or 'logodds_abs'",
+                "threshold_type must be 'logodds', 'logodds_abs' or 'pvalue'",
             ));
         }
     };
@@ -231,7 +232,19 @@ fn _write_matrix(
     matrix::write(&unwrap(&motifs), &opts).map_err(err)
 }
 
+#[pyfunction]
+fn _read_fasta(text: &str) -> PyResult<Vec<(String, String)>> {
+    fasta::read(text).map_err(err)
+}
+
+#[pyfunction]
+fn _write_fasta(records: Vec<(String, String)>, width: usize) -> String {
+    fasta::write(&records, width)
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(_read_fasta, m)?)?;
+    m.add_function(wrap_pyfunction!(_write_fasta, m)?)?;
     m.add_function(wrap_pyfunction!(_read_jaspar, m)?)?;
     m.add_function(wrap_pyfunction!(_read_homer, m)?)?;
     m.add_function(wrap_pyfunction!(_read_transfac, m)?)?;

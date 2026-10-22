@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import os
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -249,12 +249,14 @@ def write_homer(
 ) -> None:
     """Write DNA or RNA motifs in HOMER format.
 
-    The detection threshold in each header is ``threshold`` times the motif's
-    maximum log-odds score (``threshold_type="logodds"``) or the log-odds
-    score itself (``"logodds_abs"``). Give one value or one per motif.
+    The detection threshold in each header is on HOMER's own score scale:
+    HOMER scores a site as the sum of ``ln(p / 0.25)`` over the probabilities
+    written in the file, floored at 0.001. With ``threshold_type="logodds"``
+    it is ``threshold`` times the motif's maximum score, with
+    ``"logodds_abs"`` it is ``threshold`` itself, and with ``"pvalue"`` it is
+    a score random sites (from a uniform background) reach with at most that
+    probability. Give one value or one per motif.
     """
-    if threshold_type == "pvalue":
-        raise NotImplementedError("P-value thresholds need motif_pvalue(), which is not ported yet")
     ms = _motif_list(motifs)
     _warn_gaps(ms, "HOMER")
     t = [float(threshold)] if isinstance(threshold, (int, float)) else [float(x) for x in threshold]
@@ -304,6 +306,29 @@ def write_uniprobe(
     _write_text(file, _core._write_uniprobe(ms), overwrite, append)
 
 
+def read_fasta(file: PathLike, skip: int = 0) -> dict[str, str]:
+    """Read a FASTA file into a dict from names (the whole header line after
+    ``>``) to sequences."""
+    return dict(_core._read_fasta(_read_text(file, skip)))
+
+
+def write_fasta(
+    sequences: Mapping[str, str] | Sequence[str],
+    file: PathLike,
+    width: int = 80,
+    overwrite: bool = False,
+    append: bool = False,
+) -> None:
+    """Write sequences to a FASTA file, wrapping lines at ``width``
+    characters (0 for no wrapping). Unnamed sequences are called ``seq1``,
+    ``seq2`` and so on."""
+    if isinstance(sequences, Mapping):
+        records = [(str(k), str(v)) for k, v in sequences.items()]
+    else:
+        records = [(f"seq{i + 1}", str(s)) for i, s in enumerate(sequences)]
+    _write_text(file, _core._write_fasta(records, width), overwrite, append)
+
+
 def write_matrix(
     motifs: Motif | Iterable[Motif],
     file: PathLike,
@@ -331,6 +356,7 @@ def write_matrix(
 
 __all__ = [
     "read_cisbp",
+    "read_fasta",
     "read_homer",
     "read_jaspar",
     "read_matrix",
@@ -338,6 +364,7 @@ __all__ = [
     "read_transfac",
     "read_uniprobe",
     "write_cisbp",
+    "write_fasta",
     "write_homer",
     "write_jaspar",
     "write_matrix",
