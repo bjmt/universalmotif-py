@@ -1,5 +1,7 @@
 """Packed sequences, and scanning FASTA files without reading them whole."""
 
+import gzip
+
 import numpy as np
 import pytest
 
@@ -90,3 +92,13 @@ def test_packed_sequences_work_as_a_mapping():
 def _write(path, text):
     path.write_text(text)
     return path
+
+
+def test_gzipped_fasta(tmp_path):
+    plain = reference_file("promoters.fa")
+    gz = tmp_path / "promoters.fa.gz"
+    gz.write_bytes(gzip.compress(plain.read_bytes()))
+    assert um.read_fasta(gz) == um.read_fasta(plain)
+    assert dict(um.read_fasta(gz, packed=True)) == dict(um.read_fasta(plain, packed=True))
+    motifs = _scan_motifs()
+    assert um.scan_sequences(motifs, gz).equals(um.scan_sequences(motifs, plain))

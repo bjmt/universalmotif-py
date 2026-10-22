@@ -167,9 +167,9 @@ def scan_sequences(
         protein letters are matched case-insensitively and custom alphabets
         exactly; anything else (such as ``N`` or ``X``) never forms part of
         a hit. :class:`PackedSequences` are scanned without decoding them,
-        and a FASTA file given as a path (such as a :class:`pathlib.Path`)
-        is read and scanned a batch at a time, so a genome can be scanned
-        in a few hundred MB.
+        and a FASTA file given as a path (such as a :class:`pathlib.Path`),
+        gzipped or not, is read and scanned a batch at a time, so a genome
+        can be scanned in a few hundred MB.
     rc
         Also scan the reverse strand.
     no_overlaps

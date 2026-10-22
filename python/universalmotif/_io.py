@@ -313,7 +313,8 @@ def read_fasta(
     """Read a FASTA file into a dict from names (the whole header line after
     ``>``) to sequences. The file is read line by line, so a genome needs
     little more memory than its sequences, and the first ``skip`` lines are
-    ignored.
+    ignored. Gzipped files (bgzip included) are recognised from their first
+    bytes and decompressed as they are read.
 
     With ``packed``, the sequences are packed for scanning as they are read
     and returned as :class:`PackedSequences` for ``alphabet`` (``"DNA"``,
