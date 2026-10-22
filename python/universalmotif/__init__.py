@@ -7,6 +7,7 @@ a Rust crate of the same name.
 from importlib.metadata import PackageNotFoundError, version
 
 from ._analysis import dedup_hits, motif_pvalue, scan_sequences
+from ._data import example_file, example_motifs, example_sequences
 from ._packed import PackedSequences, pack_sequences
 from ._utils import (
     add_gap,
@@ -112,6 +113,9 @@ __all__ = [
     "create_sequences",
     "dedup_hits",
     "enrich_motifs",
+    "example_file",
+    "example_motifs",
+    "example_sequences",
     "filter_motifs",
     "get_bkg",
     "get_consensus",

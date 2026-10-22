@@ -89,5 +89,6 @@ nav:
       - Sequences: reference/sequences.md
       - Genomic intervals: reference/genomic.md
       - Plotting: reference/plotting.md
+      - Example data: reference/data.md
   - Differences from the R package: differences.md
   - Changelog: changelog.md

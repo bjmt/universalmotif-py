@@ -22,6 +22,7 @@ The functions are grouped by what they do:
 - [Genomic intervals](genomic.md): matched backgrounds and proximity to
   anchors.
 - [Plotting](plotting.md): logos, trees and plots of results.
+- [Example data](data.md): synthetic motifs, sequences and files for trying things out.
 
 Most functions that do a lot of work take an `nthreads` argument, which is
 1 by default or 0 to use every core. Functions that use random numbers take a

@@ -1,0 +1,59 @@
+ID TATA-box
+HC TBP
+OS synthetic
+P0	A	C	G	T
+01	2	1	11	9	K
+02	2	0	0	21	T
+03	23	0	0	0	A
+04	1	1	1	20	T
+05	18	3	1	1	A
+06	11	1	1	10	W
+07	20	3	0	0	A
+08	8	1	1	13	W
+09	10	0	13	0	R
+10	7	3	5	8	N
+XX
+//
+ID AP-1
+HC bZIP
+OS synthetic
+P0	A	C	G	T
+01	10	11	9	19	N
+02	3	1	0	45	T
+03	0	2	45	2	G
+04	40	5	2	2	A
+05	0	24	24	1	S
+06	2	2	2	43	T
+07	1	48	0	0	C
+08	48	1	0	0	A
+09	16	4	20	9	N
+XX
+//
+ID CRE
+HC bZIP
+OS synthetic
+P0	A	C	G	T
+01	3	2	3	38	T
+02	1	1	44	0	G
+03	43	0	2	1	A
+04	3	43	0	0	C
+05	0	3	41	2	G
+06	1	1	1	43	T
+07	0	39	4	3	C
+08	37	8	0	1	A
+XX
+//
+ID G-box
+HC bZIP
+OS synthetic
+P0	A	C	G	T
+01	17	9	23	22	N
+02	6	62	1	2	C
+03	62	3	2	4	A
+04	0	69	0	2	C
+05	2	1	64	4	G
+06	0	15	3	53	T
+07	12	1	58	0	G
+08	27	10	21	13	N
+XX
+//

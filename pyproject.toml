@@ -43,4 +43,6 @@ module-name = "universalmotif._core"
 features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "python/universalmotif"]
+# Docstring examples run as tests too.
+addopts = "--doctest-modules"
