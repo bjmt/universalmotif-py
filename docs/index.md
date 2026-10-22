@@ -55,7 +55,10 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
 
 The [installation](installation.md) page explains how to get the package
 set up, and the [getting started](guides/getting-started.ipynb) guide walks
-through the basics. Every function is described in the
+through the basics. The guides that follow it go from what the different
+motif types mean in [sequence motifs](guides/motif-basics.ipynb) through to
+a full analysis of real peaks in [a ChIP-seq
+workflow](guides/chipseq-workflow.ipynb). Every function is described in the
 [API reference](reference/index.md).
 
 If you already know the R package, the function names will be familiar,

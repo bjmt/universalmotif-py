@@ -38,6 +38,11 @@ plugins:
       # MkDocs renders the notebooks' text, so links to the reference work.
       markdown_cell_processor: mkdocs
       execute: true
+      # These use downloaded data, so they were run once and kept with their
+      # outputs.
+      execute_ignore:
+        - guides/background-models.ipynb
+        - guides/chipseq-workflow.ipynb
       include_source: true
       allow_errors: false
   - mkdocstrings:
@@ -58,6 +63,8 @@ plugins:
 
 markdown_extensions:
   - admonition
+  - pymdownx.arithmatex:
+      generic: true
   - attr_list
   - toc:
       permalink: true
@@ -73,11 +80,24 @@ markdown_extensions:
 watch:
   - python/universalmotif
 
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js
+
 nav:
   - Home: index.md
   - Installation: installation.md
   - Guides:
       - Getting started: guides/getting-started.ipynb
+      - Sequence motifs: guides/motif-basics.ipynb
+      - Working with motifs: guides/working-with-motifs.ipynb
+      - Working with sequences: guides/sequences.ipynb
+      - Scanning and enrichment: guides/scanning-and-enrichment.ipynb
+      - Comparing motifs and P-values: guides/comparison-and-pvalues.ipynb
+      - Choosing a background: guides/background-models.ipynb
+      - Scanning large genomes: guides/large-genomes.ipynb
+      - Gapped motifs and other alphabets: guides/gaps-and-alphabets.ipynb
+      - A ChIP-seq workflow: guides/chipseq-workflow.ipynb
   - API reference:
       - reference/index.md
       - Motifs: reference/motifs.md
