@@ -42,6 +42,7 @@ from ._io import (
     write_uniprobe,
 )
 from ._core import Motif
+from ._enrich import enrich_motifs, motif_coocc, motif_peaks
 from ._sequences import (
     calc_complexity,
     calc_windows,
@@ -76,6 +77,7 @@ __all__ = [
     "create_motif",
     "create_sequences",
     "dedup_hits",
+    "enrich_motifs",
     "get_bkg",
     "get_consensus",
     "get_consensus_aa",
@@ -83,7 +85,9 @@ __all__ = [
     "implant_motifs",
     "merge_motifs",
     "merge_similar",
+    "motif_coocc",
     "motif_finder",
+    "motif_peaks",
     "motif_pvalue",
     "motif_rc",
     "motif_tree",

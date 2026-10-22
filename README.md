@@ -13,7 +13,8 @@ reading and writing motif files (MEME, JASPAR, HOMER, TRANSFAC, CIS-BP,
 UniPROBE, plain matrices and FASTA), exact P-values, scanning sequences for
 hits, comparing, merging and clustering motifs, k-let backgrounds,
 sequence complexity, shuffling, random sequences, implanting sites and
-*de novo* motif discovery. Enrichment testing and plotting will follow.
+*de novo* motif discovery, enrichment testing, co-occurrence and
+positional enrichment. Plotting will follow.
 
 ## Example
 
@@ -41,6 +42,11 @@ merged = um.merge_similar(motifs, qvalue=0.01)
 background = um.shuffle_sequences(sequences, k=2, seed=1)
 found = um.motif_finder(sequences, background, qvalue=0.05)
 new_motifs = found["motif"].to_list()
+
+enriched = um.enrich_motifs(motifs, sequences, background, qvalue=0.05)
+pairs = um.motif_coocc(motifs, sequences, max_distance=50)
+peaks = um.motif_peaks(hits, seq_length=500)  # equal-length, centred sequences
+groups = tree.cutree(k=5)
 ```
 
 Functions that use random numbers take a `seed`; without one they draw a

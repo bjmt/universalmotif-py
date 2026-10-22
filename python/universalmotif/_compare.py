@@ -200,6 +200,21 @@ class MotifTree:
     def __len__(self) -> int:
         return len(self.labels)
 
+    def cutree(self, k: int | None = None, h: float | None = None) -> np.ndarray:
+        """Cut the tree into ``k`` groups, or at height ``h``, as R's
+        ``cutree()``.
+
+        Returns one group per motif, numbered from 0 in the order the groups
+        first appear among the motifs. Cutting by height needs increasing
+        merge heights, which the centroid and median methods do not
+        guarantee.
+        """
+        if (k is None) == (h is None):
+            raise ValueError("give exactly one of k and h")
+        merge = [tuple(int(v) for v in row) for row in self.merge]
+        ids = _core._cutree(merge, [float(x) for x in self.height], k, None if h is None else float(h))
+        return np.array(ids, dtype=np.int64)
+
 
 def _tree(d: dict, labels: list[str], method: str) -> MotifTree:
     return MotifTree(

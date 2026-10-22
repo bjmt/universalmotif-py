@@ -14,6 +14,7 @@ use universalmotif::ops::{self, TrimFrom};
 use universalmotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, Strand, convert};
 
 mod analysis;
+mod enrichment;
 mod io;
 mod sequences;
 
@@ -663,5 +664,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     io::register(m)?;
     analysis::register(m)?;
     sequences::register(m)?;
+    enrichment::register(m)?;
     Ok(())
 }

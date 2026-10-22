@@ -283,3 +283,40 @@ def _motif_finder(
     pseudocount: int,
     nthreads: int,
 ) -> tuple[list[Motif], dict[str, Any]]: ...
+def _enrich(
+    motifs: list[Motif],
+    sequences: list[str],
+    background: list[str] | None,
+    pvalue: float,
+    test: str,
+    rc: bool,
+    shuffle_k: int,
+    seed: int,
+    pseudocount: int,
+    nthreads: int,
+) -> dict[str, Any]: ...
+def _coocc(
+    motif: list[int],
+    sequence: list[int],
+    start: list[int],
+    n_motifs: int,
+    n_sequences: int,
+    max_distance: int | None,
+    min_coocc: int,
+    pseudocount: int,
+    self_pairs: bool,
+) -> dict[str, Any]: ...
+def _peaks(
+    motif: list[int],
+    sequence: list[int],
+    center: list[float],
+    score: list[float],
+    seq_length: int,
+    mode: str,
+    min_window: int,
+    max_window: int | None,
+    window_step: int,
+    position_step: int,
+    nthreads: int,
+) -> dict[str, Any]: ...
+def _cutree(merge: list[tuple[int, int]], height: list[float], k: int | None, h: float | None) -> list[int]: ...
