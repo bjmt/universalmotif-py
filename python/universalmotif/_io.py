@@ -14,6 +14,7 @@ import polars as pl
 from . import _core
 from ._api import MotifType, _check_motif
 from ._core import Motif
+from ._packed import PackedSequences
 
 Positions = Literal["columns", "rows"]
 PathLike = str | os.PathLike[str]
@@ -306,12 +307,24 @@ def write_uniprobe(
     _write_text(file, _core._write_uniprobe(ms), overwrite, append)
 
 
-def read_fasta(file: PathLike, skip: int = 0) -> dict[str, str]:
+def read_fasta(
+    file: PathLike, skip: int = 0, packed: bool = False, alphabet: str = "DNA"
+) -> dict[str, str] | PackedSequences:
     """Read a FASTA file into a dict from names (the whole header line after
     ``>``) to sequences. The file is read line by line, so a genome needs
-    little more memory than its sequences."""
+    little more memory than its sequences, and the first ``skip`` lines are
+    ignored.
+
+    With ``packed``, the sequences are packed for scanning as they are read
+    and returned as :class:`PackedSequences` for ``alphabet`` (``"DNA"``,
+    ``"RNA"``, ``"AA"`` or the letters of a custom alphabet), which hold a
+    genome in a quarter of the memory; names must then be unique. To scan a
+    file just once, pass its path to :func:`scan_sequences` instead.
+    """
     if skip < 0:
         raise ValueError("skip must be zero or positive")
+    if packed:
+        return PackedSequences(_core._read_fasta_packed(os.fspath(file), alphabet, skip))
     return dict(_core._read_fasta_path(os.fspath(file), skip))
 
 

@@ -10,6 +10,7 @@ import polars as pl
 
 from . import _core
 from ._analysis import _make_unique, _sequence_pairs, scan_sequences
+from ._packed import PackedSequences
 from ._core import Motif
 from ._sequences import _seed
 
@@ -185,11 +186,20 @@ def motif_proximity(
         if not isinstance(sequences, Mapping):
             raise ValueError("sequences must map chromosome names to sequences")
         anchored = set(anc["chrom"])
-        chroms = {k: v for k, v in sequences.items() if k in anchored}
-        if not chroms:
-            raise ValueError("none of the anchor chromosomes are in sequences")
-        hits = scan_sequences(motifs, chroms, pvalue=scan_pvalue, rc=rc, nthreads=nthreads)
-        lengths = {k: len(v) for k, v in sequences.items()}
+        if isinstance(sequences, PackedSequences):
+            # Scanned without decoding; hits away from the anchors' chromosomes
+            # are dropped afterwards.
+            if not anchored & set(sequences):
+                raise ValueError("none of the anchor chromosomes are in sequences")
+            hits = scan_sequences(motifs, sequences, pvalue=scan_pvalue, rc=rc, nthreads=nthreads)
+            hits = hits.filter(pl.col("sequence").is_in(list(anchored)))
+            lengths = sequences.lengths
+        else:
+            chroms = {k: v for k, v in sequences.items() if k in anchored}
+            if not chroms:
+                raise ValueError("none of the anchor chromosomes are in sequences")
+            hits = scan_sequences(motifs, chroms, pvalue=scan_pvalue, rc=rc, nthreads=nthreads)
+            lengths = {k: len(v) for k, v in sequences.items()}
     for col in ("motif", "score", "start"):
         if col not in hits.columns:
             raise ValueError(f"hits must have a {col!r} column")
@@ -347,9 +357,19 @@ def match_bkg(
         exclude_cols = _cols(excl, index) if excl is not None else ([], [], [], [])
         if n_candidates is None:
             n_candidates = max(10000, 10 * len(seqs))
-        windows = _core._genome_windows([len(genome[c]) for c in chroms], [len(s) for s in seqs],
-                                        n_candidates, exclude_cols, _seed(seed))
-        uni = [genome[chroms[c]][s - 1 : e] for c, s, e in windows]
+        if isinstance(genome, PackedSequences):
+            # Decode just the windows, not whole chromosomes.
+            chrom_lengths = genome.lengths
+            lens = [chrom_lengths[c] for c in chroms]
+            window = genome.subseq
+        else:
+            lens = [len(genome[c]) for c in chroms]
+
+            def window(c: str, s: int, e: int) -> str:
+                return genome[c][s - 1 : e]
+        windows = _core._genome_windows(lens, [len(s) for s in seqs], n_candidates, exclude_cols,
+                                        _seed(seed))
+        uni = [window(chroms[c], s, e) for c, s, e in windows]
         names = [f"{chroms[c]}:{s}-{e}" for c, s, e in windows]
         seed = None if seed is None else seed + 1
     else:

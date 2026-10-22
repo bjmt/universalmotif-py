@@ -9,15 +9,19 @@ use universalmotif::compare::{self, CompareOptions, NullModel};
 use universalmotif::dedup::{Interval, dedup};
 use universalmotif::merge::{self, MergeOptions, MergeSimilarOptions};
 use universalmotif::pvalue::{self, PvalueOptions};
-use universalmotif::scan::{NoOverlaps, OverlapPriority, ScanOptions, scan_table};
+use universalmotif::scan::{
+    HitTable, NoOverlaps, OverlapPriority, ScanOptions, scan_encoded, scan_fasta, scan_table,
+};
 
 use pyo3_arrow::PyTable;
 
 use std::sync::Arc;
 
+use arrow_array::ArrayRef;
 use arrow_array::builder::StringViewBuilder;
 
 use crate::arrow::{f64_vec, f64s, i64_vec, i64s, names_at, strs, table};
+use crate::packed::PyPacked;
 use crate::{PyMotif, err, parse_bkg};
 
 fn unwrap(motifs: &[PyRef<'_, PyMotif>]) -> Vec<Motif> {
@@ -76,21 +80,12 @@ fn _motif_pvalue(
     .map_err(err)
 }
 
-#[pyfunction]
-#[pyo3(signature = (motifs, sequences, pvalue, rc, no_overlaps, nthreads, motif_names, sequence_names))]
-#[allow(clippy::too_many_arguments)]
-fn _scan_sequences<'py>(
-    py: Python<'py>,
-    motifs: Vec<PyRef<'py, PyMotif>>,
-    sequences: Vec<PyBackedStr>,
+fn scan_options(
     pvalue: f64,
     rc: bool,
     no_overlaps: Option<(String, bool, bool)>,
     nthreads: usize,
-    motif_names: Vec<String>,
-    sequence_names: Vec<String>,
-) -> PyResult<PyTable> {
-    let motifs = unwrap(&motifs);
+) -> PyResult<ScanOptions> {
     let no_overlaps = no_overlaps
         .map(|(by, ignore_strand, ignore_motif)| {
             let by = match by.as_str() {
@@ -109,25 +104,37 @@ fn _scan_sequences<'py>(
             })
         })
         .transpose()?;
-    let opts = ScanOptions {
+    Ok(ScanOptions {
         pvalue,
         rc,
         no_overlaps,
         nthreads,
-    };
-    let t = py
-        .detach(|| scan_table(&motifs, &sequences, &opts))
-        .map_err(err)?;
-    let mut matched = StringViewBuilder::with_capacity(t.len());
+    })
+}
+
+/// The matched letters of `n` hits as an Arrow column, with
+/// `matched(i, buf)` writing hit `i`'s letters.
+fn matched_column(n: usize, mut matched: impl FnMut(usize, &mut Vec<u8>)) -> ArrayRef {
+    let mut letters = StringViewBuilder::with_capacity(n);
     let mut buf = Vec::new();
-    for i in 0..t.len() {
-        t.matched_into(i, &sequences, &mut buf);
-        matched.append_value(String::from_utf8_lossy(&buf));
+    for i in 0..n {
+        matched(i, &mut buf);
+        letters.append_value(String::from_utf8_lossy(&buf));
     }
+    Arc::new(letters.finish())
+}
+
+/// The hit table as Arrow.
+fn hit_table(
+    t: HitTable,
+    letters: ArrayRef,
+    motif_names: &[String],
+    sequence_names: &[String],
+) -> PyResult<PyTable> {
     let strand = strs(t.minus.iter().map(|&m| if m { "-" } else { "+" }));
     let (motif, sequence) = (
-        names_at(&t.motif, &motif_names),
-        names_at(&t.sequence, &sequence_names),
+        names_at(&t.motif, motif_names),
+        names_at(&t.sequence, sequence_names),
     );
     table(vec![
         ("motif", motif),
@@ -139,9 +146,81 @@ fn _scan_sequences<'py>(
         ("strand", strand),
         ("score", f64_vec(t.score)),
         ("score_pct", f64_vec(t.score_pct)),
-        ("match", Arc::new(matched.finish())),
+        ("match", letters),
         ("pvalue", f64_vec(t.pvalue)),
     ])
+}
+
+#[pyfunction]
+#[pyo3(signature = (motifs, sequences, pvalue, rc, no_overlaps, nthreads, motif_names, sequence_names))]
+#[allow(clippy::too_many_arguments)]
+fn _scan_sequences<'py>(
+    py: Python<'py>,
+    motifs: Vec<PyRef<'py, PyMotif>>,
+    sequences: Vec<PyBackedStr>,
+    pvalue: f64,
+    rc: bool,
+    no_overlaps: Option<(String, bool, bool)>,
+    nthreads: usize,
+    motif_names: Vec<String>,
+    sequence_names: Vec<String>,
+) -> PyResult<PyTable> {
+    let motifs = unwrap(&motifs);
+    let opts = scan_options(pvalue, rc, no_overlaps, nthreads)?;
+    let t = py
+        .detach(|| scan_table(&motifs, &sequences, &opts))
+        .map_err(err)?;
+    let letters = matched_column(t.len(), |i, buf| t.matched_into(i, &sequences, buf));
+    hit_table(t, letters, &motif_names, &sequence_names)
+}
+
+#[pyfunction]
+#[pyo3(signature = (motifs, packed, pvalue, rc, no_overlaps, nthreads, motif_names))]
+#[allow(clippy::too_many_arguments)]
+fn _scan_packed<'py>(
+    py: Python<'py>,
+    motifs: Vec<PyRef<'py, PyMotif>>,
+    packed: Bound<'py, PyPacked>,
+    pvalue: f64,
+    rc: bool,
+    no_overlaps: Option<(String, bool, bool)>,
+    nthreads: usize,
+    motif_names: Vec<String>,
+) -> PyResult<PyTable> {
+    let motifs = unwrap(&motifs);
+    let opts = scan_options(pvalue, rc, no_overlaps, nthreads)?;
+    let p = packed.get();
+    let t = py
+        .detach(|| scan_encoded(&motifs, &p.seqs, &opts))
+        .map_err(err)?;
+    let letters = matched_column(t.len(), |i, buf| t.matched_encoded_into(i, &p.seqs, buf));
+    hit_table(t, letters, &motif_names, &p.names)
+}
+
+#[pyfunction]
+#[pyo3(signature = (motifs, path, pvalue, rc, no_overlaps, nthreads, motif_names))]
+#[allow(clippy::too_many_arguments)]
+fn _scan_fasta<'py>(
+    py: Python<'py>,
+    motifs: Vec<PyRef<'py, PyMotif>>,
+    path: std::path::PathBuf,
+    pvalue: f64,
+    rc: bool,
+    no_overlaps: Option<(String, bool, bool)>,
+    nthreads: usize,
+    motif_names: Vec<String>,
+) -> PyResult<PyTable> {
+    let motifs = unwrap(&motifs);
+    let opts = scan_options(pvalue, rc, no_overlaps, nthreads)?;
+    let mut f = py
+        .detach(|| scan_fasta(&motifs, &path, &opts))
+        .map_err(err)?;
+    let letters = matched_column(f.len(), |i, buf| {
+        buf.clear();
+        buf.extend_from_slice(f.matched(i).as_bytes());
+    });
+    let t = std::mem::take(&mut f.table);
+    hit_table(t, letters, &motif_names, &f.names)
 }
 
 #[pyfunction]
@@ -409,6 +488,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_motif_tree, m)?)?;
     m.add_function(wrap_pyfunction!(_motif_pvalue, m)?)?;
     m.add_function(wrap_pyfunction!(_scan_sequences, m)?)?;
+    m.add_function(wrap_pyfunction!(_scan_packed, m)?)?;
+    m.add_function(wrap_pyfunction!(_scan_fasta, m)?)?;
     m.add_function(wrap_pyfunction!(_dedup, m)?)?;
     Ok(())
 }

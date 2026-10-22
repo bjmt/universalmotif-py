@@ -190,3 +190,22 @@ def test_genomic_plots():
     fig = um.plot_match_bkg(_ref("match_targets"), _ref("match_universe")[:12], by=["gc"])
     assert len(fig.axes) == 1
     plt.close("all")
+
+
+def test_packed_genomes():
+    # Packed genomes are scanned and cut into windows without decoding whole
+    # chromosomes, with the same results.
+    chroms = {k: v.upper() for k, v in _chroms().items()}
+    packed = um.pack_sequences(chroms)
+    motifs = [motif_from_record(r) for r in _ref("proximity_motifs")]
+    anchors = _ranges(_ref("anchors"))
+    a = um.motif_proximity(anchors=anchors, motifs=motifs, sequences=chroms, scan_pvalue=1e-3, qvalue=1)
+    b = um.motif_proximity(anchors=anchors, motifs=motifs, sequences=packed, scan_pvalue=1e-3, qvalue=1)
+    assert a.equals(b)
+    targets = _ref("match_targets")
+    exclude = pl.DataFrame({"chrom": ["chr1"], "start": [1], "end": [6000]})
+    opts = dict(exclude=exclude, n_candidates=300, seed=4, n_per_target=2)
+    assert um.match_bkg(targets, genome=packed, **opts) == um.match_bkg(targets, genome=chroms, **opts)
+    assert packed.subseq("chr2", 5, 9) == chroms["chr2"][4:9]
+    with pytest.raises(IndexError):
+        packed.subseq("chr2", 1, len(chroms["chr2"]) + 1)

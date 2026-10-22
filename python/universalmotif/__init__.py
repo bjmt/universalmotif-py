@@ -7,6 +7,7 @@ Rust counterpart.
 from importlib.metadata import PackageNotFoundError, version
 
 from ._analysis import dedup_hits, motif_pvalue, scan_sequences
+from ._packed import PackedSequences, pack_sequences
 from ._compare import MotifTree, compare_motifs, merge_motifs, merge_similar, motif_tree
 from ._api import (
     consensus_to_ppm,
@@ -69,6 +70,7 @@ except PackageNotFoundError:  # pragma: no cover
 __all__ = [
     "Motif",
     "MotifTree",
+    "PackedSequences",
     "calc_complexity",
     "calc_windows",
     "compare_motifs",
@@ -96,6 +98,7 @@ __all__ = [
     "motif_rc",
     "motif_tree",
     "normalize",
+    "pack_sequences",
     "plot_match_bkg",
     "plot_motif_peaks",
     "plot_motif_proximity",

@@ -19,11 +19,15 @@ backgrounds, along with sequence logos, motif trees and motif
 peak plots drawn with matplotlib (install with `pip install
 universalmotif[plot]`). Scanning, comparison, merging, clustering,
 enrichment and logos work for amino acid and custom alphabets as well as
-DNA and RNA.
+DNA and RNA. For genome-sized inputs, `scan_sequences` can scan a FASTA file
+given as a path a batch at a time, and `read_fasta(..., packed=True)` keeps
+sequences packed at two bits per base for repeated use.
 
 ## Example
 
 ```python
+from pathlib import Path
+
 import universalmotif as um
 
 motif = um.create_motif("TATAWAW", nsites=50)
@@ -57,7 +61,8 @@ um.view_motifs(motifs[:4]).savefig("logos.png")  # aligned logos
 tree.plot(groups="family", tip_logos=True)        # matplotlib axes
 um.plot_motif_peaks(peaks)
 
-genome = um.read_fasta("genome.fa")
+genome_hits = um.scan_sequences(motifs, Path("genome.fa"))  # streamed
+genome = um.read_fasta("genome.fa", packed=True)            # about 0.8 GB
 background = um.match_bkg(sequences, genome=genome, exclude=peak_table)
 near = um.motif_proximity(anchors=summits, motifs=motifs, sequences=genome)
 ```

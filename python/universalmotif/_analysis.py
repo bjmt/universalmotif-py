@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numbers
+import os
 from collections.abc import Iterable, Mapping, Sequence
 
 import numpy as np
@@ -11,6 +12,7 @@ import polars as pl
 from . import _core
 from ._api import _check_motif
 from ._core import Motif
+from ._packed import PackedSequences
 
 
 def _is_number(x: object) -> bool:
@@ -141,7 +143,7 @@ _HIT_SCHEMA = {
 
 def scan_sequences(
     motifs: Motif | Iterable[Motif],
-    sequences: str | Sequence[str] | Mapping[str, str],
+    sequences: str | Sequence[str] | Mapping[str, str] | os.PathLike[str],
     pvalue: float = 1e-4,
     rc: bool = True,
     nthreads: int = 1,
@@ -164,7 +166,10 @@ def scan_sequences(
         sequences (such as the result of :func:`read_fasta`). DNA, RNA and
         protein letters are matched case-insensitively and custom alphabets
         exactly; anything else (such as ``N`` or ``X``) never forms part of
-        a hit.
+        a hit. :class:`PackedSequences` are scanned without decoding them,
+        and a FASTA file given as a path (such as a :class:`pathlib.Path`)
+        is read and scanned a batch at a time, so a genome can be scanned
+        in a few hundred MB.
     rc
         Also scan the reverse strand.
     no_overlaps
@@ -186,10 +191,16 @@ def scan_sequences(
     strand. Rows are ordered by motif, sequence and start.
     """
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
-    names, seqs = _sequence_pairs(sequences)
     overlaps = (no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif) if no_overlaps else None
     motif_names = _make_unique([m.name for m in ms])
-    hits = _core._scan_sequences(ms, seqs, pvalue, rc, overlaps, nthreads, motif_names, names)
+    if isinstance(sequences, PackedSequences):
+        hits = _core._scan_packed(ms, sequences._inner, pvalue, rc, overlaps, nthreads, motif_names)
+    elif isinstance(sequences, os.PathLike):
+        path = os.fspath(sequences)
+        hits = _core._scan_fasta(ms, path, pvalue, rc, overlaps, nthreads, motif_names)
+    else:
+        names, seqs = _sequence_pairs(sequences)
+        hits = _core._scan_sequences(ms, seqs, pvalue, rc, overlaps, nthreads, motif_names, names)
     return pl.DataFrame(hits).cast(_HIT_SCHEMA)
 
 
