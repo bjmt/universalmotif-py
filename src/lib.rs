@@ -21,6 +21,7 @@ mod io;
 mod packed;
 mod plot;
 mod sequences;
+mod utils;
 
 pub(crate) fn err(e: universalmotif::Error) -> PyErr {
     PyValueError::new_err(e.to_string())
@@ -672,5 +673,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     plot::register(m)?;
     genomic::register(m)?;
     packed::register(m)?;
+    utils::register(m)?;
     Ok(())
 }
