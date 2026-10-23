@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.1 (unreleased)
+## 0.2.0 (unreleased)
 
 - `view_attributions()` draws attribution or contribution scores along a
   sequence, for the bases in the sequence or for every nucleotide, as a
