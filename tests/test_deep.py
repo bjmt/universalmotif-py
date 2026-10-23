@@ -303,3 +303,172 @@ def test_read_contributions_edge_cases(tmp_path):
     np.testing.assert_allclose(one.scores[0], hyp[1], rtol=1e-6)
     with pytest.warns(UserWarning, match="regions is only used"):
         um.read_contributions(tmp_path / "shap.npy", sequences=tmp_path / "ohe.npy", regions="x.bed")
+
+
+def test_filter_argument_checks():
+    with pytest.raises(ValueError, match="no motifs"):
+        um.to_filters([])
+    with pytest.raises(ValueError, match="align"):
+        um.to_filters(um.create_motif("ACGT"), align="right")
+    with pytest.raises(ValueError, match="shape"):
+        um.from_filters(np.zeros((2, 2, 4, 3)))
+    with pytest.raises(ValueError, match="'a' is not two-dimensional"):
+        um.from_filters({"a": np.zeros((2, 4, 3))})
+
+
+def test_filters_round_trip_types_and_alphabets():
+    motifs = um.example_motifs()[:3]
+    for use_type in ("PPM", "PWM", "ICM"):
+        filters = um.to_filters(motifs, use_type=use_type, align="centre")
+        back = um.from_filters(filters, names=[m.name for m in motifs], type=use_type)
+        for b, m in zip(back, motifs):
+            assert b.type == use_type and b.width == m.width
+            np.testing.assert_allclose(b.matrix, um.convert_type(m, use_type).matrix, rtol=1e-6,
+                                       atol=1e-6)
+            np.testing.assert_allclose(um.convert_type(b, "PPM").matrix,
+                                       um.convert_type(m, "PPM").matrix, atol=1e-5)
+    # A single (letters, width) matrix is one filter.
+    one = um.from_filters(um.to_filters(motifs[0])[0])
+    assert len(one) == 1 and one[0].name == "filter_1" and one[0].width == motifs[0].width
+    aa = um.create_motif(["MKVLA", "MKVLW"], alphabet="AA", pseudocount=1)
+    f = um.to_filters(aa, use_type="PPM")
+    assert f.shape == (1, 20, 5)
+    back = um.from_filters(f, type="PPM", alphabet="AA")[0]
+    assert back.alphabet == "AA" and back.consensus == aa.consensus
+    # Filters of zeros are left as they are rather than trimmed away.
+    assert um.from_filters(np.zeros((1, 4, 3)))[0].width == 3
+    padded = np.pad(um.to_filters(motifs[2]), ((0, 0), (0, 0), (1, 2)))
+    assert um.from_filters(padded, trim=False)[0].width == motifs[2].width + 3
+    assert um.from_filters(padded)[0].width == motifs[2].width
+
+
+def test_one_hot_edge_cases():
+    assert um.one_hot([]).shape == (0, 4, 0)
+    assert um.one_hot({}, alphabet="ACGU").shape == (0, 4, 0)
+    with pytest.raises(ValueError, match="repeated"):
+        um.one_hot(["ACG"], alphabet="AAC")
+    with pytest.raises(ValueError, match=r"\(sequences, 4, length\)"):
+        um.from_one_hot(np.zeros(4))
+    with pytest.raises(ValueError, match=r"\(sequences, 4, length\)"):
+        um.from_one_hot(np.zeros((1, 3, 4)))
+    # Each column holds at most a single 1, and only letters of the alphabet get one.
+    seqs = um.create_sequences(seqnum=5, seqlen=30, seed=1)
+    seqs = [s[:10] + "N" + s[11:] for s in seqs]
+    x = um.one_hot(seqs)
+    assert set(np.unique(x.sum(axis=1))) == {0.0, 1.0}
+    assert (x.sum(axis=1) == 0).sum() == 5
+    assert um.from_one_hot(x) == seqs
+    aa = "ACDEFGHIKLMNPQRSTVWY"
+    assert um.from_one_hot(um.one_hot(["MKVWY", "acdef"], alphabet=aa), alphabet=aa) == ["MKVWY", "ACDEF"]
+    assert um.from_one_hot(um.one_hot(["xyzzy"], alphabet="xyz"), alphabet="xyz") == ["xyzzy"]
+    # The channels follow the alphabet as given, not sorted.
+    assert um.one_hot("TA", alphabet="TA")[0].astype(int).tolist() == [[1, 0], [0, 1]]
+
+
+def test_one_hot_round_trips_random_sequences():
+    rng = np.random.default_rng(3)
+    for alphabet in ("ACGT", "ACGU", "ACDEFGHIKLMNPQRSTVWY"):
+        seqs = ["".join(rng.choice(list(alphabet), 25)) for _ in range(4)]
+        x = um.one_hot(seqs, alphabet=alphabet)
+        assert x.shape == (4, len(alphabet), 25)
+        assert um.from_one_hot(x, alphabet=alphabet) == seqs
+        assert np.array_equal(um.one_hot(um.from_one_hot(x, alphabet=alphabet), alphabet=alphabet), x)
+
+
+def test_modisco_without_negative_patterns(tmp_path):
+    h5py = pytest.importorskip("h5py")
+    path = _modisco_file(tmp_path / "modisco.h5")
+    with h5py.File(path, "a") as f:
+        del f["neg_patterns"]
+    assert [m.name for m in um.read_modisco(path)] == [
+        "pos_patterns.pattern_0", "pos_patterns.pattern_2", "pos_patterns.pattern_10"]
+
+
+def test_missing_h5py(tmp_path, monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "h5py", None)
+    with pytest.raises(ImportError, match="universalmotif\\[h5py\\]"):
+        um.read_modisco(tmp_path / "x.h5")
+    with pytest.raises(ImportError, match="universalmotif\\[h5py\\]"):
+        um.read_contributions(tmp_path / "x.h5")
+
+
+def test_read_contributions_shape_checks(tmp_path):
+    h5py = pytest.importorskip("h5py")
+    seqs = ["ACGTA", "GGCAT"]
+    onehot = um.one_hot(seqs, dtype=np.int8)
+    # A single sequence stored without its first axis.
+    path = tmp_path / "one.counts_scores.h5"
+    with h5py.File(path, "w") as f:
+        f["raw/seq"] = onehot[0]
+        f["shap/seq"] = np.ones((4, 5), dtype=np.float32)
+        f["projected_shap/seq"] = onehot[0].astype(np.float32)
+    one = um.read_contributions(path)
+    assert one.sequences == ["ACGTA"] and one.scores.shape == (1, 4, 5)
+    other = tmp_path / "other.h5"
+    with h5py.File(other, "w") as f:
+        f["something"] = np.zeros(3)
+    with pytest.raises(ValueError, match="not a chromBPNet scores file; it holds something"):
+        um.read_contributions(other)
+    np.save(tmp_path / "flat.npy", np.zeros(10))
+    with pytest.raises(ValueError, match="scores must have shape"):
+        um.read_contributions(tmp_path / "flat.npy", sequences=seqs)
+    np.save(tmp_path / "wide.npy", np.zeros((2, 5, 6)))
+    with pytest.raises(ValueError, match=r"not \(2, 5, 6\)"):
+        um.read_contributions(tmp_path / "wide.npy", sequences=seqs)
+    np.savez(tmp_path / "two.npz", a=np.zeros((2, 4, 5)), b=np.zeros((2, 4, 5)))
+    with pytest.raises(ValueError, match=r"several arrays \(a, b\)"):
+        um.read_contributions(tmp_path / "two.npz", sequences=seqs)
+    # With several arrays, the unnamed first one is taken.
+    np.savez(tmp_path / "named.npz", np.ones((2, 4, 5)), extra=np.zeros(1))
+    assert um.read_contributions(tmp_path / "named.npz", sequences=seqs).scores.sum() == 40
+    # Indices pick from sequences given as strings too.
+    np.save(tmp_path / "s.npy", np.arange(40, dtype=np.float32).reshape(2, 4, 5))
+    picked = um.read_contributions(tmp_path / "s.npy", sequences=seqs, indices=[1])
+    assert picked.sequences == ["GGCAT"] and picked.names == ["seq2"]
+    np.testing.assert_array_equal(picked.scores[0], np.arange(20, 40).reshape(4, 5))
+    assert repr(picked) == "ContributionScores(1 sequences of 5 letters)"
+
+
+def test_read_contributions_regions(tmp_path):
+    seqs = ["ACGTACGTAA", "TTTTGGGGCA"]
+    path, _, _ = _chrombpnet_files(tmp_path, seqs, [("chr1", 100, 50), ("chr2", 0, 20)])
+    short = tmp_path / "short.bed"
+    short.write_text("chr1\t100\t200\n")
+    with pytest.raises(ValueError, match="ten columns of a narrowPeak"):
+        um.read_contributions(path, regions=short)
+    peaks = tmp_path / "peaks.narrowPeak"
+    peaks.write_text("chr3\t10\t500\tp\t0\t.\t1\t1\t1\t30\nchr4\t0\t50\tp\t0\t.\t1\t1\t1\t5\n")
+    c = um.read_contributions(path, regions=peaks)
+    # Each window of 10 is centred on its summit.
+    assert c.names == ["chr3:35-45", "chr4:0-10"]
+    some = um.read_contributions(path, regions=peaks, indices=[1])
+    assert some.names == ["chr4:0-10"]
+
+
+def test_site_checks():
+    with pytest.raises(TypeError, match="non-empty string or a motif"):
+        um.insert_sites("AAAA", "")
+    with pytest.raises(TypeError, match="non-empty string or a motif"):
+        um.insert_sites("AAAA", 5)
+    with pytest.raises(ValueError, match="1 positions for 2 sites"):
+        um.insert_sites("AAAA", ["G", "T"], positions=[0])
+    # Later sites overwrite earlier ones where they overlap.
+    assert um.insert_sites("AAAAAA", ["GGG", "TT"], positions=[1, 2]) == "AGTTAA"
+    # A motif's most probable letters are used, for RNA as well.
+    rna = um.create_motif(["ACGUU", "ACGUA", "AGGUU"], alphabet="RNA")
+    assert um.insert_sites("CCCCCCC", rna, positions=1) == "CACGUUC"
+
+
+def test_one_hot_batch_checks():
+    genome = {"chr1": "ACGTACGTAC"}
+    with pytest.raises(ValueError, match="batch_size"):
+        um.one_hot_batches(genome, [("chr1", 0, 2)], batch_size=0)
+    with pytest.raises(ValueError, match="width must be 1 or more"):
+        um.one_hot_batches(genome, [("chr1", 0, 2)], width=0)
+    batches = um.one_hot_batches(genome, [("chr1", i, i + 2) for i in range(5)], batch_size=2)
+    assert repr(batches) == "<3 batches of up to 2 sequences>"
+    assert [s for x in batches for s in um.from_one_hot(x)] == ["AC", "CG", "GT", "TA", "AC"]
+    # Iterating again reads the batches afresh.
+    assert sum(x.shape[0] for x in batches) == 5

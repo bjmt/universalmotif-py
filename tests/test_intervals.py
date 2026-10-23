@@ -1,4 +1,5 @@
 import random
+import sys
 
 import polars as pl
 import pytest
@@ -105,3 +106,108 @@ def test_polars_bio():
     lazy = one.lazy()
     lazy.config_meta.set(coordinate_system_zero_based=False)
     assert um.extract_ranges(genome, lazy) == um.extract_ranges(genome, peaks)
+
+
+def _hits(rows, cols=("sequence", "start", "end", "strand")):
+    return pl.DataFrame(rows, schema=list(cols), orient="row")
+
+
+def test_genomic_hits_coordinates_by_hand():
+    # A hit at 2-5 in a + range from 10 lands at 12-15; in a - range from
+    # 5 to 15, read backwards, it lands at 15 - 5 = 10 to 15 - 2 = 13 on
+    # the other strand.
+    hits = _hits([("chrUn:alt:10-20", 2, 5, "+"), ("chr1:5-15(-)", 2, 5, "+"),
+                  ("chr1:5-15(-).1", 0, 3, "-"), ("chr1:5-15.2", 2, 5, "*")])
+    got = um.genomic_hits(hits)
+    assert got.columns == ["sequence", "chrom", "start", "end", "strand"]
+    # Colons in chromosome names and the suffixes of repeated ranges are
+    # understood.
+    assert got.select("chrom", "start", "end", "strand").rows() == [
+        ("chrUn:alt", 12, 15, "+"), ("chr1", 10, 13, "-"), ("chr1", 12, 15, "+"),
+        ("chr1", 7, 10, "*"),
+    ]
+    assert got["sequence"].to_list() == hits["sequence"].to_list()
+
+
+def test_genomic_hits_matches_extracted_sequence():
+    # A hit's genomic span reads, on its genomic strand, the match the scan
+    # reported.
+    genome = _genome(3)
+    peaks = [("chr1", 100, 400, "+"), ("chr1", 100, 400, "-"), ("chr2", 50, 350, "*")]
+    hits = um.scan_sequences(um.example_motifs()[:6], um.extract_ranges(genome, peaks), pvalue=1e-3)
+    gh = um.genomic_hits(hits)
+    assert gh.height > 0
+    for c, s, e, st, match in gh.select("chrom", "start", "end", "strand", "match").iter_rows():
+        assert um.extract_ranges(genome, [(c, s, e, st)]).popitem()[1] == match
+
+
+def test_genomic_hits_with_ranges():
+    hits = _hits([("s1", 0, 0, 2, "+"), ("s2", 1, 1, 4, "+"), ("s2", 1, 0, 1, "-")],
+                 cols=("sequence", "sequence_i", "start", "end", "strand"))
+    ranges = pl.DataFrame({"seqnames": ["c", "c"], "start": [100, 200], "width": [10, 10],
+                           "strand": ["*", "-"]})
+    got = um.genomic_hits(hits, ranges=ranges)
+    assert got.select("chrom", "start", "end", "strand").rows() == [
+        ("c", 100, 102, "+"), ("c", 206, 209, "-"), ("c", 209, 210, "+"),
+    ]
+    with pytest.raises(ValueError, match="'sequence_i' column"):
+        um.genomic_hits(hits.drop("sequence_i"), ranges=ranges)
+    with pytest.raises(ValueError, match="beyond the 2 ranges"):
+        um.genomic_hits(hits.with_columns(pl.Series("sequence_i", [0, None, 1])), ranges=ranges)
+    with pytest.raises(ValueError, match="beyond the 1 ranges"):
+        um.genomic_hits(hits, ranges=[("c", 100, 110)])
+
+
+def test_genomic_hits_replaces_a_chrom_column():
+    hits = _hits([("chr1:10-20", 1, 3, "+")]).with_columns(pl.lit("old").alias("chrom"))
+    got = um.genomic_hits(hits)
+    assert got.columns == ["sequence", "chrom", "start", "end", "strand"]
+    assert got.row(0) == ("chr1:10-20", "chr1", 11, 13, "+")
+
+
+def test_to_pyranges_conversions(monkeypatch):
+    pytest.importorskip("pyranges1")
+    gr = um.to_pyranges([("c1", 5, 10, "-"), ("c2", 0, 3)])
+    assert list(gr.columns) == ["Chromosome", "Start", "End", "Strand"]
+    assert gr["Start"].tolist() == [5, 0] and gr["End"].tolist() == [10, 3]
+    assert gr["Strand"].tolist() == ["-", "*"]
+    # A table without strands has no Strand column.
+    gr = um.to_pyranges(pl.DataFrame({"seqnames": ["c1"], "start": [1], "end": [2], "score": [0.5]}))
+    assert list(gr.columns) == ["Chromosome", "Start", "End", "score"]
+    with pytest.raises(ValueError, match="needs a chromosome column"):
+        um.to_pyranges(pl.DataFrame({"chrom": ["c1"], "start": [1], "width": [2]}))
+    monkeypatch.setitem(sys.modules, "pyranges1", None)
+    with pytest.raises(ImportError, match=r"universalmotif\[pyranges\]"):
+        um.to_pyranges([("c1", 5, 10)])
+
+
+def test_to_polars_bio_conversions(monkeypatch):
+    pb = pytest.importorskip("polars_bio")
+    ready = um.to_polars_bio(pl.DataFrame({"score": [1.0], "end": [9], "start": [4],
+                                           "seqnames": ["c1"]}))
+    assert ready.columns == ["chrom", "start", "end", "score"]
+    assert ready.row(0) == ("c1", 4, 9, 1.0)
+    assert pb.get_metadata(ready)["coordinate_system_zero_based"] is True
+    tuples = um.to_polars_bio([("c1", 4, 9, "-")])
+    assert tuples.rows() == [("c1", 4, 9, "-")]
+    assert pb.get_metadata(tuples)["coordinate_system_zero_based"] is True
+    with pytest.raises(ValueError, match="needs a chromosome column"):
+        um.to_polars_bio(pl.DataFrame({"chrom": ["c1"], "start": [1]}))
+    monkeypatch.setitem(sys.modules, "polars_bio", None)
+    with pytest.raises(ImportError, match=r"universalmotif\[polars-bio\]"):
+        um.to_polars_bio([("c1", 5, 10)])
+
+
+def test_polars_bio_one_based_round_trip():
+    pb = pytest.importorskip("polars_bio")
+    genome = _genome()
+    # 1-based, closed positions 11 to 20 are 0-based, half-open 10 to 20.
+    one = pl.DataFrame({"chrom": ["chr1"], "start": [11], "end": [20]})
+    one.config_meta.set(coordinate_system_zero_based=False)
+    assert um.extract_ranges(genome, one) == {"chr1:10-20": genome["chr1"][10:20]}
+    # Widths are kept, so the end moves with the start.
+    width = pl.DataFrame({"chrom": ["chr1"], "start": [11], "width": [10]})
+    width.config_meta.set(coordinate_system_zero_based=False)
+    assert list(um.extract_ranges(genome, width)) == ["chr1:10-20"]
+    assert pb.get_metadata(um.to_polars_bio(one))["coordinate_system_zero_based"] is True
+    assert um.to_polars_bio(one)["start"].to_list() == [10]

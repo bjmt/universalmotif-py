@@ -233,3 +233,107 @@ def test_small_helpers(tmp_path):
         um.slide_fun("ACGT", len, window=10, return_incomp=False)
     s = um.shuffle_string("AACCGGTTAACCGGTT", k=2, seed=1)
     assert sorted(s) == sorted("AACCGGTTAACCGGTT") and s == um.shuffle_string("AACCGGTTAACCGGTT", k=2, seed=1)
+
+
+@pytest.mark.parametrize("fn", [
+    lambda m: um.motif_range(m),
+    lambda m: um.motif_score(m, 0.5),
+    lambda m: um.score_match(m, "ACGT"),
+    lambda m: um.get_scores(m),
+    lambda m: um.get_matches(m, 1.0),
+    lambda m: um.prob_match(m, "ACGT"),
+])
+def test_scoring_helpers_take_one_motif(fn):
+    m = um.create_motif("ACGT", pseudocount=1)
+    with pytest.raises(TypeError, match="expected a single Motif, got list"):
+        fn([m])
+    with pytest.raises(TypeError, match="got str"):
+        fn("ACGT")
+
+
+def test_column_conversion_round_trips():
+    p = np.array([0.1, 0.2, 0.3, 0.4])
+    bkg = [0.3, 0.2, 0.2, 0.3]
+    np.testing.assert_allclose(um.pcm_to_ppm(um.ppm_to_pcm(p, 10)), p)
+    np.testing.assert_allclose(um.pwm_to_ppm(um.ppm_to_pwm(p, smooth=False)), p)
+    np.testing.assert_allclose(um.pwm_to_ppm(um.ppm_to_pwm(p, bkg, smooth=False), bkg), p)
+    np.testing.assert_allclose(um.icm_to_ppm(um.ppm_to_icm(p)), p)
+    # Smoothing spreads the pseudocount evenly over the letters, whatever
+    # the background, as counts of nsites.
+    smoothed = um.pwm_to_ppm(um.ppm_to_pwm(p, bkg, pseudocount=2, nsites=20), bkg)
+    np.testing.assert_allclose(smoothed, (p * 20 + 2 / 4) / 22)
+    # Each column's information content sums to log2(4) minus its entropy.
+    ic = um.ppm_to_icm(p)
+    assert ic.sum() == pytest.approx(2 + (p * np.log2(p)).sum())
+    np.testing.assert_allclose(ic / ic.sum(), p)
+    rel = um.ppm_to_icm(p, relative_entropy=True)
+    assert (rel >= 0).all() and rel[:2].tolist() == [0, 0]
+
+
+def test_motif_conversion_chains():
+    pcm = um.example_motifs()[0]
+    for chain in (["PPM", "PCM"], ["PWM", "PPM", "PCM"], ["ICM", "PPM", "PCM"], ["PWM", "ICM", "PCM"]):
+        m = pcm
+        for t in chain:
+            m = um.convert_type(m, t)
+            assert m.type == t
+        np.testing.assert_allclose(m.matrix, pcm.matrix, atol=1e-9)
+        assert m.nsites == pcm.nsites
+    ppm = um.convert_type(pcm, "PPM")
+    np.testing.assert_allclose(ppm.matrix.sum(axis=0), 1)
+    for t in ("PWM", "ICM", "PCM"):
+        np.testing.assert_allclose(um.convert_type(um.convert_type(ppm, t), "PPM").matrix, ppm.matrix,
+                                   atol=1e-12)
+
+
+def test_score_helpers_agree():
+    m = um.example_motifs()[5]
+    lo, hi = um.motif_range(m)
+    assert um.motif_score(m, [0, 1]).tolist() == [lo, hi]
+    assert um.motif_score(m, [0, 1], "fromzero").tolist() == [0, hi]
+    with pytest.raises(ValueError, match="threshold type"):
+        um.motif_score(m, 0.5, "logodds")
+    small = um.create_motif(["TGACA", "TGAGA"], pseudocount=1, type="PCM")
+    scores = um.get_scores(small)
+    assert len(scores) == 4 ** 5 and np.all(np.diff(scores) <= 0)
+    assert scores[0] == um.motif_range(small)[1] and scores[-1] == um.motif_range(small)[0]
+    for s in (0, 3, 5):
+        matches = um.get_matches(small, s)
+        assert len(matches) == (scores >= s).sum() and len(set(matches)) == len(matches)
+    # The probability of a word only depends on the background.
+    bkg = {"A": 0.4, "C": 0.1, "G": 0.1, "T": 0.4}
+    words = ["ACG", "TTT", "GGC"]
+    np.testing.assert_allclose(um.prob_match(um.create_motif("ACG", bkg=list(bkg.values())), words),
+                               um.prob_match_bkg(bkg, words))
+    with pytest.raises(ValueError, match="single letters"):
+        um.prob_match_bkg({"AA": 1.0}, "A")
+
+
+def test_mask_and_slide_checks():
+    with pytest.raises(ValueError, match="single character"):
+        um.mask_seqs("ACGT", "AC", letter="--")
+    with pytest.raises(ValueError, match="single character"):
+        um.mask_ranges({"a": "ACGT"}, [("a", 0, 1)], letter="")
+    # Sites on either strand are masked and the rest is left as it is.
+    seq = "GATTACAxxTGTAATCcc"
+    masked = um.mask_seqs(seq, "GATTACA", rc=True)
+    assert masked == "-------xx-------cc" and len(masked) == len(seq)
+    assert um.mask_seqs(seq, "GATTACA") == "-------xxTGTAATCcc"
+    assert um.mask_ranges({"a": "ACGTACGT"}, [("a", 0, 2), ("a", 6, 8)], letter="N") == {"a": "NNGTACNN"}
+    with pytest.raises(TypeError, match="single string"):
+        um.shuffle_string(["ACGT"])
+    seq = "AACCGGTTACGTACGTAAAC"
+    assert um.shuffle_string(seq, k=2, seed=3) == um.shuffle_sequences([seq], k=2, seed=3)[0]
+    assert um.shuffle_string(seq, method="linear", k=2, seed=3) == um.shuffle_sequences(
+        seq, method="linear", k=2, seed=3)
+    with pytest.raises(ValueError, match="must not be empty"):
+        um.slide_fun("", len)
+    with pytest.raises(ValueError, match="window should be a positive"):
+        um.slide_fun("ACGT", len, window=0)
+    with pytest.raises(ValueError, match="overlap should be a non-negative"):
+        um.slide_fun("ACGT", len, window=2, overlap=-1)
+    with pytest.raises(ValueError, match="greater or equal to window"):
+        um.slide_fun("ACGT", len, window=2, overlap=2)
+    assert um.slide_fun("ACGT", lambda w: w, window=10) == ["ACGT"]
+    assert um.slide_fun("ACGTA", lambda w: w, window=2) == ["AC", "GT", "A"]
+    assert um.slide_fun("ACGTA", lambda w: w, window=2, return_incomp=False) == ["AC", "GT"]

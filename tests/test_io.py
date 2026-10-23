@@ -1,8 +1,10 @@
 """Motif file readers and writers against the R package, plus file
 handling."""
 
+import gzip
 import warnings
 
+import numpy as np
 import pytest
 
 import universalmotif as um
@@ -201,3 +203,93 @@ def test_cisbp_and_uniprobe_writers(tmp_path):
     aa = um.create_motif("ACDE")
     with pytest.raises(ValueError, match="CIS-BP"):
         um.write_cisbp(aa, tmp_path / "aa.cisbp")
+
+
+_FORMATS = ["meme", "jaspar", "homer", "transfac", "cisbp", "uniprobe", "matrix"]
+# The type each format reads back, and whether it keeps nsites.
+_READ_AS = {"meme": ("PPM", True), "jaspar": ("PCM", True), "homer": ("PPM", False),
+            "transfac": ("PCM", True), "cisbp": ("PPM", False), "uniprobe": ("PPM", False),
+            "matrix": ("PCM", True)}
+
+
+@pytest.mark.parametrize("fmt", _FORMATS)
+@pytest.mark.parametrize("suffix", ["", ".gz"])
+def test_write_read_round_trip(tmp_path, fmt, suffix):
+    motifs = um.example_motifs()[:4]
+    path = tmp_path / f"motifs.{fmt}{suffix}"
+    getattr(um, f"write_{fmt}")(motifs, path)
+    assert (path.read_bytes()[:2] == b"\x1f\x8b") == (suffix == ".gz")
+    back = getattr(um, f"read_{fmt}")(path)
+    kind, keeps_nsites = _READ_AS[fmt]
+    assert [b.name for b in back] == [m.name for m in motifs]
+    for b, m in zip(back, motifs):
+        assert b.type == kind and b.alphabet == "DNA" and b.width == m.width
+        if keeps_nsites:
+            assert b.nsites == m.nsites
+        # MEME and HOMER write probabilities with fewer digits.
+        tol = {"meme": 1e-6, "homer": 1e-3}.get(fmt, 0)
+        np.testing.assert_allclose(b.matrix, um.convert_type(m, kind).matrix, atol=tol)
+
+
+@pytest.mark.parametrize("fmt", ["meme", "jaspar", "cisbp", "matrix"])
+def test_round_trip_rna_and_amino_acids(tmp_path, fmt):
+    rna = um.create_motif(["ACGUU", "ACGUA", "AGGUU"], alphabet="RNA", name="r1", type="PCM")
+    aa = um.create_motif(["MKVLA", "MKVLW", "MRVLA"], alphabet="AA", name="p1", type="PCM")
+    for m in (rna, aa):
+        if fmt == "cisbp" and m.alphabet == "AA":
+            continue
+        path = tmp_path / f"{m.name}.{fmt}"
+        getattr(um, f"write_{fmt}")(m, path)
+        kw = {"alphabet": m.alphabet} if fmt == "matrix" else {}
+        b = getattr(um, f"read_{fmt}")(path, **kw)[0]
+        assert b.alphabet == m.alphabet and b.consensus == m.consensus
+        np.testing.assert_allclose(b.matrix, um.convert_type(m, b.type).matrix, atol=1e-6)
+
+
+def test_custom_alphabets(tmp_path):
+    custom = um.create_motif(["XYZZ", "XYYZ"], alphabet="XYZ", name="c1", type="PCM")
+    um.write_meme(custom, tmp_path / "c.meme")
+    back = um.read_meme(tmp_path / "c.meme")[0]
+    assert back.alphabet == "XYZ" and back.name == "c1"
+    np.testing.assert_allclose(back.matrix, um.convert_type(custom, "PPM").matrix)
+    um.write_matrix(custom, tmp_path / "c.txt")
+    back = um.read_matrix(tmp_path / "c.txt", alphabet="XYZ")[0]
+    assert back.alphabet == "XYZ" and np.array_equal(back.matrix, custom.matrix)
+    for fmt, message in (("jaspar", "DNA, RNA and AA"), ("homer", "DNA and RNA"),
+                         ("transfac", "DNA and RNA"), ("cisbp", "DNA and RNA"),
+                         ("uniprobe", "only supports DNA")):
+        with pytest.raises(ValueError, match=message):
+            getattr(um, f"write_{fmt}")(custom, tmp_path / f"c.{fmt}")
+
+
+def test_io_argument_checks(tmp_path):
+    path = tmp_path / "m.jaspar"
+    um.write_jaspar(um.example_motifs()[0], path)
+    with pytest.raises(ValueError, match="skip must be zero or positive"):
+        um.read_jaspar(path, skip=-1)
+    with pytest.raises(ValueError, match="skip must be zero or positive"):
+        um.read_fasta(path, skip=-1)
+    with pytest.raises(ValueError, match="no motifs to write"):
+        um.write_jaspar([], tmp_path / "none.jaspar")
+    assert not (tmp_path / "none.jaspar").exists()
+
+
+@pytest.mark.parametrize("fmt, label", [
+    ("meme", "MEME"), ("jaspar", "JASPAR"), ("homer", "HOMER"), ("transfac", "TRANSFAC"),
+    ("cisbp", "CIS-BP"), ("uniprobe", "UniPROBE"), ("matrix", "Raw matrix"),
+])
+def test_writers_warn_about_gaps(tmp_path, fmt, label):
+    gapped = um.add_gap(um.create_motif("ACGTACGT", nsites=10), gaploc=4, mingap=1, maxgap=3)
+    with pytest.warns(UserWarning, match=f"{label} format cannot preserve gap definitions"):
+        getattr(um, f"write_{fmt}")(gapped, tmp_path / f"g.{fmt}")
+    # The motif is still written, without its gap.
+    back = getattr(um, f"read_{fmt}")(tmp_path / f"g.{fmt}")[0]
+    assert back.width == 8 and not back.isgapped
+
+
+def test_fasta_round_trip_other_alphabets(tmp_path):
+    seqs = {"rna": "ACGUNNACGU", "protein": "MKVLAAGHHW", "lower": "acgtacgt"}
+    um.write_fasta(seqs, tmp_path / "s.fa.gz", width=3)
+    assert um.read_fasta(tmp_path / "s.fa.gz") == seqs
+    lines = gzip.decompress((tmp_path / "s.fa.gz").read_bytes()).decode().splitlines()
+    assert max(len(x) for x in lines if not x.startswith(">")) == 3

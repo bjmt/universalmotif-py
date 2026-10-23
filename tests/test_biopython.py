@@ -72,3 +72,41 @@ def test_pseudocounts_are_summed():
     assert um.from_biopython(bio).pseudocount == 2.0
     bio.pseudocounts = {"A": 0.25, "C": 0.25, "G": 0.25, "T": 0.25}
     assert um.from_biopython(bio).pseudocount == 1.0
+
+
+def test_missing_biopython(monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "Bio", None)
+    with pytest.raises(ImportError, match=r"universalmotif\[biopython\]"):
+        um.to_biopython(um.example_motifs()[0])
+    with pytest.raises(ImportError, match=r"universalmotif\[biopython\]"):
+        um.from_biopython(object())
+
+
+def test_motif_like_objects():
+    from types import SimpleNamespace
+
+    # Objects shaped like Bio.motifs.Motif, with a single number as the
+    # pseudocount for every letter, as older Biopython code sets it.
+    like = SimpleNamespace(alphabet="TGCA", counts={"A": [3, 0], "C": [0, 2], "G": [0, 1], "T": [0, 0]},
+                           pseudocounts=0.25, name="like", alt_id="alt", evalue=1e-5)
+    m = um.from_biopython(like)
+    assert m.pseudocount == 1.0 and m.type == "PCM" and m.nsites == 3
+    assert (m.name, m.altname, m.eval) == ("like", "alt", 1e-5)
+    np.testing.assert_array_equal(m.matrix, [[3, 0], [0, 2], [0, 1], [0, 0]])
+    unnamed = SimpleNamespace(alphabet="ACGT", counts={a: [0.25] for a in "ACGT"}, name="", id=None)
+    assert um.from_biopython(unnamed).name == "motif"
+    assert um.from_biopython([like, unnamed])[0].name == "like"
+
+
+def test_round_trip_keeps_pseudocount_and_background():
+    m = um.create_motif(["TTGACC", "TTGACT", "ATGACC"], type="PCM", pseudocount=2,
+                        bkg=[0.3, 0.2, 0.2, 0.3], name="w")
+    back = um.from_biopython(um.to_biopython(m))
+    assert back.pseudocount == pytest.approx(2) and back.bkg == m.bkg
+    np.testing.assert_array_equal(back.matrix, m.matrix)
+    # Biopython's own log-odds use the same pseudocount and background.
+    bio = um.to_biopython(m)
+    np.testing.assert_allclose(np.array([bio.pssm[a] for a in "ACGT"]),
+                               um.convert_type(m, "PWM").matrix, atol=1e-6)

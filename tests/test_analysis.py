@@ -3,6 +3,7 @@
 import math
 
 import numpy as np
+import polars as pl
 import pytest
 
 import universalmotif as um
@@ -117,3 +118,121 @@ def test_fasta_round_trip(tmp_path):
     assert um.read_fasta(tmp_path / "x.fa") == seqs
     um.write_fasta(["ACGT", "GGCC"], tmp_path / "y.fa")
     assert um.read_fasta(tmp_path / "y.fa") == {"seq1": "ACGT", "seq2": "GGCC"}
+
+
+def test_motif_pvalue_broadcasting():
+    motifs = um.example_motifs()[:3]
+    with pytest.raises(ValueError, match="no motifs"):
+        um.motif_pvalue([], score=1)
+    each = [um.motif_pvalue(m, score=[5, 8]) for m in motifs]
+    shared = um.motif_pvalue(motifs, score=[[5, 8]])
+    assert len(shared) == 3
+    for got, want in zip(shared, each):
+        np.testing.assert_array_equal(got, want)
+    with pytest.raises(ValueError, match="one sequence of values for all motifs or one per motif"):
+        um.motif_pvalue(motifs, score=[[5], [8]])
+    np.testing.assert_array_equal(um.motif_pvalue(motifs, score=[5]),
+                                  [um.motif_pvalue(m, score=5) for m in motifs])
+    np.testing.assert_array_equal(um.motif_pvalue(motifs, score=5), um.motif_pvalue(motifs, score=[5]))
+
+
+def _grid_scores(motif, words):
+    """Scores as documented: PWM entries truncated to three decimals and
+    summed exactly."""
+    pwm = np.trunc(um.convert_type(motif, "PWM").matrix * 1000).astype(int)
+    rows = {letter: i for i, letter in enumerate(motif.letters)}
+    return np.array([sum(pwm[rows[c], i] for i, c in enumerate(w)) for w in words])
+
+
+@pytest.mark.parametrize("bkg", [None, [0.4, 0.1, 0.1, 0.4]])
+def test_motif_pvalue_matches_enumeration(bkg):
+    import itertools
+
+    m = um.create_motif(["TGACA", "TGAGA", "TCACA", "AGACT"], pseudocount=1, type="PCM", bkg=bkg)
+    words = ["".join(w) for w in itertools.product("ACGT", repeat=5)]
+    grid = _grid_scores(m, words)
+    probs = um.prob_match(m, words)
+    assert probs.sum() == pytest.approx(1)
+    for score in (-5, 0, 2.5, 4, grid.max() / 1000):
+        want = probs[grid >= round(score * 1000)].sum()
+        assert um.motif_pvalue(m, score=score) == pytest.approx(want, rel=1e-9)
+    if bkg is None:
+        assert sorted(um.get_scores(m) * 1000, reverse=True) == pytest.approx(sorted(grid, reverse=True))
+    assert um.motif_range(m) == pytest.approx((grid.min() / 1000, grid.max() / 1000))
+
+
+def test_motif_pvalue_and_score_are_inverse():
+    m = um.example_motifs()[5]
+    for p in (0.05, 1e-2, 1e-3, 1e-4, 1e-5):
+        s = um.motif_pvalue(m, pvalue=p)
+        # The threshold is the lowest score on the 0.001 grid reaching p.
+        assert um.motif_pvalue(m, score=s) <= p
+        assert um.motif_pvalue(m, score=s - 0.001) > p
+    # P-values fall as scores rise.
+    scores = np.linspace(*um.motif_range(m), 25)
+    assert np.all(np.diff(um.motif_pvalue(m, score=scores)) <= 0)
+    assert um.motif_pvalue(m, score=um.motif_range(m)[0]) == pytest.approx(1)
+
+
+def test_scan_hits_are_consistent():
+    motifs = um.example_motifs()[3:6]
+    seqs = dict(list(um.example_sequences().items())[:20])
+    hits = um.scan_sequences(motifs, seqs, pvalue=1e-3)
+    assert hits.height > 0
+    comp = str.maketrans("ACGT", "TGCA")
+    for r in hits.iter_rows(named=True):
+        site = seqs[r["sequence"]][r["start"]:r["end"]]
+        assert r["match"] == (site if r["strand"] == "+" else site.translate(comp)[::-1])
+        assert r["end"] - r["start"] == motifs[r["motif_i"]].width
+        assert r["score"] == _grid_scores(motifs[r["motif_i"]], [r["match"]])[0] / 1000
+        assert r["pvalue"] <= 1e-3
+        assert r["pvalue"] == pytest.approx(um.motif_pvalue(motifs[r["motif_i"]], score=r["score"]))
+    # RNA motifs find the same sites in RNA.
+    rna = um.scan_sequences([um.switch_alph(m) for m in motifs],
+                            {k: v.replace("T", "U") for k, v in seqs.items()}, pvalue=1e-3)
+    assert rna.drop("match").equals(hits.drop("match"))
+    assert rna["match"].to_list() == [s.replace("T", "U") for s in hits["match"]]
+    # Windows holding an N are skipped.
+    near_n = um.scan_sequences(um.create_motif("TTGACT"), "TTGACTNNNTTGACT", pvalue=0.01, rc=False)
+    assert near_n.select("start", "end").rows() == [(0, 6), (9, 15)]
+
+
+@pytest.mark.xfail(strict=True, reason="score_match sums truncated entries in floating point, "
+                   "then truncates the total, and can come out 0.001 below the scan score")
+def test_score_match_agrees_with_scanning():
+    gbox = um.example_motifs()[3]
+    hit = um.scan_sequences(gbox, "TAACGTGG", pvalue=0.01, rc=False)
+    assert hit["score"].to_list() == [7.844]
+    assert um.score_match(gbox, "TAACGTGG") == 7.844
+
+
+def test_scan_empty_genome(tmp_path):
+    path = tmp_path / "empty.fa"
+    path.write_text("")
+    hits = um.scan_sequences(um.example_motifs()[:2], um.Genome(path))
+    assert hits.height == 0
+    assert hits.columns == ["motif", "motif_i", "sequence", "sequence_i", "start", "end", "strand",
+                            "score", "score_pct", "match", "pvalue"]
+    assert hits.schema["start"] == pl.Int64
+
+
+def test_dedup_hits_checks():
+    base = {"sequence": ["a", "a"], "motif": ["m", "m"], "strand": ["+", "+"], "start": [0, 2],
+            "end": [5, 6], "pvalue": [0.1, 0.01], "score": [1.0, 2.0]}
+    hits = pl.DataFrame(base)
+    assert um.dedup_hits(hits)["start"].to_list() == [2]
+    assert um.dedup_hits(hits, by="score")["start"].to_list() == [2]
+    assert um.dedup_hits(hits, by="score", reverse=True)["start"].to_list() == [0]
+    assert um.dedup_hits(hits, reverse=True)["start"].to_list() == [0]
+    # Touching hits do not overlap, as ends are left out.
+    touching = pl.DataFrame({**base, "start": [0, 5], "end": [5, 10]})
+    assert um.dedup_hits(touching).height == 2
+    empty = hits.clear()
+    assert um.dedup_hits(empty).equals(empty)
+    with pytest.raises(ValueError, match="nulls"):
+        um.dedup_hits(pl.DataFrame({**base, "start": [0, None]}))
+    with pytest.raises(ValueError, match="start <= end"):
+        um.dedup_hits(pl.DataFrame({**base, "start": [7, 2]}))
+    for bad in (None, float("nan")):
+        with pytest.raises(ValueError, match="'pvalue' cannot contain missing values"):
+            um.dedup_hits(pl.DataFrame({**base, "pvalue": [bad, 0.1]}))

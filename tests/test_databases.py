@@ -152,3 +152,109 @@ def test_live(tmp_path, monkeypatch):
     assert len(databases.hocomoco(11)) > 300
     assert databases.cisbp("Arabidopsis thaliana", family="WRKY")
     assert um.databases is databases
+
+
+def test_cache_dir_by_platform(tmp_path, monkeypatch):
+    monkeypatch.delenv("UNIVERSALMOTIF_CACHE", raising=False)
+    monkeypatch.setattr(databases.Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(databases.sys, "platform", "darwin")
+    assert databases.cache_dir() == tmp_path / "Library" / "Caches" / "universalmotif"
+    monkeypatch.setattr(databases.sys, "platform", "win32")
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    assert databases.cache_dir() == tmp_path / "AppData" / "Local" / "universalmotif" / "cache"
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    assert databases.cache_dir() == tmp_path / "local" / "universalmotif" / "cache"
+    monkeypatch.setattr(databases.sys, "platform", "linux")
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    assert databases.cache_dir() == tmp_path / ".cache" / "universalmotif"
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
+    assert databases.cache_dir() == tmp_path / "xdg" / "universalmotif"
+    # The environment variable wins everywhere, with ~ expanded.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("UNIVERSALMOTIF_CACHE", "~/mine")
+    assert databases.cache_dir() == tmp_path / "mine"
+
+
+def test_download_request(monkeypatch):
+    seen = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b"payload"
+
+    def urlopen(req, timeout):
+        seen.append((req, timeout))
+        return Response()
+
+    monkeypatch.setattr(databases.urllib.request, "urlopen", urlopen)
+    assert databases._download("https://example.org/x") == b"payload"
+    req, timeout = seen[0]
+    assert req.get_method() == "GET" and req.data is None and timeout == databases._TIMEOUT
+    agent = req.get_header("User-agent")
+    assert agent.startswith(f"universalmotif/{um.__version__} ") and "github.com" in agent
+    databases._download("https://example.org/form", {"a": "1 2", "b[]": ["x", "y"]})
+    req = seen[1][0]
+    assert req.get_method() == "POST"
+    assert urllib.parse.parse_qsl(req.data.decode()) == [("a", "1 2"), ("b[]", "x"), ("b[]", "y")]
+
+
+def test_downloads_are_cached_whole(offline):
+    databases.jaspar(tax_group="plants")
+    files = [p.name for p in (Path(os.environ["UNIVERSALMOTIF_CACHE"]) / "downloads").iterdir()]
+    assert files and not any(f.endswith(".part") for f in files)
+
+
+def test_hocomoco_checks(offline, monkeypatch):
+    with pytest.raises(ValueError, match='"CORE", "INVIVO", "INVITRO" or "RSNP"'):
+        databases.hocomoco(12, "FULL")
+    with pytest.raises(ValueError, match="version must be 11 or 12"):
+        databases.hocomoco(10)
+    mouse = databases.hocomoco(collection="core", species="mouse")
+    assert len(mouse) == 1 and mouse[0].organism == "Mus musculus"
+    # Models missing from the annotation keep what the MEME file gives.
+    serve = databases._download
+
+    def no_aire(url, data=None):
+        content = serve(url, data)
+        if url.endswith(".tsv"):
+            content = b"".join(x for x in content.splitlines(keepends=True) if not x.startswith(b"AIRE"))
+        return content
+
+    monkeypatch.setattr(databases, "_download", no_aire)
+    h11 = databases.hocomoco(11, refresh=True)
+    assert [m.name for m in h11] == ["AHR_HUMAN.H11MO.0.B", "AIRE_HUMAN.H11MO.0.C"]
+    assert h11[0].altname == "AHR" and h11[0].extrainfo["quality"] == "B"
+    assert h11[1].altname is None and h11[1].family is None and h11[1].extrainfo == {}
+    assert h11[1].organism == "Homo sapiens"
+
+
+def test_cisbp_without_an_archive(offline, monkeypatch):
+    monkeypatch.setattr(databases, "_download", lambda url, data=None: b"<p>No such species</p>")
+    with pytest.raises(ValueError, match="did not offer an archive for the species 'Nowhere_species'"):
+        databases.cisbp("Nowhere species")
+
+
+def test_cisbp_archive_skips_incomplete_entries(tmp_path):
+    info = (
+        "TF_ID\tMotif_ID\tTF_Name\tTF_Species\tTF_Status\tFamily_Name\n"
+        "T1\tM001\tWRKY1\tSome_species\tD\tWRKY\n"
+        "T2\tM002\tERF1\n"
+        "T3\tM003\tERF2\tSome_species\tD\tAP2\n"
+        "T4\t\tERF3\tSome_species\tD\tAP2\n"
+    )
+    pwm = "Pos\tA\tC\tG\tT\n1\t0.1\t0.7\t0.1\t0.1\n"
+    folder = tmp_path / "archive"
+    (folder / "pwms_all_motifs").mkdir(parents=True)
+    (folder / "TF_Information.txt").write_text(info)
+    (folder / "pwms_all_motifs" / "M001.txt").write_text(pwm)
+    (folder / "pwms_all_motifs" / "M002.txt").write_text(pwm)
+    # M002's row is cut short and M003 has no matrix file, so only M001 is read.
+    motifs = databases.read_cisbp_archive(folder)
+    assert [(m.name, m.altname, m.consensus) for m in motifs] == [("M001", "WRKY1", "C")]
+    assert motifs[0].extrainfo == {"status": "D"}

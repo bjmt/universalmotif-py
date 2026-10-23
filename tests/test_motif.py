@@ -185,3 +185,38 @@ def test_replace_recomputes_derived_values():
     more = m.replace(pseudocount=10)
     assert more.icscore < m.icscore
     assert m.replace(name="x").icscore == m.icscore
+
+
+def test_create_motif_argument_checks():
+    for width in (0, -2):
+        with pytest.raises(ValueError, match="width must be greater than 0"):
+            um.create_motif(width)
+    for call in (lambda: um.create_motif("ACGT", letters="ACGT"),
+                 lambda: um.create_motif(["ACGT", "ACGA"], letters="ACGT"),
+                 lambda: um.create_motif(5, letters="ACGT"),
+                 lambda: um.create_motif(letters="ACGT")):
+        with pytest.raises(TypeError, match="letters is only used for matrix input"):
+            call()
+
+
+def test_random_motifs_other_alphabets():
+    for alphabet, n in (("AA", 20), ("XYZ", 3), ("RNA", 4)):
+        a = um.create_motif(6, alphabet=alphabet, seed=7)
+        assert a == um.create_motif(6, alphabet=alphabet, seed=7)
+        assert a.matrix.shape == (n, 6)
+        np.testing.assert_allclose(a.matrix.sum(axis=0), 1)
+    assert um.create_motif(6, seed=7) != um.create_motif(6, seed=8)
+
+
+@pytest.mark.parametrize("alphabet", ["DNA", "RNA"])
+def test_reverse_complement_is_an_involution(alphabet):
+    for m in um.example_motifs()[:6]:
+        if alphabet == "RNA":
+            m = um.switch_alph(m)
+        rc = um.motif_rc(m)
+        assert rc.width == m.width and rc.alphabet == alphabet
+        # Each column becomes its complement, in reverse order.
+        np.testing.assert_array_equal(rc.matrix, m.matrix[::-1, ::-1])
+        back = um.motif_rc(rc)
+        np.testing.assert_array_equal(back.matrix, m.matrix)
+        assert back.consensus == m.consensus and back.icscore == pytest.approx(m.icscore)

@@ -1,4 +1,5 @@
 import io
+import itertools
 import warnings
 
 import numpy as np
@@ -241,3 +242,208 @@ def test_get_bkg_defaults():
     assert isinstance(df, pl.DataFrame)
     df = um.get_bkg(["MKV"], k=1)
     assert df["kmer"].to_list() == ["K", "M", "V"]
+
+
+_M = um.create_motif("ACGT")
+
+
+@pytest.mark.parametrize(
+    "call, message",
+    [
+        (lambda: um.shuffle_sequences("ACGT", seed=-1), "seed must be a non-negative"),
+        (lambda: um.get_kmers("ACGT", 0), "k must be at least 1"),
+        (lambda: um.count_kmers("ACGT", 0), "k must be at least 1"),
+        (lambda: um.count_kmers("", 1), "string cannot be empty"),
+        (lambda: um.count_kmers("ACGT", 1, alph=""), "alph cannot be empty"),
+        (lambda: um.calc_windows(0), "n should be a positive"),
+        (lambda: um.calc_windows(5, 0), "window should be a positive"),
+        (lambda: um.calc_windows(5, 2, -1), "overlap should be a non-negative"),
+        (lambda: um.window_string("", 2), "string cannot be empty"),
+        (lambda: um.calc_complexity("ACGT", "Shannon"), "complexity_method must be one of"),
+        (lambda: um.calc_complexity("ACGT", "Trifonov", trifonov_max_word_size=0), "positive integer"),
+        (lambda: um.sequence_complexity("ACGT", method="Shannon"), "method must be one of"),
+        (lambda: um.get_bkg("ACGT", k=[1, 0]), "k must be at least 1"),
+        (lambda: um.get_bkg("ACGT", k=1, window=True, to_meme=io.StringIO()), "window=True"),
+        (lambda: um.get_bkg("ACGT", k=1, merge=False, to_meme=io.StringIO()), "merge=False"),
+        (lambda: um.get_bkg("ACGT", k=1, pseudocount=-1), "pseudocount must be non-negative"),
+        (lambda: um.shuffle_sequences("ACGT", k=0), "k must be at least 1"),
+        (lambda: um.shuffle_sequences("AC", k=3, seed=1), "must not exceed"),
+        (lambda: um.create_sequences(""), "alphabet cannot be empty"),
+        (lambda: um.create_sequences(seqnum=-1), "seqnum must be non-negative"),
+        (lambda: um.create_sequences(seqlen=0), "seqlen positive"),
+        (lambda: um.create_sequences(freqs={"A": 0.5, "C": 0.5}), "one value for each of the 4 1-lets"),
+        (lambda: um.create_sequences(freqs={"AA": 0.5, "AC": 0.5}), "16 2-lets"),
+        (lambda: um.create_sequences(freqs=[0.5, 0.5]), "power of the alphabet size"),
+        (lambda: um.create_sequences(freqs=[-1, 1, 1, 1]), "non-negative"),
+        (lambda: um.shuffle_motifs(_M, k=0), "k must be at least 1"),
+        (lambda: um.sample_sites(_M, n=-1), "n must be non-negative"),
+        (lambda: um.implant_motifs(_M, ["A" * 10], strand="-"), "strand must be"),
+        (lambda: um.implant_motifs(_M, ["A" * 10], n_per_seq=-1), "n_per_seq must be"),
+        (lambda: um.implant_motifs(_M, ["A" * 10], positions=[[-1]]), "positions must be at least 0"),
+        (lambda: um.motif_finder(["A" * 20], min_width=2), "3 <= min_width"),
+        (lambda: um.motif_finder(["A" * 20], max_width=31), "max_width <= 30"),
+        (lambda: um.motif_finder(["A" * 20], min_width=8, max_width=7), "min_width <= max_width"),
+        (lambda: um.motif_finder(["A" * 20], shuffle_k=0), "shuffle_k must be at least 1"),
+        (lambda: um.motif_finder(["A" * 20], pseudocount=-1), "pseudocount must be non-negative"),
+    ],
+)
+def test_argument_checks(call, message):
+    with pytest.raises(ValueError, match=message.replace("(", r"\(").replace("+", r"\+")):
+        call()
+
+
+def test_count_kmers_letters():
+    # Letters outside the alphabet break k-mers rather than being counted.
+    got = um.count_kmers("ACNGT", 2, "ACGT")
+    assert got.height == 16
+    assert got.filter(pl.col("count") > 0).rows() == [("AC", 1), ("GT", 1)]
+    assert um.count_kmers("ACGTN", 1, "ACGT")["count"].sum() == 4
+    # Without an alphabet, every letter in the string counts, N included.
+    assert um.count_kmers("ACGTN")["kmer"].to_list() == ["A", "C", "G", "N", "T"]
+    # Letters are compared as they are, so lowercase stays separate.
+    assert um.count_kmers("acgt").rows() == [("a", 1), ("c", 1), ("g", 1), ("t", 1)]
+    # The counts of every k-mer add up to the number of windows.
+    seq = um.create_sequences(seqnum=1, seqlen=57, seed=8)[0]
+    for k in (1, 2, 3, 5):
+        assert um.count_kmers(seq, k, "ACGT")["count"].sum() == len(seq) - k + 1
+    assert um.get_kmers(["C", "A"], 2) == ["CC", "CA", "AC", "AA"]
+
+
+def test_rna_default_alphabet():
+    rna = ["ACGUUGCAAC", "UUUUACGNNA"]
+    bkg = um.get_bkg(rna, k=1)
+    assert bkg["kmer"].to_list() == ["A", "C", "G", "U"]
+    assert bkg["count"].sum() == sum(len(s) - s.count("N") for s in rna)
+    rc = um.get_bkg(["ACGU"], k=2, rc=True)
+    assert rc.filter(pl.col("count") > 0)["kmer"].to_list() == ["AC", "CG", "GU"]
+    # Complexity only depends on composition, so RNA scores as its DNA copy.
+    dna = [s.replace("U", "T") for s in rna]
+    np.testing.assert_allclose(um.calc_complexity(rna), um.calc_complexity(dna))
+    for method in ("WoottonFederhen", "Trifonov", "DUST"):
+        a = um.sequence_complexity(rna, window_size=5, method=method)
+        b = um.sequence_complexity(dna, window_size=5, method=method)
+        assert a.equals(b), method
+
+
+@pytest.mark.parametrize("n, window, overlap", [(1, 1, 0), (10, 3, 1), (11, 4, 1), (100, 7, 6), (9, 20, 5)])
+def test_windows_tile_the_sequence(n, window, overlap):
+    w = um.calc_windows(n, window, overlap)
+    starts, ends = w["start"].to_list(), w["end"].to_list()
+    width = min(window, n)
+    step = width - (overlap if window <= n else 0)
+    assert starts[0] == 0 and ends[-1] == n
+    assert all(b - a == step for a, b in itertools.pairwise(starts))
+    assert all(0 < e - s <= width for s, e in zip(starts, ends))
+    assert all(e - s == width for s, e in zip(starts[:-1], ends[:-1], strict=True))
+    string = "".join("ACGT"[i % 4] for i in range(n))
+    assert um.window_string(string, window, overlap) == [string[s:e] for s, e in zip(starts, ends)]
+
+
+def _kmer_counts(s, k):
+    out = {}
+    for i in range(len(s) - k + 1):
+        out[s[i:i + k]] = out.get(s[i:i + k], 0) + 1
+    return out
+
+
+@pytest.mark.parametrize("k", [1, 2, 3, 4])
+@pytest.mark.parametrize(
+    "seq",
+    [
+        "ACGTNNACGTTTGACANNACGTAAGGCTTACGAT",
+        "ACGUUGCAACGUAGCUAGCUAGGCUAACGUUAGC",
+        "MKVLAAGHHWWMKVLPPQMKAAGHVLWPQ",
+        "acgtacgttgcaacgtagct",
+    ],
+)
+def test_euler_shuffle_keeps_kmers_and_ends(seq, k):
+    out = um.shuffle_sequences(seq, k=k, seed=11)
+    assert len(out) == len(seq)
+    assert _kmer_counts(out, k) == _kmer_counts(seq, k)
+    assert out[:k - 1] == seq[:k - 1] and out[len(out) - k + 1:] == seq[len(seq) - k + 1:]
+    assert out == um.shuffle_sequences(seq, k=k, seed=11, nthreads=2)
+
+
+def test_linear_and_markov_shuffles():
+    seq = "AACCGGTTACGTACGTAACCG"
+    for k in (1, 2, 3):
+        out = um.shuffle_sequences(seq, k=k, method="linear", seed=3)
+        n = len(seq) // k * k
+        blocks = sorted(seq[i:i + k] for i in range(0, n, k))
+        assert sorted(out[i:i + k] for i in range(0, n, k)) == blocks
+        # A partial block at the end stays where it is.
+        assert out[n:] == seq[n:]
+    for k in (1, 2, 3):
+        out = um.shuffle_sequences(seq, k=k, method="markov", seed=3)
+        assert len(out) == len(seq) and set(out) <= set(seq)
+    assert um.shuffle_sequences([], seed=1) == []
+    assert um.shuffle_sequences({}, seed=1) == {}
+
+
+def test_create_sequences_shapes():
+    assert um.create_sequences(seqnum=0) == []
+    custom = um.create_sequences("ZYXYZ", 4, 9, seed=2)
+    assert len(custom) == 4 and all(len(s) == 9 and set(s) <= set("XYZ") for s in custom)
+    rna = um.create_sequences("RNA", 3, 40, seed=2)
+    # The same seed draws the same letters whatever the alphabet.
+    assert rna == [s.replace("T", "U") for s in um.create_sequences("DNA", 3, 40, seed=2)]
+    # Dinucleotide frequencies in get_kmers() order set a first-order Markov
+    # chain; with only AC and CA possible, letters alternate.
+    freqs = [0.0] * 16
+    freqs[1] = freqs[4] = 0.5
+    for s in um.create_sequences(seqnum=4, seqlen=15, freqs=freqs, seed=1):
+        assert set(s) == {"A", "C"} and "AA" not in s and "CC" not in s
+    assert um.create_sequences(seqnum=3, seqlen=8, seed=5) == um.create_sequences(
+        seqnum=3, seqlen=8, seed=5, nthreads=2)
+
+
+@pytest.mark.xfail(strict=True, reason="frequencies that are all zero silently give sequences of A")
+def test_create_sequences_rejects_zero_frequencies():
+    with pytest.raises(ValueError):
+        um.create_sequences(seqnum=2, seqlen=10, freqs=[0, 0, 0, 0], seed=1)
+
+
+def test_shuffle_motifs_moves_whole_columns():
+    ppms = um.convert_type(um.example_motifs()[:3], "PPM")
+
+    def columns(ms):
+        return sorted(map(tuple, np.round(np.concatenate([m.matrix for m in ms], axis=1).T, 9)))
+
+    for k in (1, 2, 3):
+        out = um.shuffle_motifs(ppms, k=k, seed=4)
+        assert [m.width for m in out] == [m.width for m in ppms]
+        assert columns(out) == columns(ppms)
+    # Counts keep each motif's own number of sites.
+    pcms = um.example_motifs()[:3]
+    out = um.shuffle_motifs(pcms, k=1, seed=4)
+    assert [m.nsites for m in out] == [m.nsites for m in pcms]
+    assert all((m.matrix.sum(axis=0) == m.nsites).all() for m in out)
+
+
+def test_sample_sites_follow_probabilities():
+    ppm = um.create_motif(np.array([[0.7, 0.1], [0.1, 0.1], [0.1, 0.1], [0.1, 0.7]]), type="PPM",
+                          alphabet="DNA")
+    sites = um.sample_sites(ppm, 4000, seed=1)
+    assert abs(sum(s[0] == "A" for s in sites) / 4000 - 0.7) < 0.03
+    assert abs(sum(s[1] == "T" for s in sites) / 4000 - 0.7) < 0.03
+    assert um.sample_sites(ppm, 0, seed=1) == []
+    assert set(um.sample_sites(um.create_motif("MKV", alphabet="AA"), 5, seed=1)) == {"MKV"}
+    counts = um.create_motif(["AC", "AG"], type="PCM")
+    assert set(um.sample_sites(counts, 50, seed=1)) == {"AC", "AG"}
+
+
+def test_implant_motifs_rna_and_strands():
+    site = um.create_motif("ACGGU", alphabet="RNA")
+    seqs = ["A" * 30] * 6
+    out, idx = um.implant_motifs(site, seqs, seed=2, return_indices=True)
+    assert set(idx["strand"]) == {"+", "-"}
+    for i, start, width, strand, planted in idx.select(
+        "sequence_i", "start", "width", "strand", "planted"
+    ).iter_rows():
+        assert out[i][start:start + width] == planted
+        # Sites on the minus strand read as the reverse complement, with U.
+        assert planted == ("ACGGU" if strand == "+" else "ACCGU")
+    plus = um.implant_motifs(site, seqs, strand="+", seed=2, return_indices=True)[1]
+    assert set(plus["strand"]) == {"+"}
+    none = um.implant_motifs(site, seqs, n_per_seq=0, return_indices=True)
+    assert none[0] == seqs and none[1].height == 0

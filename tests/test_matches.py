@@ -79,3 +79,39 @@ def test_anndata():
     del cells.uns["peak_seq"]
     with pytest.raises(ValueError, match="peak_seq"):
         um.add_motif_matches(cells, motifs)
+
+
+def test_checks_and_missing_extras(monkeypatch):
+    import sys
+
+    motifs = um.example_motifs()[3:6]
+    seqs = um.example_sequences()
+    with pytest.raises(ValueError, match="no motifs given"):
+        um.match_motifs([], seqs)
+    matches = um.match_motifs(motifs, seqs)
+    assert repr(matches) == f"MotifMatches(100 sequences x 3 motifs, {matches.matrix.nnz} matches)"
+    monkeypatch.setitem(sys.modules, "anndata", None)
+    with pytest.raises(ImportError, match=r"universalmotif\[anndata\]"):
+        matches.to_anndata()
+    monkeypatch.setitem(sys.modules, "scipy.sparse", None)
+    with pytest.raises(ImportError, match=r"universalmotif\[scipy\]"):
+        um.match_motifs(motifs, seqs)
+
+
+def test_counts_and_scores_by_hand():
+    # A palindrome, so each site is hit on both strands.
+    site = um.create_motif("CACGTG", nsites=20, pseudocount=1)
+    seqs = {"none": "CCCCCCCCCCCC", "one": "CCCACGTGCCCC", "two": "CACGTGACACGTG"}
+    counts = um.match_motifs(site, seqs, value="counts", pvalue=5e-4)
+    assert counts.matrix.toarray()[:, 0].tolist() == [0, 2, 4]
+    once = um.match_motifs(site, seqs, value="counts", pvalue=5e-4, no_overlaps=True)
+    # The two hits of a site overlap, so each site counts once.
+    assert once.matrix.toarray()[:, 0].tolist() == [0, 1, 2]
+    best = um.match_motifs(site, seqs, value="scores", pvalue=5e-4)
+    top = um.motif_range(site)[1]
+    assert best.matrix.toarray()[:, 0].tolist() == [0, top, top]
+    assert best.to_polars().rows() == [("one", "motif", top), ("two", "motif", top)]
+    # RNA sequences and motifs match alike.
+    rna = um.match_motifs(um.switch_alph(site), {k: v.replace("T", "U") for k, v in seqs.items()},
+                          value="counts", pvalue=5e-4)
+    assert (rna.matrix != counts.matrix).nnz == 0

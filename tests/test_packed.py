@@ -106,3 +106,31 @@ def test_gzipped_fasta(tmp_path):
     assert dict(um.read_fasta(gz, packed=True)) == dict(um.read_fasta(plain, packed=True))
     motifs = _scan_motifs()
     assert um.scan_sequences(motifs, gz).equals(um.scan_sequences(motifs, plain))
+
+
+def test_subseq_checks_and_slices():
+    seq = "ACGTNNACGTTGCA"
+    packed = um.pack_sequences({"a": seq})
+    # Every slice decodes as the same slice of the sequence.
+    for start in range(len(seq) + 1):
+        for end in range(start, len(seq) + 1):
+            assert packed.subseq("a", start, end) == seq[start:end]
+    with pytest.raises(KeyError):
+        packed.subseq("b", 0, 2)
+    with pytest.raises(IndexError, match="start must be at least 0"):
+        packed.subseq("a", -1, 2)
+    with pytest.raises(IndexError, match="outside"):
+        packed.subseq("a", 8, 20)
+    with pytest.raises(KeyError):
+        packed[0]
+    assert 0 not in packed and "a" in packed and "b" not in packed
+    assert packed.lengths == {"a": len(seq)}
+    assert repr(packed) == f"PackedSequences(1 DNA sequences, 14 letters, {packed.nbytes} bytes)"
+    assert "3,000 letters" in repr(um.pack_sequences({"x": "A" * 3000}))
+
+
+@pytest.mark.parametrize("alphabet, seq", [("RNA", "ACGUNNUU"), ("AA", "MKVXLBWY"), ("XYZ", "XYZZYQ")])
+def test_pack_other_alphabets(alphabet, seq):
+    packed = um.pack_sequences([seq, seq[::-1]], alphabet=alphabet)
+    assert packed.alphabet == alphabet and list(packed) == ["seq1", "seq2"]
+    assert dict(packed) == {"seq1": seq, "seq2": seq[::-1]}
