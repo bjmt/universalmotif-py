@@ -85,7 +85,28 @@ jobs:
           uv sync --group docs --no-install-project
           uv run --no-sync maturin develop --release
           uv run --no-sync mkdocs build --strict
-      - uses: actions/upload-artifact@v4
+      # Uploaded in the form GitHub Pages takes, which can also be downloaded
+      # from the run as the github-pages artifact.
+      - uses: actions/upload-pages-artifact@v3
         with:
-          name: docs-site
           path: universalmotif-py/site
+
+  # Publishing the site to https://bjmt.github.io/universalmotif-py/ is off
+  # until Pages is enabled for the repository (Settings > Pages > Source:
+  # GitHub Actions) and the DEPLOY_DOCS repository variable is set to true,
+  # since a Pages site is public even when the repository is not. After that,
+  # the site is published by version tags and by runs started by hand.
+  deploy-docs:
+    name: Publish the documentation
+    needs: docs
+    if: github.event_name != 'pull_request' && vars.DEPLOY_DOCS == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
