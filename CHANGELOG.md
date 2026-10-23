@@ -10,8 +10,15 @@
   from numpy files as TF-MoDISco takes them.
 - `signal_values()` reads the value of a bigWig track at every position
   of a range.
+- A new guide, motifs and deep learning, works through the TF-MoDISco
+  patterns and contribution scores of a published chromBPNet model.
 - Logos keep their top y-axis tick when the axis ends at a value that
   rounds up, as for information content logos of six-letter alphabets.
+- Logos draw negative letters smaller than 0.03, so contribution weight
+  matrices of negative TF-MoDISco patterns are no longer blank, and CWM
+  logos get round axis ticks and less empty space below zero.
+- Letters below zero in logos are separated by the same gaps as letters
+  above zero.
 
 ## 0.1.0 (2026-10-23)
 

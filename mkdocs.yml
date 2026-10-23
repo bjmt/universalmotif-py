@@ -49,6 +49,7 @@ plugins:
         - guides/background-models.ipynb
         - guides/chipseq-workflow.ipynb
         - guides/building-a-library.ipynb
+        - guides/deep-learning.ipynb
       include_source: true
       allow_errors: false
   - mkdocstrings:
@@ -105,6 +106,7 @@ nav:
       - Gapped motifs and other alphabets: guides/gaps-and-alphabets.ipynb
       - A ChIP-seq workflow: guides/chipseq-workflow.ipynb
       - Building a motif library: guides/building-a-library.ipynb
+      - Motifs and deep learning: guides/deep-learning.ipynb
   - Command line: command-line.md
   - API reference:
       - reference/index.md

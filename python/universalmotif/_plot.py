@@ -214,6 +214,13 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
             [widths[i] for i in perm], alphabet)
 
 
+def _round_step(x: float) -> float:
+    """The smallest of 1, 2, 2.5 and 5 times a power of ten that is at
+    least ``x``."""
+    power = 10.0 ** math.floor(math.log10(x))
+    return next(f * power for f in (1, 2, 2.5, 5, 10) if f * power >= x * (1 - 1e-9))
+
+
 def _y_axis(mats: list[np.ndarray], use_type: str):
     """Tick positions and limits for a logo panel."""
     nrow = mats[0].shape[0]
@@ -228,6 +235,13 @@ def _y_axis(mats: list[np.ndarray], use_type: str):
         return sorted({0.0, float(np.round(top / 2)), top}), (0.0, top)
     lo = min(float(np.where(m > 0, 0, m).sum(axis=0).min()) for m in mats)
     hi = max(float(np.where(m < 0, 0, m).sum(axis=0).max()) for m in mats)
+    if use_type == "CWM":
+        # Contributions can be any size, so the ticks are round numbers and
+        # the space below the lowest letter is a share of the range.
+        span = (hi - lo) or 1.0
+        step = _round_step(span / 4)
+        ticks = np.arange(math.ceil(lo / step - 1e-9), math.floor(hi / step + 1e-9) + 1) * step
+        return [float(t) for t in np.round(ticks, 12)], (lo - 0.05 * span, hi)
     breaks = np.array([lo, lo / 2, 0, hi / 2, hi])
     if use_type == "PWM":
         breaks = np.round(breaks)
@@ -1008,10 +1022,14 @@ def view_attributions(
             ax.scatter(xs, ys, s=min(30.0, 900.0 / max(n, 1)), color="black", zorder=3)
         ax.figure.colorbar(im, ax=ax, label=ylabel or "Score", fraction=0.04, pad=0.01)
     else:
-        view_logo(m, letters=list(alphabet), colour_scheme=colour_scheme, flip_neg=flip_neg, ax=ax)
+        hi, lo = max(float(m.clip(min=0).sum(axis=0).max()), 0.0), min(float(m.clip(max=0).sum(axis=0).min()), 0.0)
+        # Scores come at any scale, so the smallest letter drawn and the gaps
+        # between letters are a share of the tallest column.
+        scale = max(hi, -lo) or 1.0
+        view_logo(m, letters=list(alphabet), colour_scheme=colour_scheme, flip_neg=flip_neg,
+                  min_height=0.01 * scale, y_spacer=0.01 * scale, ax=ax)
         ax.set_axis_on()
         ax.axhline(0, color="0.6", linewidth=0.6, zorder=0)
-        hi, lo = max(float(m.clip(min=0).sum(axis=0).max()), 0.0), min(float(m.clip(max=0).sum(axis=0).min()), 0.0)
         pad = 0.08 * ((hi - lo) or 1.0)
         ax.set_ylim(lo - (pad if lo < 0 else 0), hi + pad)
         ax.set_ylabel(ylabel or "Attribution")

@@ -7,8 +7,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 import universalmotif as um  # noqa: E402
-from universalmotif._logo import matrix_glyphs  # noqa: E402
-from universalmotif._plot import _attribution_matrix, _panel_glyphs, _prepare_motifs  # noqa: E402
+from universalmotif._logo import _flip_negative, matrix_glyphs, position_glyphs  # noqa: E402
+from universalmotif._plot import _attribution_matrix, _panel_glyphs, _prepare_motifs, _y_axis  # noqa: E402
 
 from conftest import args, load_reference, motif_from_record, nums  # noqa: E402
 
@@ -21,6 +21,15 @@ def _close_figures():
 
 def _ref(key):
     return load_reference("plot.json", key)
+
+
+@pytest.fixture
+def flush_negative_letters(monkeypatch):
+    # The R package stacks negative letters with no gaps between them, where
+    # the port leaves the same gaps as above zero, so the reference
+    # comparisons stack them as R does.
+    monkeypatch.setattr("universalmotif._logo._flip_negative",
+                        lambda glyphs, s, d, f, y_spacer=0.0: _flip_negative(glyphs, s, d, f))
 
 
 def _motifs():
@@ -38,7 +47,7 @@ def _check_glyphs(glyphs, want, ctx):
     np.testing.assert_allclose(y, nums(want["y"]), rtol=1e-12, atol=1e-13, err_msg=ctx)
 
 
-def test_logo_polygons_reference():
+def test_logo_polygons_reference(flush_negative_letters):
     mats = _ref("logo_matrices")
     for case in _ref("logo"):
         m = mats[case["matrix"]]
@@ -85,7 +94,7 @@ def test_aligned_matrices_reference():
             np.testing.assert_allclose(m, want, rtol=1e-12, atol=1e-14, err_msg=f"{a} {name}")
 
 
-def test_single_motif_polygons_reference():
+def test_single_motif_polygons_reference(flush_negative_letters):
     ms = _motifs()
     for case in _ref("single"):
         m = ms[case["idx"] - 1]
@@ -195,6 +204,44 @@ def test_top_logo_tick_stays_on_the_axis():
     fig = um.view_motifs(um.create_motif(6, alphabet="QWERTY", seed=1))
     assert list(fig.axes[0].get_yticks()) == [0.0, 1.0, 2.0]
     plt.close(fig)
+
+
+
+def test_small_contributions_are_drawn():
+    # Contribution weights are often far below 0.03, the smallest negative
+    # letter once drawn, and the axis was padded by a fixed 0.1.
+    cwm = np.array([[-0.02, 0.0, 0.004], [0.0, -0.012, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, -0.001]])
+    glyphs = _panel_glyphs(cwm, list("ACGT"), "CWM", 0.01, 0.04, 0.01, False, True, None, False)
+    assert {g.letter_id for g in glyphs} >= {"1.A.1", "2.C.1", "3.A.1"}
+    assert min(g.y.min() for g in glyphs) < -0.015
+    ticks, ylim = _y_axis([cwm], "CWM")
+    assert ticks == [-0.02, -0.01, 0.0]
+    assert ylim[0] == pytest.approx(-0.02 - 0.05 * 0.024) and ylim[1] == pytest.approx(0.004)
+    # Attributions at any scale keep their letters.
+    seq = "ACGTACGTAC"
+    tiny = np.linspace(1, 10, len(seq)) * 1e-5
+    ax = um.view_attributions(tiny, seq)
+    assert len(ax.collections[0].get_paths()) == len(seq)
+    # Letters keep their shape, so gaps don't swallow them at small scales.
+    big = um.view_attributions(tiny * 1e5, seq)
+    ys = [np.ptp(p.vertices[:, 1]) for p in ax.collections[0].get_paths()]
+    big_ys = [np.ptp(p.vertices[:, 1]) for p in big.collections[0].get_paths()]
+    np.testing.assert_allclose(np.array(ys) * 1e5, big_ys, rtol=1e-6)
+
+
+def test_negative_letters_are_spaced_like_positive_ones():
+    for flip in (False, True):
+        glyphs = position_glyphs(list("ACGT"), np.array([0.5, 0.3, -0.4, -0.2]), 1, 0.01, 0.04, 0.05,
+                                 flip_neg=flip)
+        ext = {}
+        for g in glyphs:
+            lo, hi = ext.get(g.letter_id, (np.inf, -np.inf))
+            ext[g.letter_id] = (min(lo, g.y.min()), max(hi, g.y.max()))
+        a, c, g_, t = (ext[f"1.{x}.1"] for x in "ACGT")
+        assert a[0] - c[1] == pytest.approx(0.025)
+        assert g_[0] - t[1] == pytest.approx(0.025)
+        # Each stack spans the sum of its values.
+        assert a[1] == pytest.approx(0.8) and t[0] == pytest.approx(-0.6)
 
 
 def test_view_attributions():

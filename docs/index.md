@@ -75,7 +75,9 @@ motif types mean in [sequence motifs](guides/motif-basics.ipynb) through to
 a full analysis of real peaks in [a ChIP-seq
 workflow](guides/chipseq-workflow.ipynb), and [building a motif
 library](guides/building-a-library.ipynb) shows how to combine motifs from
-several databases. Every function is described in the
+several databases, while [motifs and deep
+learning](guides/deep-learning.ipynb) reads the patterns and contribution
+scores of a sequence model. Every function is described in the
 [API reference](reference/index.md).
 
 If you already know the R package, the function names will be familiar,

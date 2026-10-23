@@ -64,8 +64,10 @@ def _stable_sort(names: list[str], values: np.ndarray, decreasing: bool) -> tupl
     return [names[i] for i in order], values[order]
 
 
-def _flip_negative(glyphs: list[Glyph], sort_positions: bool, decreasing: bool, flip: bool) -> list[Glyph]:
-    """Turn a stack of positive letters into one hanging below zero."""
+def _flip_negative(glyphs: list[Glyph], sort_positions: bool, decreasing: bool, flip: bool,
+                   y_spacer: float = 0.0) -> list[Glyph]:
+    """Turn a stack of positive letters into one hanging below zero, with the
+    same gaps between letters as a stack above zero."""
     key = [re.sub(r"[.]\d+$", "", g.letter_id) for g in glyphs]
     lets = list(dict.fromkeys(key))
     for name in lets:
@@ -76,7 +78,8 @@ def _flip_negative(glyphs: list[Glyph], sort_positions: bool, decreasing: bool, 
     mins = np.array([min(g.y.min() for g, k in zip(glyphs, key) if k == name) for name in lets])
     if sort_positions:
         lets, mins = _stable_sort(lets, mins, decreasing)
-    offsets = np.concatenate([[0.0], np.cumsum(mins)])
+    gap = y_spacer * (len(lets) - 1) / len(lets)
+    offsets = np.concatenate([[0.0], np.cumsum(mins - gap)])
     for name, off in zip(lets, offsets):
         for g, k in zip(glyphs, key):
             if k == name:
@@ -100,7 +103,7 @@ def position_glyphs(
     """The letters of one position, with x running from 0.5 to 1.5."""
     values = np.asarray(values, dtype=float)
     neg = values < 0
-    any_neg = bool(neg.any() and (np.abs(values[neg]) >= 0.03).any())
+    any_neg = bool(neg.any() and (np.abs(values[neg]) >= min_height).any())
     negout: list[Glyph] = []
     if any_neg:
         neg_names = [n for n, b in zip(names, neg) if b]
@@ -110,7 +113,8 @@ def position_glyphs(
             top = max(g.y.max() for g in negout)
             for g in negout:
                 g.y = g.y - top
-            negout = _flip_negative(negout, sort_positions, not sort_positions_decreasing, flip_neg)
+            negout = _flip_negative(negout, sort_positions, not sort_positions_decreasing, flip_neg,
+                                    y_spacer)
         keep = values >= 0
         names = [n for n, b in zip(names, keep) if b]
         values = values[keep]
