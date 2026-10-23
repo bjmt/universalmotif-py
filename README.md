@@ -10,25 +10,27 @@ the heavy lifting, so most of it is quick and can use several threads.
 Motifs are `Motif` objects, matrices come back as numpy arrays, and tables
 come back as [polars](https://pola.rs/) DataFrames.
 
-The [documentation](https://bjmt.github.io/universalmotif-py/) has guides covering everything from motif
-basics to a full ChIP-seq analysis, and a reference for every function. The
-package is not on PyPI yet, and its interface may still change before the
-first release.
+The [documentation](https://bjmt.github.io/universalmotif-py/) has guides
+covering everything from motif basics to a full ChIP-seq analysis, and a
+reference for every function. The package is at an early version, and its
+interface may still change.
 
 ## Installation
 
-Until there are prebuilt wheels, the package is built from source, which
-needs Python 3.10 or later and a [Rust toolchain](https://rustup.rs/). The
-Rust crate has to be checked out next to it:
+The package needs Python 3.10 or later and can be installed from PyPI:
 
 ```sh
-git clone https://github.com/bjmt/universalmotif-rs.git
-git clone https://github.com/bjmt/universalmotif-py.git
-pip install "./universalmotif-py[plot]"
+pip install universalmotif
 ```
 
+Wheels are built for Linux (x86_64 and aarch64), macOS (Intel and Apple
+Silicon) and Windows (x86_64). Elsewhere pip builds the package from source,
+which needs a [Rust toolchain](https://rustup.rs/).
+
 The only required dependencies are numpy and polars. Everything else is an
-optional extra, needed only by the functions that use it:
+optional extra, needed only by the functions that use it, so that for
+example `pip install "universalmotif[plot]"` adds matplotlib for drawing
+logos:
 
 | Extra | Brings in | For |
 | --- | --- | --- |
@@ -152,6 +154,9 @@ this one, since the package builds against it and the tests read the R
 reference values kept there:
 
 ```sh
+git clone https://github.com/bjmt/universalmotif-rs.git
+git clone https://github.com/bjmt/universalmotif-py.git
+cd universalmotif-py
 uv sync --group dev --no-install-project
 uv run --no-sync maturin develop --release
 uv run --no-sync pytest
