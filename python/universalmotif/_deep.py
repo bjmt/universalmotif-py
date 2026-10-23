@@ -372,11 +372,12 @@ def _chrombpnet_regions(path: str, regions: Any, length: int):
             return None
         regions = bed
     if isinstance(regions, (str, os.PathLike)):
-        regions = pl.read_csv(regions, separator="\t", has_header=False,
-                              schema_overrides={"column_1": pl.String})
+        # Every column is read as text and picked by position, since the
+        # names polars gives headerless columns differ between versions.
+        regions = pl.read_csv(regions, separator="\t", has_header=False, infer_schema_length=0)
         if regions.width < 10:
             raise ValueError("the regions need the ten columns of a narrowPeak file")
-        regions = regions.select(chrom="column_1", start="column_2", summit="column_10")
+        regions = regions.select(chrom=pl.nth(0), start=pl.nth(1), summit=pl.nth(9))
     centre = regions["start"].cast(pl.Int64) + regions["summit"].cast(pl.Int64)
     return pl.DataFrame({
         "chrom": regions["chrom"].cast(pl.String),

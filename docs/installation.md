@@ -6,6 +6,12 @@ The package needs Python 3.10 or later and is installed from PyPI:
 pip install universalmotif
 ```
 
+!!! note "Development version"
+    These pages follow the latest code on GitHub, which can be ahead of the
+    latest release on PyPI. Functions and guides marked as unreleased in
+    the [changelog](changelog.md) are only available by installing
+    [from source](#from-source) until the next release.
+
 Wheels are built for Linux (x86_64 and aarch64), macOS (Intel and Apple
 Silicon) and Windows (x86_64), so on those there is nothing to compile.
 Installing also adds the `universalmotif` and `umotif` commands described in
