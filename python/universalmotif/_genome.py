@@ -230,4 +230,50 @@ def signal_stats(
     return pl.DataFrame(out)
 
 
-__all__ = ["Genome", "extract_ranges", "signal_stats"]
+def signal_values(
+    bigwig: str | os.PathLike[str],
+    chrom: str,
+    start: int,
+    end: int,
+    uncovered: float | None = 0.0,
+) -> np.ndarray:
+    """The value of a bigWig file at each position of one genomic range.
+
+    Positions run from ``start`` up to but not including ``end``, counted
+    from 0. Bases the file has no value for get ``uncovered``, zero by
+    default, or NaN with ``uncovered=None``. Where
+    [`signal_stats()`][universalmotif.signal_stats] summarizes signal over
+    many ranges, this gives every position of one, such as the per-base
+    contribution scores some models write as bigWig tracks, which can be
+    drawn along the genome's sequence with
+    [`view_attributions()`][universalmotif.view_attributions].
+
+    Needs the ``bigwig`` extra.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> genome = um.Genome("genome.fa.gz")  # doctest: +SKIP
+    >>> scores = um.signal_values("scores.bw", "1", 1000, 1100)  # doctest: +SKIP
+    >>> um.view_attributions(scores, genome.subseq("1", 1000, 1100), start=1000)  # doctest: +SKIP
+    """
+    try:
+        import pybigtools
+    except ImportError as e:
+        raise ImportError(
+            "reading bigWig files needs pybigtools; install it with `pip install "
+            "universalmotif[bigwig]`"
+        ) from e
+    start, end = int(start), int(end)
+    reader = pybigtools.open(os.fspath(bigwig))
+    sizes = reader.chroms()
+    if chrom not in sizes:
+        raise ValueError(f"the chromosome {chrom!r} is not in {bigwig}")
+    if start < 0 or end > sizes[chrom] or start >= end:
+        raise ValueError(f"the range {chrom}:{start}-{end} does not fit in {chrom} "
+                         f"(length {sizes[chrom]})")
+    values = reader.values(chrom, start, end, fillna=uncovered)
+    return np.asarray(values, dtype=float)
+
+
+__all__ = ["Genome", "extract_ranges", "signal_stats", "signal_values"]

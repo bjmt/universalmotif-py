@@ -1,6 +1,7 @@
 """Convolution filters, one-hot sequences and TF-MoDISco results."""
 
 import numpy as np
+import polars as pl
 import pytest
 
 import universalmotif as um
@@ -136,3 +137,73 @@ def test_read_modisco(tmp_path):
     assert subs[1].name == "pos_patterns.pattern_0.subpattern_0" and subs[1].nsites == 70
     with pytest.raises(ValueError, match="type"):
         um.read_modisco(path, type="PWM")
+
+
+def _chrombpnet_files(tmp_path, seqs, peaks):
+    h5py = pytest.importorskip("h5py")
+    onehot = um.one_hot(seqs, dtype=np.int8)
+    rng = np.random.default_rng(1)
+    hyp = rng.normal(size=onehot.shape).astype(np.float16)
+    path = tmp_path / "model.counts_scores.h5"
+    # chromBPNet writes (sequences, letters, length).
+    with h5py.File(path, "w") as f:
+        f["raw/seq"] = onehot
+        f["shap/seq"] = hyp
+        f["projected_shap/seq"] = hyp * onehot
+    (tmp_path / "model.interpreted_regions.bed").write_text("".join(
+        f"{chrom}\t{start}\t{start + 500}\tp\t0\t.\t1\t1\t1\t{summit}\n"
+        for chrom, start, summit in peaks))
+    return path, hyp.astype(np.float32), onehot
+
+
+def test_read_contributions_chrombpnet(tmp_path):
+    seqs = ["ACGTACGTAA", "TTTTGGGGCA", "GATTACAGAT"]
+    peaks = [("chr1", 100, 50), ("chr2", 0, 20), ("chr1", 1000, 7)]
+    path, hyp, onehot = _chrombpnet_files(tmp_path, seqs, peaks)
+    c = um.read_contributions(path)
+    assert len(c) == 3 and c.sequences == seqs
+    assert c.scores.dtype == np.float32 and c.scores.shape == (3, 4, 10)
+    np.testing.assert_allclose(c.scores, hyp)
+    assert c.names == ["chr1:145-155", "chr2:15-25", "chr1:1002-1012"]
+    assert c.ranges.columns == ["chrom", "start", "end"]
+    proj = um.read_contributions(path, scores="projected")
+    np.testing.assert_allclose(proj.scores, hyp * onehot)
+    some = um.read_contributions(path, indices=[2, 0])
+    assert some.sequences == [seqs[2], seqs[0]]
+    assert some.names == [c.names[2], c.names[0]]
+    np.testing.assert_allclose(some.scores, hyp[[2, 0]])
+    scores, seq = c[1]
+    assert seq == seqs[1] and scores.shape == (4, 10)
+    ax = c.view(0)
+    assert ax.get_xlabel() == "Position"
+    (tmp_path / "model.interpreted_regions.bed").unlink()
+    bare = um.read_contributions(path)
+    assert bare.ranges is None and bare.names == ["seq1", "seq2", "seq3"]
+    with pytest.raises(ValueError, match="2 regions"):
+        um.read_contributions(path, regions=pl.DataFrame(
+            {"chrom": ["chr1", "chr1"], "start": [0, 0], "summit": [5, 5]}))
+    with pytest.raises(ValueError, match="hypothetical"):
+        um.read_contributions(path, scores="raw")
+    with pytest.raises(ValueError, match="repeat"):
+        um.read_contributions(path, indices=[0, 0])
+
+
+def test_read_contributions_numpy(tmp_path):
+    seqs = ["ACGTA", "GGCAT"]
+    onehot = um.one_hot(seqs, dtype=np.int8)
+    hyp = np.arange(40, dtype=np.float64).reshape(2, 4, 5)
+    np.savez(tmp_path / "shap.npz", hyp)
+    np.savez(tmp_path / "ohe.npz", onehot)
+    c = um.read_contributions(tmp_path / "shap.npz", sequences=tmp_path / "ohe.npz")
+    assert c.sequences == seqs and c.names == ["seq1", "seq2"] and c.ranges is None
+    np.testing.assert_allclose(c.scores, hyp)
+    # (sequences, length, letters) and strings work too.
+    np.save(tmp_path / "shap.npy", hyp.transpose(0, 2, 1))
+    p = um.read_contributions(tmp_path / "shap.npy", sequences=seqs, scores="projected")
+    np.testing.assert_allclose(p.scores, hyp * onehot)
+    one = um.read_contributions(tmp_path / "shap.npz", sequences=onehot, indices=[1])
+    assert one.sequences == ["GGCAT"] and one.names == ["seq2"]
+    with pytest.raises(ValueError, match="give the sequences"):
+        um.read_contributions(tmp_path / "shap.npz")
+    with pytest.raises(ValueError, match="sequences of length"):
+        um.read_contributions(tmp_path / "shap.npz", sequences=["ACGTA"])

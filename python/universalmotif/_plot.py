@@ -875,6 +875,170 @@ def plot_match_bkg(
     return fig
 
 
+_ALPHABET_NAMES = {"ACGT": "DNA", "ACGU": "RNA", "ACDEFGHIKLMNPQRSTVWY": "AA"}
+
+
+def _attribution_matrix(scores, sequence, alphabet: str, kind: str) -> np.ndarray:
+    """Scores as a (letters, positions) array to draw."""
+    from ._deep import _to_numpy, one_hot
+
+    m = _to_numpy(scores)
+    if m.ndim == 3 and m.shape[0] == 1:
+        m = m[0]
+    n = len(alphabet)
+    if m.ndim == 2 and m.shape[0] != n and m.shape[1] == n:
+        m = m.T
+    if m.ndim == 1:
+        if kind != "observed":
+            raise ValueError(f"kind={kind!r} needs one score per letter and position, "
+                             f"an array of shape ({n}, length)")
+        if sequence is None:
+            raise ValueError("scores with one value per position need the sequence")
+    elif m.ndim != 2 or m.shape[0] != n:
+        raise ValueError(f"scores must have shape (length,) or ({n}, length)")
+    length = m.shape[-1]
+    if sequence is not None and len(sequence) != length:
+        raise ValueError(f"the sequence has {len(sequence)} letters for {length} positions of scores")
+    if kind == "observed" and sequence is not None:
+        m = one_hot(sequence, alphabet=alphabet, dtype=float)[0] * m
+    if not np.isfinite(m).all():
+        raise ValueError("the scores have missing or infinite values")
+    return m
+
+
+def _nice_step(span: int) -> int:
+    for step in (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10_000, 20_000, 50_000):
+        if span / step <= 12:
+            return step
+    return 100_000
+
+
+def view_attributions(
+    scores: Any,
+    sequence: str | None = None,
+    kind: str = "observed",
+    alphabet: str = "ACGT",
+    start: int = 0,
+    region: tuple[int, int] | None = None,
+    hits: pl.DataFrame | None = None,
+    colour_scheme: Mapping[str, str] | None = None,
+    flip_neg: bool = False,
+    ylabel: str | None = None,
+    figsize: tuple[float, float] | None = None,
+    ax: Axes | None = None,
+) -> Axes:
+    """Draw attribution or contribution scores along a sequence, such as
+    those a deep-learning model gives each position of an input.
+
+    ``scores`` is either one value per position, or one value per letter
+    and position as an array of shape (letters, length), with the letters
+    in the order of ``alphabet``. Arrays of shape (length, letters) and
+    PyTorch tensors are accepted too. ``kind`` chooses what is drawn:
+
+    ``"observed"``
+        A logo of the letters of ``sequence``, each as tall as its score,
+        above the axis when positive and below it when negative. Scores per
+        letter are reduced to those of the letters in the sequence, so this
+        draws contribution scores times the input. Without ``sequence``,
+        per-letter scores are drawn as they are, which suits scores that
+        are already zero for the letters not in the sequence.
+    ``"all"``
+        A logo of every letter's score at every position, such as
+        hypothetical contributions or the effects of in silico
+        mutagenesis, with positive scores stacked above the axis and
+        negative ones below.
+    ``"heatmap"``
+        The same per-letter scores as a heatmap with a colour scale
+        centred on zero, with the letters of ``sequence`` marked by dots.
+
+    Positions are labelled from ``start``, such as the genomic position of
+    the first letter, and ``region``, a (start, end) pair in the same
+    positions with the end left out, draws only part of the sequence.
+    ``hits``, such as from [`scan_sequences()`][universalmotif.scan_sequences]
+    run on ``sequence``, shades each hit, labelled with its ``motif`` if the
+    table has one, with positions counted along the sequence from 0.
+    Letters are coloured by ``colour_scheme``, by default the package's
+    colours for DNA, RNA and amino acids, and letters below the axis are
+    drawn upside down with ``flip_neg``.
+
+    Needs the ``plot`` extra.
+
+    Examples
+    --------
+    >>> import matplotlib.pyplot as plt
+    >>> import numpy as np
+    >>> import universalmotif as um
+    >>> seq = "ACGTTTGACCAAGT"
+    >>> scores = np.zeros(len(seq))
+    >>> scores[4:10] = [0.3, 0.6, 0.9, 0.8, 0.7, 0.4]
+    >>> ax = um.view_attributions(scores, seq)
+    >>> ax.get_ylabel()
+    'Attribution'
+    >>> ism = np.random.default_rng(1).normal(0, 0.2, (4, len(seq)))
+    >>> ax = um.view_attributions(ism, seq, kind="heatmap", ylabel="Effect")
+    >>> plt.close("all")
+    """
+    if kind not in ("observed", "all", "heatmap"):
+        raise ValueError('kind must be "observed", "all" or "heatmap"')
+    if len(set(alphabet)) != len(alphabet):
+        raise ValueError("the alphabet has repeated letters")
+    m = _attribution_matrix(scores, sequence, alphabet, kind)
+    length = m.shape[1]
+    a, b = (start, start + length) if region is None else (int(region[0]), int(region[1]))
+    if not start <= a < b <= start + length:
+        raise ValueError(f"region must lie within {start} to {start + length}")
+    m = m[:, a - start:b - start]
+    seq = None if sequence is None else sequence[a - start:b - start]
+    n = m.shape[1]
+    plt = _pyplot()
+    if ax is None:
+        width = min(max(4.0, 0.12 * n + 1.5), 16.0)
+        _, ax = plt.subplots(figsize=figsize or (width, 3.2 if kind == "heatmap" else 2.6))
+    if colour_scheme is None:
+        colour_scheme = _default_colours(_ALPHABET_NAMES.get(alphabet, ""), list(alphabet))
+    if kind == "heatmap":
+        top = float(np.abs(m).max()) or 1.0
+        im = ax.imshow(m, aspect="auto", cmap="RdBu_r", vmin=-top, vmax=top, interpolation="nearest",
+                       extent=(0.5, n + 0.5, len(alphabet) - 0.5, -0.5))
+        ax.set_yticks(range(len(alphabet)), list(alphabet))
+        if seq is not None:
+            index = {c: i for i, c in enumerate(alphabet)}
+            xs = [j + 1 for j, c in enumerate(seq) if c.upper() in index]
+            ys = [index[c.upper()] for c in seq if c.upper() in index]
+            ax.scatter(xs, ys, s=min(30.0, 900.0 / max(n, 1)), color="black", zorder=3)
+        ax.figure.colorbar(im, ax=ax, label=ylabel or "Score", fraction=0.04, pad=0.01)
+    else:
+        view_logo(m, letters=list(alphabet), colour_scheme=colour_scheme, flip_neg=flip_neg, ax=ax)
+        ax.set_axis_on()
+        ax.axhline(0, color="0.6", linewidth=0.6, zorder=0)
+        hi, lo = max(float(m.clip(min=0).sum(axis=0).max()), 0.0), min(float(m.clip(max=0).sum(axis=0).min()), 0.0)
+        pad = 0.08 * ((hi - lo) or 1.0)
+        ax.set_ylim(lo - (pad if lo < 0 else 0), hi + pad)
+        ax.set_ylabel(ylabel or "Attribution")
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+    if hits is not None:
+        for col in ("start", "end"):
+            if col not in hits.columns:
+                raise ValueError(f"hits must have a {col!r} column")
+        names = hits["motif"].to_list() if "motif" in hits.columns else [None] * hits.height
+        for s, e, name in zip(hits["start"].to_list(), hits["end"].to_list(), names):
+            s, e = max(s + start, a), min(e + start, b)
+            if e <= s:
+                continue
+            ax.axvspan(s - a + 0.5, e - a + 0.5, color="#4C72B0", alpha=0.1, linewidth=0, zorder=0)
+            if name is not None:
+                ax.annotate(str(name), ((s + e) / 2 - a + 0.5, 1.0), xycoords=("data", "axes fraction"),
+                            ha="center", va="bottom", fontsize=8, color="0.3", annotation_clip=False)
+    step = _nice_step(n)
+    first = -(-a // step) * step
+    ticks = list(range(first, b, step))
+    ax.set_xticks([t - a + 1 for t in ticks], [str(t) for t in ticks])
+    ax.set_xlim(0.5, n + 0.5)
+    ax.set_xlabel("Position")
+    return ax
+
+
 __all__ = [
     "AA_COLOURS",
     "DNA_COLOURS",
@@ -882,6 +1046,7 @@ __all__ = [
     "plot_match_bkg",
     "plot_motif_peaks",
     "plot_motif_proximity",
+    "view_attributions",
     "view_logo",
     "view_motifs",
 ]

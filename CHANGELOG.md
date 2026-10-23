@@ -2,6 +2,14 @@
 
 ## 0.1.1 (unreleased)
 
+- `view_attributions()` draws attribution or contribution scores along a
+  sequence, for the bases in the sequence or for every nucleotide, as a
+  logo or a heatmap, with motif hits shaded.
+- `read_contributions()` reads contribution scores and their sequences
+  from chromBPNet HDF5 files, with the genomic range of each sequence, or
+  from numpy files as TF-MoDISco takes them.
+- `signal_values()` reads the value of a bigWig track at every position
+  of a range.
 - Logos keep their top y-axis tick when the axis ends at a value that
   rounds up, as for information content logos of six-letter alphabets.
 

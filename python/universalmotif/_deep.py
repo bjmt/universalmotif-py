@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -277,4 +278,218 @@ def _modisco_motif(pattern, name: str, dataset: str, kind: str,
     )
 
 
-__all__ = ["from_filters", "from_one_hot", "one_hot", "read_modisco", "to_filters"]
+@dataclass(frozen=True)
+class ContributionScores:
+    """Contribution scores of a set of sequences, from
+    [`read_contributions()`][universalmotif.read_contributions].
+
+    ``scores`` is an array of shape (sequences, letters, length) holding a
+    score for every letter at every position, ``sequences`` the sequences
+    themselves, ``names`` their names, and ``ranges`` a DataFrame of the
+    genomic range of each sequence, with positions counted from 0 and the
+    end left out, when the file gives them. Indexing gives the scores and
+    sequence of one sequence, and [`view()`][universalmotif.ContributionScores.view]
+    draws them.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import universalmotif as um
+    >>> c = um.ContributionScores(np.zeros((2, 4, 5)), ["ACGTA", "TTGAC"], ["a", "b"], None)
+    >>> c
+    ContributionScores(2 sequences of 5 letters)
+    >>> scores, seq = c[1]
+    >>> seq
+    'TTGAC'
+    """
+
+    scores: np.ndarray
+    sequences: list[str]
+    names: list[str]
+    ranges: Any
+
+    def __len__(self) -> int:
+        return len(self.sequences)
+
+    def __getitem__(self, i: int) -> tuple[np.ndarray, str]:
+        return self.scores[i], self.sequences[i]
+
+    def __repr__(self) -> str:
+        return f"ContributionScores({len(self)} sequences of {self.scores.shape[-1]} letters)"
+
+    def view(self, i: int, kind: str = "observed", **kwargs: Any):
+        """Draw the scores of sequence ``i`` with
+        [`view_attributions()`][universalmotif.view_attributions], with
+        positions on the genome when the ranges are known, so that
+        ``region`` is given in genome positions too. Other arguments are
+        passed on."""
+        from ._plot import view_attributions
+
+        if self.ranges is not None and "start" not in kwargs:
+            kwargs["start"] = int(self.ranges["start"][i])
+        return view_attributions(self.scores[i], self.sequences[i], kind=kind, **kwargs)
+
+
+def _letters_first(x: np.ndarray, n: int, what: str) -> np.ndarray:
+    """An array of shape (sequences, letters, length), from that or from
+    (sequences, length, letters)."""
+    if x.ndim == 2:
+        x = x[None]
+    if x.ndim != 3:
+        raise ValueError(f"{what} must have shape (sequences, {n}, length)")
+    if x.shape[1] != n and x.shape[2] == n:
+        x = x.transpose(0, 2, 1)
+    if x.shape[1] != n:
+        raise ValueError(f"{what} must have shape (sequences, {n}, length), not {x.shape}")
+    return x
+
+
+def _load_array(source: Any, what: str) -> np.ndarray:
+    if not isinstance(source, (str, os.PathLike)):
+        return _to_numpy(source)
+    data = np.load(source)
+    if isinstance(data, np.ndarray):
+        return data
+    keys = list(data.keys())
+    if len(keys) != 1 and "arr_0" not in keys:
+        raise ValueError(f"{source} holds several arrays ({', '.join(keys)}); pass the {what} itself")
+    return data[keys[0] if len(keys) == 1 else "arr_0"]
+
+
+def _chrombpnet_regions(path: str, regions: Any, length: int):
+    """The genomic window of each sequence in a chromBPNet scores file: the
+    peaks in ``<prefix>.interpreted_regions.bed``, or given as ``regions``,
+    each a window of ``length`` centred on its summit."""
+    import polars as pl
+
+    if regions is None:
+        prefix = path
+        for suffix in (".counts_scores.h5", ".profile_scores.h5"):
+            if path.endswith(suffix):
+                prefix = path[: -len(suffix)]
+        bed = prefix + ".interpreted_regions.bed"
+        if not os.path.exists(bed):
+            return None
+        regions = bed
+    if isinstance(regions, (str, os.PathLike)):
+        regions = pl.read_csv(regions, separator="\t", has_header=False,
+                              schema_overrides={"column_1": pl.String})
+        if regions.width < 10:
+            raise ValueError("the regions need the ten columns of a narrowPeak file")
+        regions = regions.select(chrom="column_1", start="column_2", summit="column_10")
+    centre = regions["start"].cast(pl.Int64) + regions["summit"].cast(pl.Int64)
+    return pl.DataFrame({
+        "chrom": regions["chrom"].cast(pl.String),
+        "start": centre - length // 2,
+        "end": centre + length // 2,
+    })
+
+
+def read_contributions(
+    path: str | os.PathLike[str],
+    sequences: Any = None,
+    scores: str = "hypothetical",
+    regions: Any = None,
+    indices: Sequence[int] | None = None,
+    alphabet: str = "ACGT",
+) -> ContributionScores:
+    """Read the contribution scores a sequence model gives its inputs.
+
+    Two layouts are read:
+
+    - The HDF5 files chromBPNet writes, ``<prefix>.counts_scores.h5`` and
+      ``<prefix>.profile_scores.h5``, which hold the one-hot sequences and
+      their scores. ``scores`` picks the hypothetical scores of every letter
+      at every position (``"hypothetical"``), or those times the one-hot
+      sequences (``"projected"``). The genomic range of each sequence comes
+      from ``<prefix>.interpreted_regions.bed`` next to the file, or from
+      ``regions``, a narrowPeak file or a table with ``chrom``, ``start``
+      and ``summit`` columns.
+    - numpy ``.npy`` or ``.npz`` files of scores, as TF-MoDISco takes, with
+      the one-hot sequences given as ``sequences``, a file or an array, or
+      the sequences themselves as strings.
+
+    Arrays may have shape (sequences, letters, length) or (sequences,
+    length, letters), with the letters in the order of ``alphabet``.
+    Scores are read as 32-bit floats, so ``indices`` can read just some of
+    the sequences of a large file.
+
+    Needs the ``h5py`` extra for HDF5 files.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> c = um.read_contributions("model.counts_scores.h5")  # doctest: +SKIP
+    >>> c.view(0, kind="all")  # doctest: +SKIP
+    >>> c = um.read_contributions("shap.npz", sequences="ohe.npz")  # doctest: +SKIP
+    """
+    if scores not in ("hypothetical", "projected"):
+        raise ValueError('scores must be "hypothetical" or "projected"')
+    path = os.fspath(path)
+    n = len(alphabet)
+    pick = None if indices is None else [int(i) for i in indices]
+    ranges = None
+    if path.endswith((".h5", ".hdf5")):
+        try:
+            import h5py
+        except ImportError as e:
+            raise ImportError(
+                "reading HDF5 contribution scores needs h5py; install it with `pip install "
+                "universalmotif[h5py]`"
+            ) from e
+        with h5py.File(path, "r") as f:
+            if not ("raw" in f and "shap" in f):
+                raise ValueError(f"{path} is not a chromBPNet scores file; it holds {', '.join(f)}")
+            key = "shap" if scores == "hypothetical" else "projected_shap"
+
+            def read(name):
+                ds = f[name]["seq"]
+                if pick is None:
+                    return ds[()]
+                order = np.argsort(pick)
+                got = ds[np.asarray(pick)[order]]
+                out = np.empty_like(got)
+                out[order] = got
+                return out
+
+            if pick is not None and len(set(pick)) != len(pick):
+                raise ValueError("indices must not repeat")
+            onehot = _letters_first(np.asarray(read("raw")), n, "the sequences")
+            values = _letters_first(np.asarray(read(key), dtype=np.float32), n, "the scores")
+        ranges = _chrombpnet_regions(path, regions, values.shape[-1])
+        if ranges is not None and pick is not None:
+            ranges = ranges[pick]
+    else:
+        values = _letters_first(np.asarray(_load_array(path, "scores"), dtype=np.float32), n, "the scores")
+        if sequences is None:
+            raise ValueError("give the sequences, or a file of them one-hot encoded, with sequences")
+        if isinstance(sequences, list) and sequences and isinstance(sequences[0], str):
+            onehot = one_hot(sequences, alphabet=alphabet, dtype=np.int8)
+        else:
+            onehot = _letters_first(_load_array(sequences, "sequences"), n, "the sequences")
+        if pick is not None:
+            values, onehot = values[pick], onehot[pick]
+        if scores == "projected":
+            values = values * onehot
+    if onehot.shape[0] != values.shape[0] or onehot.shape[-1] != values.shape[-1]:
+        raise ValueError(f"{onehot.shape[0]} sequences of length {onehot.shape[-1]} for "
+                         f"{values.shape[0]} of length {values.shape[-1]} in the scores")
+    seqs = from_one_hot(onehot, alphabet=alphabet)
+    if ranges is not None:
+        if ranges.height != len(seqs):
+            raise ValueError(f"{ranges.height} regions for {len(seqs)} sequences")
+        names = [f"{c}:{s}-{e}" for c, s, e in ranges.iter_rows()]
+    else:
+        names = [f"seq{i + 1}" for i in (range(len(seqs)) if pick is None else pick)]
+    return ContributionScores(values, seqs, names, ranges)
+
+
+__all__ = [
+    "ContributionScores",
+    "from_filters",
+    "from_one_hot",
+    "one_hot",
+    "read_contributions",
+    "read_modisco",
+    "to_filters",
+]

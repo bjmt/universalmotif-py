@@ -166,3 +166,16 @@ def test_genome_errors(tmp_path):
     plain_gz.write_bytes(gzip.compress(b">a\nACGT\n"))
     with pytest.raises(ValueError, match="bgzip"):
         um.Genome(plain_gz)
+
+
+def test_signal_values(tmp_path):
+    path = _bigwig(tmp_path / "s.bw", {"chr1": 100},
+                   [("chr1", 2, 5, 0.5), ("chr1", 5, 7, -1.0)])
+    np.testing.assert_allclose(um.signal_values(path, "chr1", 0, 8),
+                               [0, 0, 0.5, 0.5, 0.5, -1, -1, 0])
+    v = um.signal_values(path, "chr1", 0, 3, uncovered=None)
+    assert np.isnan(v[:2]).all() and v[2] == 0.5
+    with pytest.raises(ValueError, match="chrX"):
+        um.signal_values(path, "chrX", 0, 3)
+    with pytest.raises(ValueError):
+        um.signal_values(path, "chr1", 90, 110)

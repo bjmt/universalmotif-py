@@ -9,3 +9,5 @@ Genomes read from disk a piece at a time, the sequences of genomic ranges, and b
 ::: universalmotif.extract_ranges
 
 ::: universalmotif.signal_stats
+
+::: universalmotif.signal_values

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 import universalmotif as um  # noqa: E402
 from universalmotif._logo import matrix_glyphs  # noqa: E402
-from universalmotif._plot import _panel_glyphs, _prepare_motifs  # noqa: E402
+from universalmotif._plot import _attribution_matrix, _panel_glyphs, _prepare_motifs  # noqa: E402
 
 from conftest import args, load_reference, motif_from_record, nums  # noqa: E402
 
@@ -191,10 +191,51 @@ def test_plot_motif_peaks():
 
 
 def test_top_logo_tick_stays_on_the_axis():
-    pytest.importorskip("matplotlib")
-    import matplotlib.pyplot as plt
-
     # log2(6) = 2.58 bits would round up to a tick above the axis.
     fig = um.view_motifs(um.create_motif(6, alphabet="QWERTY", seed=1))
     assert list(fig.axes[0].get_yticks()) == [0.0, 1.0, 2.0]
     plt.close(fig)
+
+
+def test_view_attributions():
+    seq = "ACGTTTGACCAAGTNA"
+    n = len(seq)
+    per_pos = np.linspace(-1, 1, n)
+    per_letter = np.arange(4 * n, dtype=float).reshape(4, n) - 2 * n
+    # One score per position goes to the observed letter; N gets nothing.
+    m = _attribution_matrix(per_pos, seq, "ACGT", "observed")
+    assert m.shape == (4, n)
+    assert m[3, 3] == per_pos[3] and m[:, 3].sum() == per_pos[3]
+    assert not m[:, 14].any()
+    # Per-letter scores keep only the observed letter's, unless all are drawn.
+    m = _attribution_matrix(per_letter, seq, "ACGT", "observed")
+    assert m[1, 1] == per_letter[1, 1] and m[0, 1] == 0
+    assert np.array_equal(_attribution_matrix(per_letter, seq, "ACGT", "all"), per_letter)
+    # (length, letters) arrays and a leading batch axis are accepted.
+    assert np.array_equal(_attribution_matrix(per_letter.T, None, "ACGT", "all"), per_letter)
+    assert np.array_equal(_attribution_matrix(per_letter[None], None, "ACGT", "all"), per_letter)
+
+    hits = um.scan_sequences(um.example_motifs()[5], seq, pvalue=1e-2)
+    ax = um.view_attributions(per_pos, seq, start=1000, hits=hits)
+    assert ax.get_xticklabels()[0].get_text() == "1000"
+    assert [t.get_text() for t in ax.texts] == hits["motif"].to_list()
+    um.view_attributions(per_pos, seq, flip_neg=True)
+    ax = um.view_attributions(per_letter, seq, kind="all", region=(4, 12))
+    assert ax.get_xlim() == (0.5, 8.5)
+    ax = um.view_attributions(per_letter, seq, kind="heatmap")
+    assert len(ax.figure.axes) == 2  # the heatmap and its colour bar
+    plt.close("all")
+
+    with pytest.raises(ValueError, match="need the sequence"):
+        um.view_attributions(per_pos)
+    with pytest.raises(ValueError, match="one score per letter"):
+        um.view_attributions(per_pos, seq, kind="all")
+    with pytest.raises(ValueError, match="letters for"):
+        um.view_attributions(per_pos, seq[:-1])
+    with pytest.raises(ValueError, match="region"):
+        um.view_attributions(per_pos, seq, region=(0, n + 1))
+    with pytest.raises(ValueError, match="kind"):
+        um.view_attributions(per_pos, seq, kind="bars")
+    with pytest.raises(ValueError, match="missing or infinite"):
+        um.view_attributions(np.full(n, np.nan), seq)
+    plt.close("all")

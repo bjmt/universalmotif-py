@@ -38,7 +38,7 @@ logos:
 | `scipy` | SciPy | sparse motif match matrices |
 | `anndata` | AnnData, SciPy | match matrices stored with single-cell ATAC data |
 | `biopython` | Biopython | converting to and from `Bio.motifs` |
-| `h5py` | h5py | reading TF-MoDISco results |
+| `h5py` | h5py | reading TF-MoDISco results and chromBPNet contribution scores |
 | `bigwig` | pybigtools | bigWig signal, and backgrounds matched on it |
 | `pyranges` | PyRanges | converting tables to PyRanges objects |
 | `polars-bio` | polars-bio | preparing tables for polars-bio |
@@ -94,7 +94,8 @@ found = um.motif_finder(targets, controls, seed=1)
   genomic coordinates, with ranges exchanged with PyRanges and polars-bio.
 - **Single-cell ATAC and deep learning:** sparse peak by motif matrices for
   AnnData and pychromVAR, motifs as convolution filters and back, one-hot
-  sequences, and TF-MoDISco results.
+  sequences, TF-MoDISco results, and plots of attribution scores along
+  sequences.
 - **Sequences:** shuffling that keeps k-mer counts, random sequences, k-mer
   backgrounds, complexity, masking and sliding windows.
 - **Plots:** sequence logos, motif trees and plots of the results above,

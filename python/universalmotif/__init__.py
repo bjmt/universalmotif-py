@@ -9,7 +9,15 @@ from importlib.metadata import PackageNotFoundError, version
 from ._analysis import dedup_hits, motif_pvalue, scan_sequences
 from ._biopython import from_biopython, to_biopython
 from ._display import _repr_html_ as _motif_html
-from ._deep import from_filters, from_one_hot, one_hot, read_modisco, to_filters
+from ._deep import (
+    ContributionScores,
+    from_filters,
+    from_one_hot,
+    one_hot,
+    read_contributions,
+    read_modisco,
+    to_filters,
+)
 from ._display import logo_svg, to_logomaker
 from ._matches import MotifMatches, add_motif_matches, match_motifs
 from . import databases
@@ -78,10 +86,17 @@ from ._io import (
 )
 from ._core import Motif
 from ._enrich import enrich_motifs, motif_coocc, motif_peaks
-from ._genome import Genome, extract_ranges, signal_stats
+from ._genome import Genome, extract_ranges, signal_stats, signal_values
 from ._genomic import match_bkg, motif_proximity
 from ._intervals import genomic_hits, to_polars_bio, to_pyranges
-from ._plot import plot_match_bkg, plot_motif_peaks, plot_motif_proximity, view_logo, view_motifs
+from ._plot import (
+    plot_match_bkg,
+    plot_motif_peaks,
+    plot_motif_proximity,
+    view_attributions,
+    view_logo,
+    view_motifs,
+)
 from ._sequences import (
     calc_complexity,
     calc_windows,
@@ -104,6 +119,7 @@ except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 
 __all__ = [
+    "ContributionScores",
     "Genome",
     "Motif",
     "MotifMatches",
@@ -174,6 +190,7 @@ __all__ = [
     "prob_match_bkg",
     "pwm_to_ppm",
     "read_cisbp",
+    "read_contributions",
     "read_fasta",
     "read_homer",
     "read_jaspar",
@@ -191,6 +208,7 @@ __all__ = [
     "shuffle_sequences",
     "shuffle_string",
     "signal_stats",
+    "signal_values",
     "slide_fun",
     "summarize_motifs",
     "switch_alph",
@@ -202,6 +220,7 @@ __all__ = [
     "trim_cwm",
     "trim_motifs",
     "ungap",
+    "view_attributions",
     "view_logo",
     "view_motifs",
     "window_string",
