@@ -1,5 +1,6 @@
 site_name: universalmotif
 site_description: Sequence motif manipulation and analysis in Python, a port of the universalmotif R package
+site_url: https://bjmt.github.io/universalmotif-py/
 repo_url: https://github.com/bjmt/universalmotif-py
 repo_name: bjmt/universalmotif-py
 copyright: Benjamin Jean-Marie Tremblay
