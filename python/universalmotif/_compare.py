@@ -81,6 +81,26 @@ def compare_motifs(
         ``target_consensus``, ``pvalue`` and ``qvalue``, where ``score`` is
         the mean column correlation.
 
+    Notes
+    -----
+    Scoring alignments by summed Pearson correlations, with P-values from
+    a null of database columns, is close to what TOMTOM does with its
+    Pearson distance, so the two largely agree. The script
+    ``scripts/compare_tomtom.py`` in the repository runs both on the same
+    motifs. With 72 queries, 60 from CIS-BP and the 12 example motifs,
+    against the 805 plant motifs of JASPAR 2024:
+
+    | | ``complete=True``, TOMTOM default | default, TOMTOM ``-incomplete-scores`` |
+    | --- | --- | --- |
+    | log10 P-values, correlation over all 57,960 pairs | 0.999 | 0.988 |
+    | P-value rank correlation within queries, median | 0.999 | 0.927 |
+    | Each query's five best matches shared | 95% | 88% |
+    | Same best match | 94% | 78% |
+    | Strong matches on the same strand | 99% | 99% |
+
+    Where the best match differs, the two choices are near ties, a tenth to
+    a fifth of an order of magnitude apart.
+
     Examples
     --------
     >>> import universalmotif as um

@@ -78,6 +78,7 @@ from ._io import (
 )
 from ._core import Motif
 from ._enrich import enrich_motifs, motif_coocc, motif_peaks
+from ._genome import Genome, extract_ranges, signal_stats
 from ._genomic import match_bkg, motif_proximity
 from ._plot import plot_match_bkg, plot_motif_peaks, plot_motif_proximity, view_logo, view_motifs
 from ._sequences import (
@@ -102,6 +103,7 @@ except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 
 __all__ = [
+    "Genome",
     "Motif",
     "MotifMatches",
     "MotifTree",
@@ -124,6 +126,7 @@ __all__ = [
     "example_file",
     "example_motifs",
     "example_sequences",
+    "extract_ranges",
     "filter_motifs",
     "from_biopython",
     "from_filters",
@@ -185,6 +188,7 @@ __all__ = [
     "shuffle_motifs",
     "shuffle_sequences",
     "shuffle_string",
+    "signal_stats",
     "slide_fun",
     "summarise_motifs",
     "switch_alph",

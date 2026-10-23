@@ -3477,6 +3477,43 @@ wheels = [
 ]
 
 [[package]]
+name = "pybigtools"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/61/f7/63dc6550b7b06ffcbafdaca052c887b717235d70acd9c7abf56bb25951c5/pybigtools-0.3.0.tar.gz", hash = "sha256:5fd0854919294421cabf9c45a7b3b6d56d105bc3c43e069f461e4adb4a50f6af", size = 9591664, upload-time = "2026-06-04T01:01:58.912Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/5e/774ab20dd11521eeb4e85cc9b32f7af17f099b39ee1972a91a6cc90d1480/pybigtools-0.3.0-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:f3380497c49cbdb7cbf0cce5a43defe37c890bfb40cc6c0bd383a677e1665a62", size = 1501191, upload-time = "2026-06-04T01:01:20.554Z" },
+    { url = "https://files.pythonhosted.org/packages/92/be/85b2bef2938637246c07931c4c1f1c6aed6516c5abfb7214706226db1c91/pybigtools-0.3.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:4fafd98a62ce96c3dab97cd1305150d68825675200f4475d3201cc686a256155", size = 1416425, upload-time = "2026-06-04T01:01:21.932Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/e7/0085b97aa1e0daada415745a186e666e41a1d87d685b4ce4e8483b13f2f7/pybigtools-0.3.0-cp310-cp310-manylinux_2_28_aarch64.whl", hash = "sha256:2724cda127ee7723613f1116f89acd1520e2f7d970601fae1d0d70622515345e", size = 1509997, upload-time = "2026-06-04T01:01:23.211Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/c3/52b25e73490494c1235ebd23f773ab57d3f35088224d675cdef66c3c7930/pybigtools-0.3.0-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:aae49cff01d6a1709a7f8ba14d781267cb014bcd34ddc3a155df12cf0eb8403a", size = 1587820, upload-time = "2026-06-04T01:01:24.325Z" },
+    { url = "https://files.pythonhosted.org/packages/36/e4/9a4e891dba72da548f66275cb4750e69373c81c7d1d01b725e66455f57cb/pybigtools-0.3.0-cp310-cp310-win32.whl", hash = "sha256:ad5ee8f72f7c9c30b5bee129578decebaf7230645c85a4dd0ee931e227dd2da9", size = 1125047, upload-time = "2026-06-04T01:01:25.757Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/fe/e9d36bd1fa96e65aa8381612c0f722778863fbb355eaffdf080cbdcbb0f7/pybigtools-0.3.0-cp310-cp310-win_amd64.whl", hash = "sha256:5c8f9b03efb8c215bde3f5ff99a28660d7a3abbfd5e68587f9da3214fd5c326e", size = 1392717, upload-time = "2026-06-04T01:01:26.929Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/8a/5a427aab9bf69a4780fd4692680c30491b2cb4cfb616e7583d5d09073abd/pybigtools-0.3.0-cp311-cp311-macosx_10_12_x86_64.whl", hash = "sha256:0e78e37617d3e488a607d83ffbc8ee624e029f15e34fe13e454ace01b850da10", size = 1501064, upload-time = "2026-06-04T01:01:28.181Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/72/c5fd00257ebde9354c8524f6d1db6809be1c108aa7fbb83e319866a0310a/pybigtools-0.3.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:802a5f8d261e16739210828e77820185cfdcfe79f14fda3862d982c1e4671755", size = 1415656, upload-time = "2026-06-04T01:01:29.451Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/dd/01ebe8082fbbe9e2368d6115058a20561475386e6a793897841df5612004/pybigtools-0.3.0-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:30b437e0bc405428e4d9ec6302c8a78c7396eba16a25fa4a9c96914b6a2cfdfa", size = 1509115, upload-time = "2026-06-04T01:01:30.684Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/e5/cf2d6702d6bbf71b0cba6fa94c34632fe22887cfa9f279e9493ee148761d/pybigtools-0.3.0-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:bd45c09cb93d53e1370569f8814624f78504473fc093ddea49478f574101fa81", size = 1588280, upload-time = "2026-06-04T01:01:31.773Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/76/6f50f38ff7f3320bbd40588adc805a0e4d9b1827fa0f1bf8e6db83e5a4f1/pybigtools-0.3.0-cp311-cp311-win32.whl", hash = "sha256:8bd25b30a6b02ed809706ec16b0a62872c95af45094fa637346c909a95d01764", size = 1125201, upload-time = "2026-06-04T01:01:32.962Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/b3/286ed774bdf747b41d5a8d1d4d300d19bc96162626a4642f398569834750/pybigtools-0.3.0-cp311-cp311-win_amd64.whl", hash = "sha256:c494f3cb48337432a722c690a872e1d3fb6e4205316ee919ec84998684d840be", size = 1388917, upload-time = "2026-06-04T01:01:34.063Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/97/8fc0c9a2d99f92039880e8a3fccdef2886fab74c29d892cbe50091f4e6a2/pybigtools-0.3.0-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:28bfda6980a7f6df8e83acb5890c47857712720d082bdb22ae53525bd178ff0e", size = 1508190, upload-time = "2026-06-04T01:01:35.416Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/ab/dd25977424221f310735a49993bebd8bd08539807c10bdea656a665e82d6/pybigtools-0.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:85c13c5baa45fef22b30a933ed81e96b2388ff94795a5a693d9ba38c0951a787", size = 1412638, upload-time = "2026-06-04T01:01:36.721Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/e8/897e03a7492aae9bebed33a1b6d7b4b9b81971a8aed2f6e10fb047566fc7/pybigtools-0.3.0-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:5b6b4e0f2613469c932506b14b8037a6721894b672878133d893a3b1d23d1bf3", size = 1507794, upload-time = "2026-06-04T01:01:37.894Z" },
+    { url = "https://files.pythonhosted.org/packages/34/9c/028f5e8a0e09df78cf9b6063fc46cd8da2da7519f440700570e88020f7be/pybigtools-0.3.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:cb61cbb60bc06d0a4ecfa1eff75462d0076938346bb66ae07eab5acd56c63ee8", size = 1587628, upload-time = "2026-06-04T01:01:39.095Z" },
+    { url = "https://files.pythonhosted.org/packages/83/35/54221657bcb2e3619ea1cb356584b5b37513ed53897311bed9e23050880b/pybigtools-0.3.0-cp312-cp312-win32.whl", hash = "sha256:32bc5fe213373c4d3fa775763e731bce257dd91b0c39a6a0ccda07f2d180f55b", size = 1127859, upload-time = "2026-06-04T01:01:40.352Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/60/2dc6a3ce42ea4a0aa211789aaef1d5ae0d903e9cdc9f267c2ff4da656b68/pybigtools-0.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:b97ff928edb4ca1b0eed60a0cb5c5f07679a839654c84b54dfa3580813f9548b", size = 1391582, upload-time = "2026-06-04T01:01:41.721Z" },
+    { url = "https://files.pythonhosted.org/packages/52/41/329df72d178f81ec49cf87336faa2a29f1923300274a86d6c199c0a846e3/pybigtools-0.3.0-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:d53d96e2d35d5cb3abe17b8cdf7468bd92ce7aa17aee2775af804c691686e0ef", size = 1507644, upload-time = "2026-06-04T01:01:42.994Z" },
+    { url = "https://files.pythonhosted.org/packages/1c/57/c89e427a9ce3fc422fe69ce7b7447a72f5964ba185f1f644ee8acce0435d/pybigtools-0.3.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:d839e6b930dbea54e215d7b1c74b2eadb75cc11b29a3185d5c80e7e953b3aa46", size = 1412217, upload-time = "2026-06-04T01:01:44.136Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/4b/ee29e64bbd3469f852cc300a1b15be5f80e94b804ed7d77105fbb6cd3666/pybigtools-0.3.0-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:8d3b5fc631ab3efd92b397cc4b7637cc8ff79d3cd9c466b9bd7e0c4f619f9121", size = 1507017, upload-time = "2026-06-04T01:01:45.299Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/61/ea208dfb53f86dd236359a189774fad79e49578c9b2c9bdc5596143c5b70/pybigtools-0.3.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:b3fd8df0b55df36710cb8ae8f0c69fa7845f479afc2709db8012dfa5f7a14bba", size = 1586499, upload-time = "2026-06-04T01:01:46.573Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/a0/ff0ac0891020d7afeb1cf919cc274278723b8f8492a738480eb1b93a626c/pybigtools-0.3.0-cp313-cp313-win32.whl", hash = "sha256:2464c75a4875578e2bce35f1fd9f13a1f542d07dbee777e7d283126dbfa8e85e", size = 1127885, upload-time = "2026-06-04T01:01:48.024Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/09/b8f095517f5921598c1e21e2c21fdf4fdbc6a0fc0bc2670a72e695904184/pybigtools-0.3.0-cp313-cp313-win_amd64.whl", hash = "sha256:8f4cc8e849ad743c54d74ef37f3dddacb5312d24f1b471e8b39aac61f0f2195c", size = 1391003, upload-time = "2026-06-04T01:01:49.356Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "3.11"
 source = { registry = "https://pypi.org/simple" }
@@ -4837,6 +4874,9 @@ anndata = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
+bigwig = [
+    { name = "pybigtools" },
+]
 biopython = [
     { name = "biopython" },
 ]
@@ -4871,6 +4911,7 @@ dev = [
     { name = "maturin" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "pandas", version = "3.0.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pybigtools" },
     { name = "pytest" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
@@ -4901,10 +4942,11 @@ requires-dist = [
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.0" },
     { name = "polars", specifier = ">=1.0" },
     { name = "pyarrow", marker = "extra == 'pandas'", specifier = ">=14" },
+    { name = "pybigtools", marker = "extra == 'bigwig'", specifier = ">=0.3" },
     { name = "scipy", marker = "extra == 'anndata'", specifier = ">=1.11" },
     { name = "scipy", marker = "extra == 'scipy'", specifier = ">=1.11" },
 ]
-provides-extras = ["anndata", "biopython", "h5py", "pandas", "plot", "scipy"]
+provides-extras = ["anndata", "bigwig", "biopython", "h5py", "pandas", "plot", "scipy"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4914,6 +4956,7 @@ dev = [
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "maturin", specifier = ">=1.9,<2" },
     { name = "pandas", specifier = ">=2.0" },
+    { name = "pybigtools", specifier = ">=0.3" },
     { name = "pytest", specifier = ">=8" },
     { name = "scipy", specifier = ">=1.15.3" },
 ]

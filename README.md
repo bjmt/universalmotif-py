@@ -33,7 +33,12 @@ matrix of matches, counts or best scores without keeping every hit, and
 into convolution filters and back, also taking the motif dictionaries of
 tangermeme and memelite, `one_hot()` and `from_one_hot()` encode sequences,
 and `read_modisco()` reads TF-MoDISco results as CWMs or PPMs, with
-`pip install universalmotif[h5py]`.
+`pip install universalmotif[h5py]`. Genomes in FASTA, bgzip or 2bit
+files can be opened with `Genome` and read a piece at a time, so peaks can
+be extracted with `extract_ranges()` and backgrounds drawn with
+`match_bkg()` without loading the whole genome, and `signal_stats()`
+summarises bigWig signal over ranges, which `match_bkg()` can also match
+on, with `pip install universalmotif[bigwig]`.
 
 ## Example
 
@@ -88,31 +93,6 @@ with underscores (`min.ic` becomes `min_ic`). Where the R package has both a
 full and a `_lite` version of a function, this package will provide the lite
 version under the plain name. Readers always return a list of motifs, and
 MEME site tables come back as polars DataFrames.
-
-## Comparison with TOMTOM
-
-`compare_motifs()` scores an alignment by the sum of the Pearson
-correlations of its columns and takes P-values from the distribution of
-that sum under a null of database columns, much as TOMTOM does with its
-Pearson distance. With `complete=True` it also scores whole queries as
-TOMTOM does by default: each query column is scored relative to the median
-of its correlations with the null columns, so that overhanging columns
-count as typical ones, and the P-value is that of the best of all the
-alignments tried. `scripts/compare_tomtom.py` runs both on the same motifs.
-
-With 72 motifs, 60 from CIS-BP and the 12 example motifs, against the 805
-plant motifs of JASPAR 2024:
-
-| | `complete=True`, TOMTOM default | default, TOMTOM `-incomplete-scores` |
-| --- | --- | --- |
-| log10 P-values, correlation over all 57,960 pairs | 0.999 | 0.988 |
-| P-value rank correlation within queries, median | 0.999 | 0.927 |
-| Each query's five best matches shared | 95% | 88% |
-| Same best match | 94% | 78% |
-| Strong matches on the same strand | 99% | 99% |
-
-Where the best match differs, the two choices are near ties, a tenth to a
-fifth of an order of magnitude apart.
 
 ## Development
 

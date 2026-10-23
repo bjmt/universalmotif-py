@@ -44,6 +44,8 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
 - **Scanning:** exact P-value thresholds, both strands, any alphabet, gapped
   motifs, and whole genomes scanned straight from a FASTA file in a few
   hundred MB.
+- **Genomes:** FASTA, bgzip and 2bit genomes read a piece at a time,
+  sequences of peaks, and bigWig signal over them to match backgrounds on.
 - **Single-cell ATAC:** sparse peak by motif match matrices, ready for
   AnnData and chromVAR-style analyses.
 - **Deep learning:** motifs as convolution filters and back, one-hot

@@ -241,7 +241,9 @@ def scan_sequences(
         [`PackedSequences`][universalmotif.PackedSequences] are scanned
         without decoding them, and a gzipped or plain FASTA file given as a
         path object such as a ``pathlib.Path`` is read and scanned a batch at
-        a time, so a genome can be scanned in a few hundred MB.
+        a time, so a genome can be scanned in a few hundred MB. A
+        [`Genome`][universalmotif.Genome] is scanned one chromosome at a
+        time.
     rc
         Also scan the reverse strand.
     no_overlaps
@@ -299,6 +301,25 @@ def scan_sequences(
             stacklevel=2,
         )
     _warn_unreachable(ms, pvalue)
+    from ._genome import Genome
+
+    if isinstance(sequences, Genome):
+        # One chromosome at a time, so only one is held in memory.
+        parts = []
+        for i, name in enumerate(sequences):
+            seq = sequences[name]
+            if i == 0:
+                _warn_alphabet_mismatch(ms, _sample_letters([seq]))
+            part = pl.DataFrame(
+                _core._scan_sequences(ms, [seq], pvalue, rc, overlaps, nthreads, use_gaps,
+                                      correct_gaps, motif_names, [name])
+            ).cast(_HIT_SCHEMA)
+            parts.append(part.with_columns(pl.lit(i, dtype=pl.Int64).alias("sequence_i")))
+            del seq
+        if not parts:
+            return pl.DataFrame(schema=_HIT_SCHEMA)
+        hits = pl.concat(parts).sort("motif_i", "sequence_i", "start", maintain_order=True)
+        return hits
     if isinstance(sequences, PackedSequences):
         hits = _core._scan_packed(ms, sequences._inner, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names)
     elif isinstance(sequences, os.PathLike):

@@ -10,6 +10,7 @@ import polars as pl
 
 from . import _core
 from ._analysis import _make_unique, _sequence_pairs, scan_sequences
+from ._genome import Genome, signal_stats
 from ._packed import PackedSequences
 from ._core import Motif
 from ._sequences import _seed
@@ -134,7 +135,8 @@ def motif_proximity(
         the chromosome names in ``sequence``. Give this, or give ``motifs``
         and ``sequences`` as a mapping from chromosome names to sequences to
         scan them with ``scan_pvalue`` and ``rc``; only chromosomes with
-        anchors are scanned.
+        anchors are scanned, and a [`Genome`][universalmotif.Genome] on disk
+        is read one of them at a time.
     anchors
         The anchor coordinates, as a DataFrame with ``chrom``, ``start``,
         ``end`` or ``width``, and optionally ``strand`` columns, or as
@@ -216,6 +218,16 @@ def motif_proximity(
                 raise ValueError("none of the anchor chromosomes are in sequences")
             hits = scan_sequences(motifs, sequences, pvalue=scan_pvalue, rc=rc, nthreads=nthreads)
             hits = hits.filter(pl.col("sequence").is_in(list(anchored)))
+            lengths = sequences.lengths
+        elif isinstance(sequences, Genome):
+            # Read and scanned one anchored chromosome at a time.
+            chroms = [c for c in sequences if c in anchored]
+            if not chroms:
+                raise ValueError("none of the anchor chromosomes are in sequences")
+            hits = pl.concat([
+                scan_sequences(motifs, {c: sequences[c]}, pvalue=scan_pvalue, rc=rc, nthreads=nthreads)
+                for c in chroms
+            ])
             lengths = sequences.lengths
         else:
             chroms = {k: v for k, v in sequences.items() if k in anchored}
@@ -324,6 +336,8 @@ def match_bkg(
     n_bins_length: int = 10,
     covariates=None,
     universe_covariates=None,
+    bigwig=None,
+    target_ranges=None,
     n_bins_covariates: int | Mapping[str, int] = 10,
     bin_type_covariates: str | Mapping[str, str] = "quantile",
     unique: bool = True,
@@ -348,9 +362,10 @@ def match_bkg(
         Candidate background sequences, as a list or a mapping from names.
     genome
         Instead of ``universe``, a mapping from chromosome names to
-        sequences, such as a genome read with
-        [`read_fasta()`][universalmotif.read_fasta], to draw
-        ``n_candidates`` random windows from. The windows take their widths
+        sequences, such as a [`Genome`][universalmotif.Genome] on disk or a
+        genome read with [`read_fasta()`][universalmotif.read_fasta], to draw
+        ``n_candidates`` random windows from; from a genome on disk, only the
+        windows are read. The windows take their widths
         from the targets, lie on ``chromosomes``, which defaults to all of
         them, and avoid ``exclude``, a range table such as the target peaks.
         ``n_candidates`` defaults to ``max(10000, 10 * len(sequences))``.
@@ -360,6 +375,14 @@ def match_bkg(
         ``n_bins_covariates`` and ``bin_type_covariates``, which is
         ``"quantile"`` or ``"equalwidth"``, apply to all of them or are given
         per name.
+    bigwig, target_ranges
+        With ``genome``, match on bigWig signal as well, such as chromatin
+        accessibility: ``bigwig`` is a path or a mapping from covariate names
+        to paths, and ``target_ranges`` holds the coordinates of the targets
+        in the same order, as a range table or (chrom, start, end) tuples.
+        The mean signal over each target and each window, computed with
+        [`signal_stats()`][universalmotif.signal_stats], becomes a covariate
+        binned as above. Needs the ``bigwig`` extra.
     return_indices
         Return a DataFrame of the matches instead, with 0-based ``target_i``
         and ``universe_i``, the GC fraction and length of each, any
@@ -394,7 +417,13 @@ def match_bkg(
     if (universe is None) == (genome is None):
         raise ValueError("give exactly one of universe and genome")
     if covariates is not None and genome is not None:
-        raise ValueError("covariates need an explicit universe with universe_covariates, not a genome")
+        raise ValueError("covariates need an explicit universe with universe_covariates, not a genome; "
+                         "use bigwig and target_ranges for signal over the genome")
+    if (bigwig is None) != (target_ranges is None):
+        raise ValueError("bigwig and target_ranges go together")
+    if bigwig is not None and genome is None:
+        raise ValueError("bigwig needs a genome to draw windows from; with a universe, give "
+                         "covariates from signal_stats() instead")
     if any(set(s) - _NUCLEOTIDES for s in seqs):
         raise ValueError("match_bkg() only supports DNA and RNA sequences")
     names: list[str] | None
@@ -409,21 +438,31 @@ def match_bkg(
         exclude_cols = _cols(excl, index) if excl is not None else ([], [], [], [])
         if n_candidates is None:
             n_candidates = max(10000, 10 * len(seqs))
-        if isinstance(genome, PackedSequences):
-            # Decode just the windows, not whole chromosomes.
+        if isinstance(genome, (Genome, PackedSequences)):
+            # Read or decode just the windows, not whole chromosomes.
             chrom_lengths = genome.lengths
             lens = [chrom_lengths[c] for c in chroms]
-            window = genome.subseq
         else:
             lens = [len(genome[c]) for c in chroms]
-
-            def window(c: str, s: int, e: int) -> str:
-                return genome[c][s - 1 : e]
         windows = _core._genome_windows(lens, [len(s) for s in seqs], n_candidates, exclude_cols,
                                         _seed(seed))
-        uni = [window(chroms[c], s, e) for c, s, e in windows]
-        names = [f"{chroms[c]}:{s}-{e}" for c, s, e in windows]
+        win_chroms = [chroms[c] for c, _, _ in windows]
+        win_starts = [s for _, s, _ in windows]
+        win_ends = [e for _, _, e in windows]
+        if isinstance(genome, Genome):
+            uni = genome._fetch(win_chroms, win_starts, win_ends)
+        elif isinstance(genome, PackedSequences):
+            uni = [genome.subseq(c, s, e) for c, s, e in zip(win_chroms, win_starts, win_ends)]
+        else:
+            uni = [genome[c][s - 1:e] for c, s, e in zip(win_chroms, win_starts, win_ends)]
+        names = [f"{c}:{s}-{e}" for c, s, e in zip(win_chroms, win_starts, win_ends)]
         seed = None if seed is None else seed + 1
+        if bigwig is not None:
+            tr = _range_table(target_ranges, "target_ranges")
+            if tr.height != len(seqs):
+                raise ValueError(f"target_ranges has {tr.height} ranges for {len(seqs)} sequences")
+            covariates = signal_stats(bigwig, tr)
+            universe_covariates = signal_stats(bigwig, list(zip(win_chroms, win_starts, win_ends)))
     else:
         names_u, uni = _sequence_pairs(universe)
         names = names_u if isinstance(universe, Mapping) else None

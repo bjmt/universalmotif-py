@@ -35,6 +35,8 @@ optimisations.
 - `anndata`: AnnData and SciPy, for storing motif matches with single-cell
   ATAC data.
 - `h5py`: h5py, for reading TF-MoDISco results with `read_modisco()`.
+- `bigwig`: pybigtools, for reading bigWig signal with `signal_stats()`
+  and matching backgrounds on it with `match_bkg()`.
 - `biopython`: Biopython, for converting motifs to and from `Bio.motifs`
   with `to_biopython()` and `from_biopython()`. The database functions need
   no extra, since they download with the standard library.

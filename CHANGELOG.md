@@ -20,3 +20,9 @@ the R package:
 - Sequence utilities: shuffling, random sequences, k-lets, complexity,
   masking and sliding windows.
 - Sequence logos, motif trees and result plots drawn with matplotlib.
+- Links to the wider ecosystem: motifs fetched from JASPAR, HOCOMOCO and
+  CIS-BP, conversion to and from Biopython, logos in Jupyter and for
+  logomaker, motif match matrices for AnnData and pychromVAR, convolution
+  filters, one-hot sequences and TF-MoDISco results, genomes read a piece
+  at a time from FASTA, bgzip and 2bit files, and bigWig signal for
+  matching backgrounds.

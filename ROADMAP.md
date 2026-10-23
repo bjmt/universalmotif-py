@@ -1,7 +1,7 @@
 # Possible extensions
 
 Ideas for connecting the package to the rest of the Python ecosystem. The
-first four are done; the others are planned in the order below.
+first five are done; the last is planned next.
 
 ## Plan
 
@@ -17,8 +17,10 @@ In order:
 4. Deep-learning interoperability, and a check of `compare_motifs()`
    against TOMTOM (done: `to_filters()`, `from_filters()`, `one_hot()`,
    `from_one_hot()`, `read_modisco()`, and `scripts/compare_tomtom.py`, with
-   the results in the README).
-5. Indexed genomes and bigWig covariates.
+   the results in the documentation of `compare_motifs()`).
+5. Indexed genomes and bigWig covariates (done: `Genome`, read in the
+   Rust crate, `extract_ranges()` and `signal_stats()`, and `match_bkg()`
+   with `bigwig` and `target_ranges`).
 6. Genomic interval libraries.
 
 A command line is left out, since yamtk already covers that ground.
@@ -31,7 +33,7 @@ all: databases can be fetched with the standard library, logos can be drawn
 as SVG from the glyph outlines the package already computes, filters can be
 exchanged as numpy arrays, and FASTA indexes and 2bit files are simple
 enough to read in the Rust crate. Biopython, scipy (with AnnData as a
-further option) and pyBigWig would be extras. Each optional function says
+further option), h5py and pybigtools are extras. Each optional function says
 so in its docstring, its tests skip when the extra is missing, and one CI
 job installs every extra.
 
@@ -56,11 +58,13 @@ job installs every extra.
 
 ## Indexed genomes and signal tracks
 
-- Read genome windows on demand with `pyfaidx` or `pysam.FastaFile` (and
-  `py2bit` for 2bit files), so `match_bkg(genome=...)` and
-  `motif_proximity()` do not need the whole genome in memory.
-- Take covariates for `match_bkg()` straight from bigWig signal with
-  `pyBigWig`.
+- Read genome windows on demand from FASTA, bgzip and 2bit files, so
+  `match_bkg(genome=...)` and `motif_proximity()` do not need the whole
+  genome in memory. This is done in the Rust crate, with the same indexes
+  as `samtools faidx`, rather than with pyfaidx, pysam or py2bit.
+- Take covariates for `match_bkg()` straight from bigWig signal, which is
+  done with pybigtools, a Rust library with prebuilt wheels, rather than
+  pyBigWig.
 
 ## Deep-learning tools
 

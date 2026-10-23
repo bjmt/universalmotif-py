@@ -109,6 +109,7 @@ nav:
       - Comparison and clustering: reference/comparison.md
       - Enrichment and discovery: reference/enrichment.md
       - Sequences: reference/sequences.md
+      - Genomes and signal: reference/genomes.md
       - Genomic intervals: reference/genomic.md
       - Plotting: reference/plotting.md
       - Databases and Biopython: reference/databases.md

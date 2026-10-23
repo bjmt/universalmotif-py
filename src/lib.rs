@@ -18,6 +18,7 @@ mod arrow;
 mod enrichment;
 mod genomic;
 mod io;
+mod genome;
 mod packed;
 mod plot;
 mod sequences;
@@ -679,6 +680,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     plot::register(m)?;
     genomic::register(m)?;
     packed::register(m)?;
+    genome::register(m)?;
     utils::register(m)?;
     Ok(())
 }
