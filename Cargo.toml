@@ -10,7 +10,9 @@ name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-universalmotif = { path = "../universalmotif-rs" }
+# The crate next door during development, and the published version for
+# builds from a source distribution.
+universalmotif = { version = "0.1", path = "../universalmotif-rs" }
 arrow-array = "59"
 arrow-schema = "59"
 numpy = "0.30.0"
