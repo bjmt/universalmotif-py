@@ -207,3 +207,54 @@ def test_read_contributions_numpy(tmp_path):
         um.read_contributions(tmp_path / "shap.npz")
     with pytest.raises(ValueError, match="sequences of length"):
         um.read_contributions(tmp_path / "shap.npz", sequences=["ACGTA"])
+
+
+def test_mutagenesis_round_trip():
+    seq = "ACGNT"
+    batch = um.mutagenesis(seq)
+    # Three substitutions per known letter and four for the N.
+    assert batch.shape == (1 + 3 * 4 + 4, 4, 5)
+    assert um.from_one_hot(batch[:1]) == [seq]
+    variants = um.from_one_hot(batch[1:])
+    assert len(set(variants)) == len(variants) and seq not in variants
+    assert all(sum(x != y for x, y in zip(v, seq)) == 1 for v in variants)
+    # A model scoring the number of Gs gives +1 for every new G and -1 for losing one.
+    preds = batch[:, 2, :].sum(axis=1)
+    eff = um.mutagenesis_effects(preds, seq)
+    assert eff.shape == (4, 5)
+    assert eff[2, 0] == 1 and eff[0, 2] == -1 and eff[2, 2] == 0 and eff[2, 3] == 1
+    two = um.mutagenesis_effects(np.stack([preds, -preds], axis=1), seq)
+    assert two.shape == (2, 4, 5) and np.array_equal(two[1], -eff)
+    centred = um.mutagenesis_effects(preds, seq, centre=True)
+    assert np.allclose(centred.mean(axis=0), 0)
+    sub = um.mutagenesis(seq, region=(1, 3))
+    assert sub.shape == (7, 4, 5)
+    assert um.mutagenesis_effects(sub[:, 2, :].sum(axis=1), seq, region=(1, 3)).shape == (4, 2)
+    with pytest.raises(ValueError, match="expected 7 predictions"):
+        um.mutagenesis_effects(np.zeros(5), seq, region=(1, 3))
+    with pytest.raises(ValueError, match="region"):
+        um.mutagenesis(seq, region=(3, 9))
+    with pytest.raises(TypeError, match="single sequence"):
+        um.mutagenesis(["ACGT"])
+
+
+def test_insert_sites_and_spacings():
+    bkg = {"a": "AAAAAAAAAA", "b": "CCCCCCCCCC"}
+    out = um.insert_sites(bkg, "TGA")
+    assert out == {"a": "AAATGAAAAA", "b": "CCCTGACCCC"}
+    motif = um.create_motif("TTGACG")
+    assert um.insert_sites("AAAAAAAAAA", motif, positions=4) == "AAAATTGACG"
+    assert um.insert_sites(["AAAAAA"], ["GG", "TT"], positions=[0, 4]) == ["GGAATT"]
+    with pytest.raises(ValueError, match="does not fit"):
+        um.insert_sites("AAAA", "TTT", positions=2)
+    with pytest.raises(ValueError, match="positions of several"):
+        um.insert_sites("AAAA", ["T", "G"])
+    res = um.site_spacings(["AAAAAAAAAAAA", "CCCCCCCCCCCC"], "GG", "TT", spacings=range(0, 5, 2))
+    assert list(res) == [0, 2, 4]
+    assert res[4] == ["AAGGAAAATTAA", "CCGGCCCCTTCC"]
+    # The first site stays put as the second moves.
+    assert {s.index("GG") for v in res.values() for s in v} == {2}
+    stacked = np.stack([um.one_hot(v) for v in res.values()])
+    assert stacked.shape == (3, 2, 4, 12)
+    with pytest.raises(ValueError, match="spacings"):
+        um.site_spacings("AAAA", "G", "T", spacings=[-1])

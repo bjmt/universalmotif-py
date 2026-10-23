@@ -21,13 +21,7 @@ as bigWig tracks with [`signal_values()`][universalmotif.signal_values].
 The [motifs and deep learning](../guides/deep-learning.ipynb) guide puts
 these together on the outputs of a published model.
 
-::: universalmotif.to_filters
-
-::: universalmotif.from_filters
-
-::: universalmotif.one_hot
-
-::: universalmotif.from_one_hot
+## Reading and drawing scores
 
 ::: universalmotif.read_modisco
 
@@ -36,3 +30,35 @@ these together on the outputs of a published model.
 ::: universalmotif.ContributionScores
     options:
       members: [view]
+
+## Sequences and filters
+
+::: universalmotif.one_hot
+
+::: universalmotif.from_one_hot
+
+::: universalmotif.to_filters
+
+::: universalmotif.from_filters
+
+## Probing a model
+
+These make batches of sequences for a model of your own, without depending
+on any deep-learning library. [`mutagenesis()`][universalmotif.mutagenesis]
+makes every single-letter substitution of a sequence, and
+[`mutagenesis_effects()`][universalmotif.mutagenesis_effects] turns the
+model's predictions for them into an array that
+[`view_attributions()`][universalmotif.view_attributions] can draw.
+[`insert_sites()`][universalmotif.insert_sites] writes the same sites into
+background sequences, and [`site_spacings()`][universalmotif.site_spacings]
+places two sites at a range of distances apart.
+[`view_variant()`][universalmotif.view_variant] compares the scores of a
+sequence with those of a variant of it.
+
+::: universalmotif.mutagenesis
+
+::: universalmotif.mutagenesis_effects
+
+::: universalmotif.insert_sites
+
+::: universalmotif.site_spacings

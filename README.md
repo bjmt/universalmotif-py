@@ -94,8 +94,9 @@ found = um.motif_finder(targets, controls, seed=1)
   genomic coordinates, with ranges exchanged with PyRanges and polars-bio.
 - **Single-cell ATAC and deep learning:** sparse peak by motif matrices for
   AnnData and pychromVAR, motifs as convolution filters and back, one-hot
-  sequences, TF-MoDISco results, and plots of attribution scores along
-  sequences.
+  sequences, TF-MoDISco results, plots of attribution scores along
+  sequences, and batches for in-silico mutagenesis and motif insertion
+  experiments.
 - **Sequences:** shuffling that keeps k-mer counts, random sequences, k-mer
   backgrounds, complexity, masking and sliding windows.
 - **Plots:** sequence logos, motif trees and plots of the results above,

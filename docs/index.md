@@ -51,8 +51,9 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
 - **Single-cell ATAC:** sparse peak by motif match matrices, ready for
   AnnData and chromVAR-style analyses.
 - **Deep learning:** motifs as convolution filters and back, one-hot
-  sequences, TF-MoDISco results read as CWMs, and attribution scores drawn
-  along sequences.
+  sequences, TF-MoDISco results read as CWMs, attribution scores drawn
+  along sequences, and batches for in-silico mutagenesis and motif
+  insertion experiments.
 - **Comparison:** motif similarity with P-values, merging of similar motifs,
   and trees.
 - **Statistics:** enrichment, co-occurrence, positional enrichment,

@@ -266,11 +266,11 @@ def test_view_attributions():
     ax = um.view_attributions(per_pos, seq, start=1000, hits=hits)
     assert ax.get_xticklabels()[0].get_text() == "1000"
     assert [t.get_text() for t in ax.texts] == hits["motif"].to_list()
-    um.view_attributions(per_pos, seq, flip_neg=True)
+    um.view_attributions(per_pos, seq, flip_neg=False)
     ax = um.view_attributions(per_letter, seq, kind="all", region=(4, 12))
     assert ax.get_xlim() == (0.5, 8.5)
     ax = um.view_attributions(per_letter, seq, kind="heatmap")
-    assert len(ax.figure.axes) == 2  # the heatmap and its colour bar
+    assert len(ax.child_axes) == 1  # the colour bar, outside the panel
     plt.close("all")
 
     with pytest.raises(ValueError, match="need the sequence"):
@@ -297,3 +297,26 @@ def test_view_motifs_into_existing_axes():
     assert len(left.collections) > 0 and not right.collections
     with pytest.raises(ValueError, match="single motif"):
         um.view_motifs(motifs, ax=right)
+
+
+def test_view_variant():
+    seq = "ACGTTGACTCAGT"
+    ref = np.zeros(len(seq))
+    ref[5:11] = [0.3, 0.6, 0.5, 0.6, 0.6, 0.4]
+    alt = ref * 0.2
+    fig = um.view_variant(ref, alt, seq, position=107, alt="A", start=100)
+    top, middle, bottom = fig.axes
+    assert top.get_ylim() == middle.get_ylim()
+    assert middle.get_ylabel() == "Alternative (A)"
+    heights = [p.get_height() for p in bottom.containers[0]]
+    assert np.allclose(heights, alt - ref)
+    assert [t.get_text() for t in bottom.get_xticklabels()] == ["100", "105", "110"]
+    assert not top.spines["bottom"].get_visible()
+    fig = um.view_variant(ref, alt, seq, position=7, alt="A", region=(4, 12))
+    assert len(fig.axes[2].containers[0]) == 8
+    with pytest.raises(ValueError, match="kind"):
+        um.view_variant(ref, alt, seq, position=7, alt="A", kind="heatmap")
+    with pytest.raises(ValueError, match="single letter"):
+        um.view_variant(ref, alt, seq, position=7, alt="N")
+    with pytest.raises(ValueError, match="include position"):
+        um.view_variant(ref, alt, seq, position=7, alt="A", region=(0, 5))

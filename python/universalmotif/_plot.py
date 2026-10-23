@@ -941,9 +941,9 @@ def _attribution_matrix(scores, sequence, alphabet: str, kind: str) -> np.ndarra
     return m
 
 
-def _nice_step(span: int) -> int:
+def _nice_step(span: int, max_ticks: int = 12) -> int:
     for step in (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10_000, 20_000, 50_000):
-        if span / step <= 12:
+        if span / step <= max_ticks:
             return step
     return 100_000
 
@@ -957,7 +957,7 @@ def view_attributions(
     region: tuple[int, int] | None = None,
     hits: pl.DataFrame | None = None,
     colour_scheme: Mapping[str, str] | None = None,
-    flip_neg: bool = False,
+    flip_neg: bool = True,
     ylabel: str | None = None,
     figsize: tuple[float, float] | None = None,
     ax: Axes | None = None,
@@ -994,7 +994,8 @@ def view_attributions(
     table has one, with positions counted along the sequence from 0.
     Letters are coloured by ``colour_scheme``, by default the package's
     colours for DNA, RNA and amino acids, and letters below the axis are
-    drawn upside down with ``flip_neg``.
+    drawn upside down, so that they read outward from zero, unless
+    ``flip_neg`` is ``False``.
 
     Needs the ``plot`` extra.
 
@@ -1026,7 +1027,8 @@ def view_attributions(
     seq = None if sequence is None else sequence[a - start:b - start]
     n = m.shape[1]
     plt = _pyplot()
-    if ax is None:
+    own_figure = ax is None
+    if own_figure:
         width = min(max(4.0, 0.12 * n + 1.5), 16.0)
         _, ax = plt.subplots(figsize=figsize or (width, 3.2 if kind == "heatmap" else 2.6))
     if colour_scheme is None:
@@ -1041,21 +1043,33 @@ def view_attributions(
             xs = [j + 1 for j, c in enumerate(seq) if c.upper() in index]
             ys = [index[c.upper()] for c in seq if c.upper() in index]
             ax.scatter(xs, ys, s=min(30.0, 900.0 / max(n, 1)), color="black", zorder=3)
-        ax.figure.colorbar(im, ax=ax, label=ylabel or "Score", fraction=0.04, pad=0.01)
+        # The colour bar sits outside the panel rather than taking width from
+        # it, so the heatmap lines up with logos drawn above or below it.
+        cax = ax.inset_axes((1.01, 0.0, 0.015, 1.0))
+        ax.figure.colorbar(im, cax=cax, label=ylabel or "Score")
     else:
         hi, lo = max(float(m.clip(min=0).sum(axis=0).max()), 0.0), min(float(m.clip(max=0).sum(axis=0).min()), 0.0)
         # Scores come at any scale, so the smallest letter drawn and the gaps
         # between letters are a share of the tallest column.
         scale = max(hi, -lo) or 1.0
+        # With every letter drawn, each position's letters are stacked by
+        # height, as in motif logos.
         view_logo(m, letters=list(alphabet), colour_scheme=colour_scheme, flip_neg=flip_neg,
-                  min_height=0.01 * scale, y_spacer=0.01 * scale, ax=ax)
+                  min_height=0.01 * scale, y_spacer=0.01 * scale, sort_positions=kind == "all",
+                  ax=ax)
         ax.set_axis_on()
         ax.axhline(0, color="0.6", linewidth=0.6, zorder=0)
         pad = 0.08 * ((hi - lo) or 1.0)
         ax.set_ylim(lo - (pad if lo < 0 else 0), hi + pad)
         ax.set_ylabel(ylabel or "Attribution")
-        for side in ("top", "right"):
+        # The zero line is the baseline, so the x-axis line is left out.
+        for side in ("top", "right", "bottom"):
             ax.spines[side].set_visible(False)
+        # The y-axis line stops at the scores rather than at the padding, and
+        # only ticks along it are kept.
+        ax.spines["left"].set_bounds(lo, hi + pad)
+        eps = 1e-9 * ((hi - lo) or 1.0)
+        ax.set_yticks([t for t in ax.get_yticks() if lo - eps <= t <= hi + pad + eps])
     if hits is not None:
         for col in ("start", "end"):
             if col not in hits.columns:
@@ -1069,13 +1083,126 @@ def view_attributions(
             if name is not None:
                 ax.annotate(str(name), ((s + e) / 2 - a + 0.5, 1.0), xycoords=("data", "axes fraction"),
                             ha="center", va="bottom", fontsize=8, color="0.3", annotation_clip=False)
-    step = _nice_step(n)
+    # As many ticks as fit across the panel, allowing for long positions.
+    width_in = ax.get_position().width * ax.figure.get_figwidth()
+    max_ticks = max(2, min(12, int(width_in / (0.08 * len(str(b)) + 0.25))))
+    step = _nice_step(n, max_ticks)
     first = -(-a // step) * step
     ticks = list(range(first, b, step))
     ax.set_xticks([t - a + 1 for t in ticks], [str(t) for t in ticks])
     ax.set_xlim(0.5, n + 0.5)
     ax.set_xlabel("Position")
+    if own_figure:
+        ax.figure.tight_layout()
     return ax
+
+
+def view_variant(
+    ref_scores: Any,
+    alt_scores: Any,
+    sequence: str,
+    position: int,
+    alt: str,
+    kind: str = "observed",
+    alphabet: str = "ACGT",
+    start: int = 0,
+    region: tuple[int, int] | None = None,
+    colour_scheme: Mapping[str, str] | None = None,
+    flip_neg: bool = True,
+    figsize: tuple[float, float] | None = None,
+) -> Figure:
+    """Draw the attribution scores of a sequence and of the same sequence
+    with one letter changed, one above the other, with their difference
+    below.
+
+    ``ref_scores`` are the scores of ``sequence`` and ``alt_scores`` those of
+    the sequence with ``alt`` at ``position``, in any of the forms
+    [`view_attributions()`][universalmotif.view_attributions] takes, drawn
+    with its ``kind`` of ``"observed"`` or ``"all"``. ``position`` and
+    ``region`` are given in the same positions as the axis, which start at
+    ``start``. The two logos share a y-axis so that they can be compared,
+    the changed position is shaded, and the bottom panel shows how the total
+    score at each position changes, alternative minus reference.
+
+    Needs the ``plot`` extra.
+
+    Examples
+    --------
+    >>> import matplotlib.pyplot as plt
+    >>> import numpy as np
+    >>> import universalmotif as um
+    >>> seq = "ACGTTGACTCAGT"
+    >>> ref = np.zeros(len(seq))
+    >>> ref[5:11] = [0.3, 0.6, 0.5, 0.6, 0.6, 0.4]
+    >>> alt = ref * 0.2
+    >>> fig = um.view_variant(ref, alt, seq, position=7, alt="A")
+    >>> len(fig.axes)
+    3
+    >>> plt.close(fig)
+    """
+    if kind not in ("observed", "all"):
+        raise ValueError('kind must be "observed" or "all"')
+    if len(alt) != 1 or alt.upper() not in alphabet.upper():
+        raise ValueError(f"alt must be a single letter of {alphabet}")
+    i = int(position) - start
+    if not 0 <= i < len(sequence):
+        raise ValueError(f"position must lie within {start} to {start + len(sequence)}")
+    alt_seq = sequence[:i] + alt + sequence[i + 1:]
+    m_ref = _attribution_matrix(ref_scores, sequence, alphabet, kind)
+    m_alt = _attribution_matrix(alt_scores, alt_seq, alphabet, kind)
+    a, b = (start, start + len(sequence)) if region is None else (int(region[0]), int(region[1]))
+    if not start <= a <= position < b <= start + len(sequence):
+        raise ValueError(f"region must lie within {start} to {start + len(sequence)} and include position")
+    plt = _pyplot()
+    n = b - a
+    if figsize is None:
+        figsize = (min(max(4.0, 0.12 * n + 1.5), 16.0), 6.0)
+    fig, axes = plt.subplots(3, 1, figsize=figsize, gridspec_kw={"height_ratios": [1, 1, 0.7]})
+    for ax, m, seq, label in ((axes[0], m_ref, sequence, "Reference"),
+                              (axes[1], m_alt, alt_seq, f"Alternative ({alt})")):
+        view_attributions(m, seq, kind="all", alphabet=alphabet, start=start, region=(a, b),
+                          colour_scheme=colour_scheme, flip_neg=flip_neg, ylabel=label, ax=ax)
+        ax.set_xlabel("")
+        ax.tick_params(axis="x", labelbottom=False, length=0)
+    from matplotlib.ticker import MaxNLocator
+
+    lo = min(axes[0].get_ylim()[0], axes[1].get_ylim()[0])
+    hi = max(axes[0].get_ylim()[1], axes[1].get_ylim()[1])
+    for ax in axes[:2]:
+        low = ax.spines["left"].get_bounds()[0]
+        ax.set_ylim(lo, hi)
+        ax.spines["left"].set_bounds(low, hi)
+        ax.set_yticks([t for t in MaxNLocator(nbins=4).tick_values(lo, hi)
+                       if low - 1e-12 <= t <= hi + 1e-12])
+    diff = (m_alt.sum(axis=0) - m_ref.sum(axis=0))[a - start:b - start]
+    axes[2].bar(np.arange(1, n + 1), diff, width=0.8,
+                color=np.where(diff >= 0, "#C0504D", "#4F81BD"))
+    axes[2].axhline(0, color="0.6", linewidth=0.6)
+    ticks = axes[0].get_xticks()
+    axes[2].set_xticks(ticks, [str(round(t) + a - 1) for t in ticks])
+    axes[2].set_xlim(axes[0].get_xlim())
+    axes[2].set_ylabel("Difference")
+    axes[2].set_xlabel("Position")
+    for side in ("top", "right", "bottom"):
+        axes[2].spines[side].set_visible(False)
+    d_lo, d_hi = min(float(diff.min()), 0.0), max(float(diff.max()), 0.0)
+    axes[2].spines["left"].set_bounds(d_lo, d_hi)
+    axes[2].set_yticks([t for t in axes[2].get_yticks() if d_lo - 1e-12 <= t <= d_hi + 1e-12])
+    fig.tight_layout()
+    # One band through all three panels and the gaps between them, drawn
+    # behind see-through panels.
+    from matplotlib.patches import Rectangle
+    from matplotlib.transforms import blended_transform_factory
+
+    bottom = axes[2].get_position().y0
+    top = axes[0].get_position().y1
+    band = Rectangle((position - a + 0.5, bottom), 1, top - bottom, facecolor="#F2C14E", alpha=0.25,
+                     linewidth=0, zorder=-1,
+                     transform=blended_transform_factory(axes[0].transData, fig.transFigure))
+    fig.add_artist(band)
+    for ax in axes:
+        ax.set_facecolor("none")
+    return fig
 
 
 __all__ = [
@@ -1088,4 +1215,5 @@ __all__ = [
     "view_attributions",
     "view_logo",
     "view_motifs",
+    "view_variant",
 ]

@@ -485,12 +485,236 @@ def read_contributions(
     return ContributionScores(values, seqs, names, ranges)
 
 
+def _substitutions(ref: np.ndarray, start: int, end: int) -> tuple[np.ndarray, np.ndarray]:
+    """Positions and letter indices of every single-letter substitution of a
+    one-hot sequence between ``start`` and ``end``, in order."""
+    pos, let = [], []
+    for p in range(start, end):
+        for i in range(ref.shape[0]):
+            if ref[i, p] == 0:
+                pos.append(p)
+                let.append(i)
+    return np.array(pos, dtype=int), np.array(let, dtype=int)
+
+
+def _mutagenesis_region(sequence: str, region: tuple[int, int] | None) -> tuple[int, int]:
+    if not isinstance(sequence, str):
+        raise TypeError("give a single sequence as a string")
+    a, b = (0, len(sequence)) if region is None else (int(region[0]), int(region[1]))
+    if not 0 <= a < b <= len(sequence):
+        raise ValueError(f"region must lie within 0 to {len(sequence)}")
+    return a, b
+
+
+def mutagenesis(
+    sequence: str,
+    alphabet: str = "ACGT",
+    region: tuple[int, int] | None = None,
+    dtype: Any = np.float32,
+) -> np.ndarray:
+    """Every single-letter substitution of a sequence, one-hot encoded for a
+    model.
+
+    Returns an array of shape (variants, letters, length) whose first entry
+    is the sequence itself. It is followed, for each position of ``region``
+    in turn, by the sequence with each other letter of ``alphabet`` at that
+    position, in alphabet order. ``region`` is a (start, end) pair counted
+    from 0 with the end left out, and is the whole sequence by default.
+    Positions holding a letter outside the alphabet, such as N, get every
+    letter. A model's predictions for the batch, in the same order, are
+    turned into the effect of each substitution by
+    [`mutagenesis_effects()`][universalmotif.mutagenesis_effects].
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> batch = um.mutagenesis("ACGT")
+    >>> batch.shape
+    (13, 4, 4)
+    >>> um.from_one_hot(batch[:4])
+    ['ACGT', 'CCGT', 'GCGT', 'TCGT']
+    """
+    a, b = _mutagenesis_region(sequence, region)
+    ref = one_hot(sequence, alphabet=alphabet, dtype=dtype)
+    pos, let = _substitutions(ref[0], a, b)
+    out = np.repeat(ref, len(pos) + 1, axis=0)
+    rows = np.arange(1, len(pos) + 1)
+    out[rows, :, pos] = 0
+    out[rows, let, pos] = 1
+    return out
+
+
+def mutagenesis_effects(
+    predictions: Any,
+    sequence: str,
+    alphabet: str = "ACGT",
+    region: tuple[int, int] | None = None,
+    centre: bool = False,
+) -> np.ndarray:
+    """The effect of each single-letter substitution, from a model's
+    predictions for the batch made by
+    [`mutagenesis()`][universalmotif.mutagenesis].
+
+    ``predictions`` holds one prediction per entry of the batch, in order,
+    with the sequence's own first; ``sequence``, ``alphabet`` and ``region``
+    must be those the batch was made with. The effect of a substitution is
+    its prediction minus the sequence's, and the letters of the sequence
+    get 0. Returns an array of shape (letters, positions of ``region``), or
+    with several outputs per prediction, given as an array of shape
+    (variants, outputs), one of shape (outputs, letters, positions). With
+    ``centre``, the mean effect at each position is subtracted, as is common
+    before drawing the effects as attributions with
+    [`view_attributions()`][universalmotif.view_attributions].
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import universalmotif as um
+    >>> batch = um.mutagenesis("ACGT")
+    >>> preds = batch[:, 0, :].sum(axis=1)  # a model that counts As
+    >>> um.mutagenesis_effects(preds, "ACGT").astype(int)
+    array([[ 0,  1,  1,  1],
+           [-1,  0,  0,  0],
+           [-1,  0,  0,  0],
+           [-1,  0,  0,  0]])
+    """
+    a, b = _mutagenesis_region(sequence, region)
+    ref = one_hot(sequence, alphabet=alphabet)
+    pos, let = _substitutions(ref[0], a, b)
+    pred = _to_numpy(predictions)
+    if pred.ndim == 0 or pred.shape[0] != len(pos) + 1:
+        raise ValueError(f"expected {len(pos) + 1} predictions, one for the sequence and one per "
+                         f"substitution, not {pred.shape[0] if pred.ndim else 0}")
+    diff = pred[1:] - pred[0]
+    out = np.zeros((len(alphabet), b - a) + pred.shape[1:])
+    out[let, pos - a] = diff
+    if centre:
+        out = out - out.mean(axis=0, keepdims=True)
+    if pred.ndim > 1:
+        out = np.moveaxis(out, (0, 1), (-2, -1))
+    return out
+
+
+def _site_letters(site: Any) -> str:
+    """A site as letters: a string as it is, or a motif's most probable
+    letter at each position."""
+    if isinstance(site, Motif):
+        ppm = convert_type(site, "PPM").matrix
+        letters = np.array(list(site.letters))
+        return "".join(letters[np.argmax(ppm, axis=0)])
+    if not isinstance(site, str) or not site:
+        raise TypeError("a site must be a non-empty string or a motif")
+    return site
+
+
+def insert_sites(
+    sequences: str | Sequence[str] | Mapping[str, str],
+    sites: Any,
+    positions: int | Sequence[int] | None = None,
+):
+    """Write the same sites into every sequence, for measuring a model's
+    response to them.
+
+    ``sites`` is a site given as a string, a motif, whose most probable
+    letter at each position is used, or a list of these to insert together.
+    ``positions`` gives the start of each site, counted from 0; by default a
+    single site is centred in each sequence, rounding down. Sites overwrite
+    the letters where they land, later ones over earlier ones, and must fit
+    within every sequence.
+
+    Unlike [`implant_motifs()`][universalmotif.implant_motifs], which draws a
+    new site from a motif for every placement, the same letters go into
+    every sequence, as when comparing a model's predictions for background
+    sequences, such as from
+    [`shuffle_sequences()`][universalmotif.shuffle_sequences], with and
+    without a motif. Returns the new sequences in the same form as the
+    input.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> bkg = ["AAAAAAAAAA", "CCCCCCCCCC"]
+    >>> um.insert_sites(bkg, "TGACTCA")
+    ['ATGACTCAAA', 'CTGACTCACC']
+    >>> um.insert_sites(bkg, ["GG", "TT"], positions=[0, 8])
+    ['GGAAAAAATT', 'GGCCCCCCTT']
+    """
+    names, seqs = _sequence_pairs(sequences)
+    several = isinstance(sites, (list, tuple))
+    letters = [_site_letters(x) for x in sites] if several else [_site_letters(sites)]
+    if positions is None:
+        if len(letters) > 1:
+            raise ValueError("give the positions of several sites")
+        starts = None
+    else:
+        starts = [int(positions)] if np.ndim(positions) == 0 else [int(p) for p in positions]
+        if len(starts) != len(letters):
+            raise ValueError(f"{len(starts)} positions for {len(letters)} sites")
+    out = []
+    for seq in seqs:
+        new = list(seq)
+        for k, site in enumerate(letters):
+            p = (len(seq) - len(site)) // 2 if starts is None else starts[k]
+            if p < 0 or p + len(site) > len(seq):
+                raise ValueError(f"the site {site} at {p} does not fit in a sequence of length {len(seq)}")
+            new[p:p + len(site)] = site
+        out.append("".join(new))
+    from ._sequences import _restore
+
+    return _restore(sequences, names, out)
+
+
+def site_spacings(
+    sequences: str | Sequence[str] | Mapping[str, str],
+    first: Any,
+    second: Any,
+    spacings: Iterable[int],
+    start: int | None = None,
+) -> dict[int, Any]:
+    """Two sites at a range of spacings, for measuring how a model responds
+    to the distance between them.
+
+    For each spacing, ``first`` is written into every sequence at ``start``
+    and ``second`` begins that many letters after ``first`` ends. Sites are
+    given as for [`insert_sites()`][universalmotif.insert_sites]. By default
+    ``start`` places the pair in the middle of each sequence at the widest
+    spacing, so that ``first`` stays put as ``second`` moves. Returns a dict
+    from each spacing to the new sequences, in the same form as the input.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> res = um.site_spacings("AAAAAAAAAAAA", "GG", "TT", spacings=[0, 2, 4])
+    >>> res
+    {0: 'AAGGTTAAAAAA', 2: 'AAGGAATTAAAA', 4: 'AAGGAAAATTAA'}
+    """
+    spacings = [int(d) for d in spacings]
+    if not spacings or min(spacings) < 0:
+        raise ValueError("spacings must be one or more whole numbers, 0 or greater")
+    a, b = _site_letters(first), _site_letters(second)
+    names, seqs = _sequence_pairs(sequences)
+    out = {}
+    for d in spacings:
+        new = []
+        for seq in seqs:
+            s0 = (len(seq) - len(a) - max(spacings) - len(b)) // 2 if start is None else int(start)
+            new.append(insert_sites(seq, [a, b], positions=[s0, s0 + len(a) + d]))
+        out[d] = new
+    from ._sequences import _restore
+
+    return {d: _restore(sequences, names, v) for d, v in out.items()}
+
+
 __all__ = [
     "ContributionScores",
     "from_filters",
     "from_one_hot",
+    "insert_sites",
+    "mutagenesis",
+    "mutagenesis_effects",
     "one_hot",
     "read_contributions",
     "read_modisco",
+    "site_spacings",
     "to_filters",
 ]

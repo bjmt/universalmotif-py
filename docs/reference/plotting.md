@@ -8,6 +8,8 @@ Sequence logos and plots of analysis results, drawn with matplotlib, which is in
 
 ::: universalmotif.view_attributions
 
+::: universalmotif.view_variant
+
 ::: universalmotif.plot_motif_peaks
 
 ::: universalmotif.plot_match_bkg

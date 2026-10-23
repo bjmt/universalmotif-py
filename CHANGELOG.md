@@ -10,6 +10,14 @@
   from numpy files as TF-MoDISco takes them.
 - `signal_values()` reads the value of a bigWig track at every position
   of a range.
+- `mutagenesis()` and `mutagenesis_effects()` make every single-letter
+  substitution of a sequence for a model and turn its predictions into
+  effects that can be drawn as attributions.
+- `insert_sites()` writes the same sites into background sequences, and
+  `site_spacings()` places two sites at a range of spacings, for probing
+  a model.
+- `view_variant()` draws the attribution scores of a sequence and a
+  variant of it with their difference.
 - `view_motifs()` takes `ax` to draw a single motif into a panel of an
   existing figure.
 - A new guide, motifs and deep learning, works through the TF-MoDISco
