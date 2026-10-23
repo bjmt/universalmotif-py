@@ -4173,6 +4173,8 @@ dev = [
     { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "matplotlib", version = "3.11.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "maturin" },
+    { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "pandas", version = "3.0.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pytest" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
@@ -4209,6 +4211,7 @@ dev = [
     { name = "biopython", specifier = ">=1.81" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "maturin", specifier = ">=1.9,<2" },
+    { name = "pandas", specifier = ">=2.0" },
     { name = "pytest", specifier = ">=8" },
     { name = "scipy", specifier = ">=1.15.3" },
 ]

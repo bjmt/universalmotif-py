@@ -24,7 +24,10 @@ plain FASTA file given as a path a batch at a time, and `read_fasta(..., packed=
 sequences packed at two bits per base for repeated use. Motifs can be
 fetched from JASPAR, HOCOMOCO and CIS-BP with `universalmotif.databases`,
 which caches its downloads, and converted to and from Biopython's
-`Bio.motifs` with `pip install universalmotif[biopython]`.
+`Bio.motifs` with `pip install universalmotif[biopython]`. In Jupyter,
+motifs are shown as a logo next to their metadata, `logo_svg()` draws the
+same logo as an SVG image, and `to_logomaker()` exports letter heights for
+logomaker.
 
 ## Example
 

@@ -25,7 +25,14 @@ pandas = ["pandas>=2.0", "pyarrow>=14"]
 plot = ["matplotlib>=3.8"]
 
 [dependency-groups]
-dev = ["biopython>=1.81", "maturin>=1.9,<2", "matplotlib>=3.8", "pytest>=8", "scipy>=1.15.3"]
+dev = [
+    "biopython>=1.81",
+    "maturin>=1.9,<2",
+    "matplotlib>=3.8",
+    "pandas>=2.0",
+    "pytest>=8",
+    "scipy>=1.15.3",
+]
 docs = [
     "maturin>=1.9,<2",
     "matplotlib>=3.8",

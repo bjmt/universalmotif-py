@@ -8,6 +8,8 @@ from importlib.metadata import PackageNotFoundError, version
 
 from ._analysis import dedup_hits, motif_pvalue, scan_sequences
 from ._biopython import from_biopython, to_biopython
+from ._display import _repr_html_ as _motif_html
+from ._display import logo_svg, to_logomaker
 from . import databases
 from ._data import example_file, example_motifs, example_sequences
 from ._packed import PackedSequences, pack_sequences
@@ -129,6 +131,7 @@ __all__ = [
     "icm_to_ppm",
     "implant_motifs",
     "log_string_pval",
+    "logo_svg",
     "mask_ranges",
     "mask_seqs",
     "match_bkg",
@@ -177,6 +180,7 @@ __all__ = [
     "summarise_motifs",
     "switch_alph",
     "to_biopython",
+    "to_logomaker",
     "trim_cwm",
     "trim_motifs",
     "ungap",
@@ -192,3 +196,6 @@ __all__ = [
     "write_transfac",
     "write_uniprobe",
 ]
+
+# Motifs show as a logo with their metadata in Jupyter.
+Motif._repr_html_ = _motif_html

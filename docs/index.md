@@ -51,7 +51,9 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
   novo* motif discovery.
 - **Sequences:** shuffling that keeps k-let counts, random sequences, k-let
   backgrounds, complexity, masking and sliding windows.
-- **Plots:** sequence logos, motif trees, and plots of the results above.
+- **Plots:** sequence logos, motif trees, and plots of the results above,
+  motifs shown with their logos in Jupyter, SVG logos for reports, and
+  export to logomaker.
 
 ## Where to go next
 

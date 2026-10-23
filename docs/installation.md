@@ -35,7 +35,7 @@ optimisations.
   no extra, since they download with the standard library.
 - `pandas`: pandas and pyarrow, for anyone who prefers pandas DataFrames,
   so that any table the package returns can be converted with
-  `.to_pandas()`.
+  `.to_pandas()`, and for `to_logomaker()`.
 
 ## For development
 

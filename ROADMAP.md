@@ -1,8 +1,7 @@
 # Possible extensions
 
 Ideas for connecting the package to the rest of the Python ecosystem. The
-first, motif databases and Biopython conversion, is done; the others are
-planned in the order below.
+first two are done; the others are planned in the order below.
 
 ## Plan
 
@@ -11,7 +10,8 @@ In order:
 1. Motif databases and Biopython conversion (done: `universalmotif.databases`
    with JASPAR, HOCOMOCO and CIS-BP, and `to_biopython()` and
    `from_biopython()`).
-2. Jupyter display with an inline logo, and logomaker export.
+2. Jupyter display with an inline logo, and logomaker export (done:
+   `Motif._repr_html_`, `logo_svg()` and `to_logomaker()`).
 3. A sparse motif-by-peak matrix for single-cell ATAC analyses.
 4. Deep-learning interoperability, and a check of `compare_motifs()`
    against TOMTOM.

@@ -11,3 +11,13 @@ Sequence logos and plots of analysis results, drawn with matplotlib, which is in
 ::: universalmotif.plot_match_bkg
 
 ::: universalmotif.plot_motif_proximity
+
+## Logos without matplotlib
+
+In a Jupyter notebook, a motif on its own at the end of a cell is shown as
+its logo next to its metadata. The same logo is available as an SVG image,
+and the letter heights as a DataFrame for logomaker.
+
+::: universalmotif.logo_svg
+
+::: universalmotif.to_logomaker
