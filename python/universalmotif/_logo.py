@@ -113,7 +113,9 @@ def position_glyphs(
             top = max(g.y.max() for g in negout)
             for g in negout:
                 g.y = g.y - top
-            negout = _flip_negative(negout, sort_positions, not sort_positions_decreasing, flip_neg,
+            # Sorted the same way as letters above zero, so that the stack
+            # below is their mirror image, with the largest furthest out.
+            negout = _flip_negative(negout, sort_positions, sort_positions_decreasing, flip_neg,
                                     y_spacer)
         keep = values >= 0
         names = [n for n, b in zip(names, keep) if b]

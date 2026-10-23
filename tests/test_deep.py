@@ -282,3 +282,24 @@ def test_one_hot_batches(tmp_path):
         um.one_hot_batches({"chr1": seq}, [("chr1", 0, 4)], width=12)
     with pytest.raises(ValueError, match="not in the genome"):
         um.one_hot_batches({"chr1": seq}, [("chr2", 0, 4)])
+
+
+def test_read_contributions_edge_cases(tmp_path):
+    # Odd lengths give ranges as wide as the sequences.
+    seqs = ["ACGTA", "TTGAC"]
+    path, hyp, _ = _chrombpnet_files(tmp_path, seqs, [("chr1", 200, 25), ("chr2", 0, 20)])
+    c = um.read_contributions(path)
+    assert all(e - s == 5 for _, s, e in c.ranges.iter_rows())
+    with pytest.warns(UserWarning, match="sequences is ignored"):
+        um.read_contributions(path, sequences=seqs)
+    # Separate objects compare by identity rather than failing on arrays.
+    other = um.read_contributions(path)
+    assert other != c and not {other} & {c}
+    # Indices are applied to memory-mapped .npy files before converting.
+    np.save(tmp_path / "shap.npy", hyp.astype(np.float64))
+    np.save(tmp_path / "ohe.npy", um.one_hot(seqs, dtype=np.int8))
+    one = um.read_contributions(tmp_path / "shap.npy", sequences=tmp_path / "ohe.npy", indices=[1])
+    assert one.sequences == ["TTGAC"] and one.scores.dtype == np.float32
+    np.testing.assert_allclose(one.scores[0], hyp[1], rtol=1e-6)
+    with pytest.warns(UserWarning, match="regions is only used"):
+        um.read_contributions(tmp_path / "shap.npy", sequences=tmp_path / "ohe.npy", regions="x.bed")

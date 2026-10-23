@@ -25,11 +25,12 @@ def _ref(key):
 
 @pytest.fixture
 def flush_negative_letters(monkeypatch):
-    # The R package stacks negative letters with no gaps between them, where
-    # the port leaves the same gaps as above zero, so the reference
-    # comparisons stack them as R does.
+    # The R package stacks negative letters with no gaps between them and
+    # the largest next to zero, where the port leaves the same gaps as above
+    # zero and mirrors the letters above, so the reference comparisons
+    # stack them as R does.
     monkeypatch.setattr("universalmotif._logo._flip_negative",
-                        lambda glyphs, s, d, f, y_spacer=0.0: _flip_negative(glyphs, s, d, f))
+                        lambda glyphs, s, d, f, y_spacer=0.0: _flip_negative(glyphs, s, not d, f))
 
 
 def _motifs():
@@ -320,3 +321,23 @@ def test_view_variant():
         um.view_variant(ref, alt, seq, position=7, alt="N")
     with pytest.raises(ValueError, match="include position"):
         um.view_variant(ref, alt, seq, position=7, alt="A", region=(0, 5))
+
+
+def test_attribution_letters_keep_their_heights():
+    # Short letters are not dropped and the rest scaled up to fill in.
+    scores = np.array([[0.02, 1.0], [0.009, 0.0], [0.009, 0.0], [0.009, 0.0]])
+    ax = um.view_attributions(scores, "AC", kind="all")
+    heights = [np.ptp(p.vertices[:, 1]) for p in ax.collections[0].get_paths()]
+    assert max(h for h in heights if h < 0.5) < 0.021
+
+
+def test_negative_letters_mirror_positive_ones():
+    glyphs = position_glyphs(list("ACGT"), np.array([-0.5, -0.1, 0.3, 0.6]), 1, 0.01, 0.04, 0.0,
+                             sort_positions=True)
+    ext = {}
+    for g in glyphs:
+        lo, hi = ext.get(g.letter_id, (np.inf, -np.inf))
+        ext[g.letter_id] = (min(lo, g.y.min()), max(hi, g.y.max()))
+    # The largest letter on each side is furthest from zero.
+    assert ext["1.T.1"][1] == pytest.approx(0.9) and ext["1.G.1"][0] == pytest.approx(0.0)
+    assert ext["1.A.1"][0] == pytest.approx(-0.6) and ext["1.C.1"][1] == pytest.approx(0.0)

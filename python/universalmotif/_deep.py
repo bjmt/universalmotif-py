@@ -123,14 +123,16 @@ def from_filters(
     return out
 
 
-def _to_numpy(x: Any) -> np.ndarray:
+def _to_numpy(x: Any, dtype: Any = float) -> np.ndarray:
+    """An array from a numpy array or tensor, as ``dtype``, or as it is with
+    ``dtype=None``."""
     if hasattr(x, "detach"):
         x = x.detach()
     if hasattr(x, "cpu"):
         x = x.cpu()
     if hasattr(x, "numpy"):
         x = x.numpy()
-    return np.asarray(x, dtype=float)
+    return np.asarray(x, dtype=dtype)
 
 
 def one_hot(
@@ -278,7 +280,7 @@ def _modisco_motif(pattern, name: str, dataset: str, kind: str,
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class ContributionScores:
     """Contribution scores of a set of sequences, from
     [`read_contributions()`][universalmotif.read_contributions].
@@ -345,9 +347,11 @@ def _letters_first(x: np.ndarray, n: int, what: str) -> np.ndarray:
 
 
 def _load_array(source: Any, what: str) -> np.ndarray:
+    """An array as it is stored, from memory or a file. ``.npy`` files are
+    memory-mapped, so that only the parts used are read."""
     if not isinstance(source, (str, os.PathLike)):
-        return _to_numpy(source)
-    data = np.load(source)
+        return _to_numpy(source, dtype=None)
+    data = np.load(source, mmap_mode="r")
     if isinstance(data, np.ndarray):
         return data
     keys = list(data.keys())
@@ -382,7 +386,7 @@ def _chrombpnet_regions(path: str, regions: Any, length: int):
     return pl.DataFrame({
         "chrom": regions["chrom"].cast(pl.String),
         "start": centre - length // 2,
-        "end": centre + length // 2,
+        "end": centre - length // 2 + length,
     })
 
 
@@ -412,8 +416,9 @@ def read_contributions(
 
     Arrays may have shape (sequences, letters, length) or (sequences,
     length, letters), with the letters in the order of ``alphabet``.
-    Scores are read as 32-bit floats, so ``indices`` can read just some of
-    the sequences of a large file.
+    Scores are read as 32-bit floats, and ``indices`` reads just some of the
+    sequences of a large HDF5 or ``.npy`` file, which is read a part at a
+    time; a ``.npz`` file is compressed, so it is read whole.
 
     Needs the ``h5py`` extra for HDF5 files.
 
@@ -427,10 +432,13 @@ def read_contributions(
     if scores not in ("hypothetical", "projected"):
         raise ValueError('scores must be "hypothetical" or "projected"')
     path = os.fspath(path)
+    import warnings
     n = len(alphabet)
     pick = None if indices is None else [int(i) for i in indices]
     ranges = None
     if path.endswith((".h5", ".hdf5")):
+        if sequences is not None:
+            warnings.warn("sequences is ignored for HDF5 files, which hold the sequences", stacklevel=2)
         try:
             import h5py
         except ImportError as e:
@@ -461,15 +469,26 @@ def read_contributions(
         if ranges is not None and pick is not None:
             ranges = ranges[pick]
     else:
-        values = _letters_first(np.asarray(_load_array(path, "scores"), dtype=np.float32), n, "the scores")
+        if regions is not None:
+            warnings.warn("regions is only used with chromBPNet HDF5 files and is ignored", stacklevel=2)
         if sequences is None:
             raise ValueError("give the sequences, or a file of them one-hot encoded, with sequences")
+
+        # Sequences are picked before the scores are converted, so that only
+        # those are read from memory-mapped files.
+        def picked(x):
+            x = x[None] if x.ndim == 2 else x
+            return x if pick is None else x[pick]
+
+        values = _letters_first(np.asarray(picked(_load_array(path, "scores")), dtype=np.float32),
+                                n, "the scores")
         if isinstance(sequences, list) and sequences and isinstance(sequences[0], str):
             onehot = one_hot(sequences, alphabet=alphabet, dtype=np.int8)
+            if pick is not None:
+                onehot = onehot[pick]
         else:
-            onehot = _letters_first(_load_array(sequences, "sequences"), n, "the sequences")
-        if pick is not None:
-            values, onehot = values[pick], onehot[pick]
+            onehot = _letters_first(np.asarray(picked(_load_array(sequences, "sequences"))),
+                                    n, "the sequences")
         if scores == "projected":
             values = values * onehot
     if onehot.shape[0] != values.shape[0] or onehot.shape[-1] != values.shape[-1]:
@@ -488,13 +507,8 @@ def read_contributions(
 def _substitutions(ref: np.ndarray, start: int, end: int) -> tuple[np.ndarray, np.ndarray]:
     """Positions and letter indices of every single-letter substitution of a
     one-hot sequence between ``start`` and ``end``, in order."""
-    pos, let = [], []
-    for p in range(start, end):
-        for i in range(ref.shape[0]):
-            if ref[i, p] == 0:
-                pos.append(p)
-                let.append(i)
-    return np.array(pos, dtype=int), np.array(let, dtype=int)
+    pos, let = np.nonzero(ref[:, start:end].T == 0)
+    return pos + start, let
 
 
 def _mutagenesis_region(sequence: str, region: tuple[int, int] | None) -> tuple[int, int]:
@@ -523,7 +537,9 @@ def mutagenesis(
     Positions holding a letter outside the alphabet, such as N, get every
     letter. A model's predictions for the batch, in the same order, are
     turned into the effect of each substitution by
-    [`mutagenesis_effects()`][universalmotif.mutagenesis_effects].
+    [`mutagenesis_effects()`][universalmotif.mutagenesis_effects]. The batch
+    has three variants per position of a DNA sequence, so for long
+    sequences, ``region`` keeps it to the part of interest.
 
     Examples
     --------
@@ -716,11 +732,10 @@ class _OneHotBatches:
         return (self._table.height + self._batch_size - 1) // self._batch_size
 
     def __iter__(self):
-        from ._genome import extract_ranges
+        from ._genome import _fetch_ranges
 
         for i in range(0, self._table.height, self._batch_size):
-            part = self._table.slice(i, self._batch_size)
-            seqs = list(extract_ranges(self._genome, part, nthreads=self._nthreads).values())
+            seqs = _fetch_ranges(self._genome, self._table.slice(i, self._batch_size), self._nthreads)
             yield one_hot(seqs, alphabet=self._alphabet, dtype=self._dtype)
 
     def __repr__(self) -> str:
@@ -767,8 +782,8 @@ def one_hot_batches(
     >>> [um.from_one_hot(x) for x in batches]
     [['CCGG'], ['GTAC']]
     """
+    from ._genome import _check_ranges
     from ._genomic import _range_table
-    from ._packed import PackedSequences
 
     if int(batch_size) < 1:
         raise ValueError("batch_size must be 1 or more")
@@ -781,15 +796,7 @@ def one_hot_batches(
         table = table.with_columns(start=first, end=first + width)
     elif table.height and (table["end"] - table["start"]).n_unique() > 1:
         raise ValueError("the ranges have different widths; give width to take windows of one width")
-    from ._genome import Genome
-
-    lengths = genome.lengths if isinstance(genome, (Genome, PackedSequences)) else None
-    for c, s, e in table.select("chrom", "start", "end").iter_rows():
-        if c not in genome:
-            raise ValueError(f"the chromosome {c!r} is not in the genome")
-        n = lengths[c] if lengths is not None else len(genome[c])
-        if s < 0 or e > n:
-            raise ValueError(f"the range {c}:{s}-{e} does not fit in {c} (length {n})")
+    _check_ranges(genome, table)
     return _OneHotBatches(genome, table, int(batch_size), alphabet, dtype, nthreads)
 
 

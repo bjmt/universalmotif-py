@@ -134,28 +134,41 @@ def extract_ranges(
     {'chr1:1-5': 'ACCG', 'chr1:1-5(-)': 'CGGT'}
     """
     from ._genomic import _range_table
-    from ._packed import PackedSequences
 
     df = _range_table(ranges, "ranges")
-    chroms, starts, ends = df["chrom"].to_list(), df["start"].to_list(), df["end"].to_list()
-    lengths = (genome.lengths if isinstance(genome, (Genome, PackedSequences)) else None)
-    for c, s, e in zip(chroms, starts, ends):
+    _check_ranges(genome, df)
+    seqs = _fetch_ranges(genome, df, nthreads)
+    names = [f"{c}:{s}-{e}" + ("(-)" if st == "-" else "")
+             for c, s, e, st in df.select("chrom", "start", "end", "strand").iter_rows()]
+    return dict(zip(_make_unique(names), seqs))
+
+
+def _check_ranges(genome: Mapping[str, str], df: pl.DataFrame) -> None:
+    """Check that every range of a range table fits within its chromosome."""
+    from ._packed import PackedSequences
+
+    lengths = genome.lengths if isinstance(genome, (Genome, PackedSequences)) else None
+    for c, s, e in df.select("chrom", "start", "end").iter_rows():
         if c not in genome:
             raise ValueError(f"the chromosome {c!r} is not in the genome")
         n = lengths[c] if lengths is not None else len(genome[c])
         if s < 0 or e > n or s > e:
             raise ValueError(f"the range {c}:{s}-{e} does not fit in {c} (length {n})")
+
+
+def _fetch_ranges(genome: Mapping[str, str], df: pl.DataFrame, nthreads: int = 1) -> list[str]:
+    """The sequences of a checked range table, in order, with ranges on the
+    minus strand reverse complemented."""
+    from ._packed import PackedSequences
+
+    chroms, starts, ends = df["chrom"].to_list(), df["start"].to_list(), df["end"].to_list()
     if isinstance(genome, Genome):
         seqs = genome._fetch(chroms, starts, ends, nthreads)
     elif isinstance(genome, PackedSequences):
         seqs = [genome.subseq(c, s, e) for c, s, e in zip(chroms, starts, ends)]
     else:
         seqs = [genome[c][s:e] for c, s, e in zip(chroms, starts, ends)]
-    strands = df["strand"].to_list()
-    seqs = [_reverse_complement(x) if st == "-" else x for x, st in zip(seqs, strands)]
-    names = [f"{c}:{s}-{e}" + ("(-)" if st == "-" else "")
-             for c, s, e, st in zip(chroms, starts, ends, strands)]
-    return dict(zip(_make_unique(names), seqs))
+    return [_reverse_complement(x) if st == "-" else x for x, st in zip(seqs, df["strand"].to_list())]
 
 
 _STATS = ("mean", "max", "min")
@@ -241,7 +254,8 @@ def signal_values(
 
     Positions run from ``start`` up to but not including ``end``, counted
     from 0. Bases the file has no value for get ``uncovered``, zero by
-    default, or NaN with ``uncovered=None``. Where
+    default, or NaN with ``uncovered=None``, and so do all of them on a
+    chromosome the file has no values for. Where
     [`signal_stats()`][universalmotif.signal_stats] summarizes signal over
     many ranges, this gives every position of one, such as the per-base
     contribution scores some models write as bigWig tracks, which can be
@@ -267,9 +281,13 @@ def signal_values(
     start, end = int(start), int(end)
     reader = pybigtools.open(os.fspath(bigwig))
     sizes = reader.chroms()
+    if start < 0 or start >= end:
+        raise ValueError(f"the range {chrom}:{start}-{end} is empty or starts before 0")
+    # A chromosome the file has no values for, as for tracks that only
+    # cover peaks, is uncovered, as in signal_stats().
     if chrom not in sizes:
-        raise ValueError(f"the chromosome {chrom!r} is not in {bigwig}")
-    if start < 0 or end > sizes[chrom] or start >= end:
+        return np.full(end - start, np.nan if uncovered is None else uncovered, dtype=float)
+    if end > sizes[chrom]:
         raise ValueError(f"the range {chrom}:{start}-{end} does not fit in {chrom} "
                          f"(length {sizes[chrom]})")
     values = reader.values(chrom, start, end, fillna=uncovered)

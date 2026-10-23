@@ -175,7 +175,8 @@ def test_signal_values(tmp_path):
                                [0, 0, 0.5, 0.5, 0.5, -1, -1, 0])
     v = um.signal_values(path, "chr1", 0, 3, uncovered=None)
     assert np.isnan(v[:2]).all() and v[2] == 0.5
-    with pytest.raises(ValueError, match="chrX"):
-        um.signal_values(path, "chrX", 0, 3)
+    # A chromosome without values is uncovered, as in signal_stats().
+    assert np.array_equal(um.signal_values(path, "chrX", 0, 3), [0, 0, 0])
+    assert np.isnan(um.signal_values(path, "chrX", 0, 3, uncovered=None)).all()
     with pytest.raises(ValueError):
         um.signal_values(path, "chr1", 90, 110)

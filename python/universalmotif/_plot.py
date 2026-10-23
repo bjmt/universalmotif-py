@@ -943,10 +943,14 @@ def _attribution_matrix(scores, sequence, alphabet: str, kind: str) -> np.ndarra
 
 
 def _nice_step(span: int, max_ticks: int = 12) -> int:
-    for step in (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10_000, 20_000, 50_000):
-        if span / step <= max_ticks:
-            return step
-    return 100_000
+    """The smallest of 1, 2 and 5 times a power of ten giving at most
+    ``max_ticks`` ticks over ``span`` positions."""
+    power = 1
+    while True:
+        for f in (1, 2, 5):
+            if span / (f * power) <= max_ticks:
+                return f * power
+        power *= 10
 
 
 def view_attributions(
@@ -1055,8 +1059,11 @@ def view_attributions(
         scale = max(hi, -lo) or 1.0
         # With every letter drawn, each position's letters are stacked by
         # height, as in motif logos.
+        # Every letter is drawn at its own height: dropping short letters
+        # would scale the rest of the column up to fill in for them, so
+        # only letters that are effectively zero are left out.
         view_logo(m, letters=list(alphabet), colour_scheme=colour_scheme, flip_neg=flip_neg,
-                  min_height=0.01 * scale, y_spacer=0.01 * scale, sort_positions=kind == "all",
+                  min_height=1e-9 * scale, y_spacer=0.01 * scale, sort_positions=kind == "all",
                   ax=ax)
         ax.set_axis_on()
         ax.axhline(0, color="0.6", linewidth=0.6, zorder=0)

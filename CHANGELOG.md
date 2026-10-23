@@ -22,7 +22,9 @@
   one batch at a time, optionally as windows of one width around their
   middles.
 - Logos draw letters below zero upside down by default, so that they read
-  outward from zero; `flip_neg=False` draws them upright.
+  outward from zero, and stack them as a mirror image of the letters above
+  zero, with the largest furthest out; `flip_neg=False` draws them
+  upright.
 - `view_motifs()` takes `ax` to draw a single motif into a panel of an
   existing figure.
 - A new guide, motifs and deep learning, works through the TF-MoDISco
