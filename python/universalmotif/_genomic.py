@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import warnings
 from collections.abc import Iterable, Mapping, Sequence
 
@@ -18,11 +19,56 @@ from ._sequences import _seed
 _CHROM_COLUMNS = ("chrom", "seqnames", "sequence", "chr", "chromosome")
 
 
+_PYRANGES_COLUMNS = {"Chromosome": "chrom", "Start": "start", "End": "end", "Strand": "strand"}
+
+
+def _zero_based_polars_bio(x) -> bool:
+    """Whether a polars frame is marked as 0-based by polars-bio, which keeps
+    the coordinate system of each frame as metadata."""
+    pb = sys.modules.get("polars_bio")
+    if pb is None:
+        return False
+    try:
+        return bool(pb.get_metadata(x).get("coordinate_system_zero_based"))
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return False
+
+
+def _ranges_frame(x):
+    """Ranges from other libraries as a polars DataFrame with 1-based,
+    inclusive positions, or ``x`` unchanged if it is not a data frame.
+
+    PyRanges objects, and pandas DataFrames with their ``Chromosome``,
+    ``Start`` and ``End`` columns, are 0-based and end-exclusive, as are
+    polars-bio frames marked as 0-based. Other pandas DataFrames and polars
+    frames, including LazyFrames, are taken to be 1-based already."""
+    if type(x).__name__ == "PyRanges" and not hasattr(x, "columns") and hasattr(x, "df"):
+        x = x.df  # PyRanges before version 1
+    zero_based = False
+    if isinstance(x, pl.LazyFrame):
+        zero_based = _zero_based_polars_bio(x)
+        x = x.collect()
+    elif isinstance(x, pl.DataFrame):
+        zero_based = _zero_based_polars_bio(x)
+    else:
+        pd = sys.modules.get("pandas")
+        if pd is None or not isinstance(x, pd.DataFrame):
+            return x
+        zero_based = {"Chromosome", "Start", "End"} <= {str(c) for c in x.columns}
+        x = pl.from_pandas(pd.DataFrame(x).reset_index(drop=True))
+        x = x.rename({k: v for k, v in _PYRANGES_COLUMNS.items() if k in x.columns and v not in x.columns})
+    if zero_based and "start" in x.columns:
+        x = x.with_columns(pl.col("start") + 1)
+    return x
+
+
 def _range_table(x, what: str) -> pl.DataFrame:
     """Ranges as a DataFrame with chrom, start, end and strand columns, from
     either a DataFrame or (chrom, start, end[, strand]) tuples. A DataFrame
     needs a chromosome column named chrom, seqnames, sequence, chr or
-    chromosome, a start column, and an end or width column."""
+    chromosome, a start column, and an end or width column. PyRanges and
+    pandas DataFrames, and polars-bio frames, are converted first."""
+    x = _ranges_frame(x)
     if isinstance(x, pl.DataFrame):
         chrom = next((c for c in _CHROM_COLUMNS if c in x.columns), None)
         if chrom is None or "start" not in x.columns:
@@ -55,7 +101,7 @@ def _range_table(x, what: str) -> pl.DataFrame:
             },
             schema={"chrom": pl.String, "start": pl.Int64, "end": pl.Int64, "strand": pl.String},
         )
-    df = df.with_columns(pl.col("strand").fill_null("*").replace({"+-": "*", "": "*"}))
+    df = df.with_columns(pl.col("strand").fill_null("*").replace({"+-": "*", "": "*", ".": "*"}))
     if df["start"].null_count() or df["end"].null_count():
         raise ValueError(f"{what} has missing coordinates")
     return df
@@ -235,6 +281,7 @@ def motif_proximity(
                 raise ValueError("none of the anchor chromosomes are in sequences")
             hits = scan_sequences(motifs, chroms, pvalue=scan_pvalue, rc=rc, nthreads=nthreads)
             lengths = {k: len(v) for k, v in sequences.items()}
+    hits = _ranges_frame(hits)
     for col in ("motif", "score", "start"):
         if col not in hits.columns:
             raise ValueError(f"hits must have a {col!r} column")

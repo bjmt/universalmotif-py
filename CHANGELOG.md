@@ -24,5 +24,6 @@ the R package:
   CIS-BP, conversion to and from Biopython, logos in Jupyter and for
   logomaker, motif match matrices for AnnData and pychromVAR, convolution
   filters, one-hot sequences and TF-MoDISco results, genomes read a piece
-  at a time from FASTA, bgzip and 2bit files, and bigWig signal for
-  matching backgrounds.
+  at a time from FASTA, bgzip and 2bit files, bigWig signal for matching
+  backgrounds, hits in genomic coordinates, and ranges exchanged with
+  PyRanges and polars-bio.

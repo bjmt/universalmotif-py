@@ -40,6 +40,10 @@ optimisations.
 - `biopython`: Biopython, for converting motifs to and from `Bio.motifs`
   with `to_biopython()` and `from_biopython()`. The database functions need
   no extra, since they download with the standard library.
+- `pyranges`: PyRanges, for `to_pyranges()`. PyRanges objects can be
+  given as ranges without it.
+- `polars-bio`: polars-bio, for `to_polars_bio()`, which marks tables as
+  1-based for polars-bio's range operations.
 - `pandas`: pandas and pyarrow, for anyone who prefers pandas DataFrames,
   so that any table the package returns can be converted with
   `.to_pandas()`, and for `to_logomaker()`.

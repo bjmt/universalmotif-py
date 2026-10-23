@@ -80,6 +80,7 @@ from ._core import Motif
 from ._enrich import enrich_motifs, motif_coocc, motif_peaks
 from ._genome import Genome, extract_ranges, signal_stats
 from ._genomic import match_bkg, motif_proximity
+from ._intervals import genomic_hits, to_polars_bio, to_pyranges
 from ._plot import plot_match_bkg, plot_motif_peaks, plot_motif_proximity, view_logo, view_motifs
 from ._sequences import (
     calc_complexity,
@@ -131,6 +132,7 @@ __all__ = [
     "from_biopython",
     "from_filters",
     "from_one_hot",
+    "genomic_hits",
     "get_bkg",
     "get_consensus",
     "get_consensus_aa",
@@ -195,6 +197,8 @@ __all__ = [
     "to_biopython",
     "to_filters",
     "to_logomaker",
+    "to_polars_bio",
+    "to_pyranges",
     "trim_cwm",
     "trim_motifs",
     "ungap",

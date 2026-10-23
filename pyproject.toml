@@ -26,6 +26,8 @@ biopython = ["biopython>=1.81"]
 h5py = ["h5py>=3.0"]
 pandas = ["pandas>=2.0", "pyarrow>=14"]
 plot = ["matplotlib>=3.8"]
+polars-bio = ["polars-bio>=0.36; python_version >= '3.11' and python_version < '3.15'"]
+pyranges = ["pyranges1>=1.0; python_version >= '3.12'"]
 scipy = ["scipy>=1.11"]
 
 [dependency-groups]
@@ -36,7 +38,9 @@ dev = [
     "maturin>=1.9,<2",
     "matplotlib>=3.8",
     "pandas>=2.0",
+    "polars-bio>=0.36; python_version >= '3.11' and python_version < '3.15'",
     "pybigtools>=0.3",
+    "pyranges1>=1.0; python_version >= '3.12'",
     "pytest>=8",
     "scipy>=1.15.3",
 ]

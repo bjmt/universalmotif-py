@@ -1,7 +1,7 @@
 # Possible extensions
 
-Ideas for connecting the package to the rest of the Python ecosystem. The
-first five are done; the last is planned next.
+Ideas for connecting the package to the rest of the Python ecosystem. All six
+are done.
 
 ## Plan
 
@@ -21,7 +21,8 @@ In order:
 5. Indexed genomes and bigWig covariates (done: `Genome`, read in the
    Rust crate, `extract_ranges()` and `signal_stats()`, and `match_bkg()`
    with `bigwig` and `target_ranges`).
-6. Genomic interval libraries.
+6. Genomic interval libraries (done: ranges taken from PyRanges, pandas and
+   polars-bio, `to_pyranges()`, `to_polars_bio()` and `genomic_hits()`).
 
 A command line is left out, since yamtk already covers that ground.
 
@@ -33,7 +34,7 @@ all: databases can be fetched with the standard library, logos can be drawn
 as SVG from the glyph outlines the package already computes, filters can be
 exchanged as numpy arrays, and FASTA indexes and 2bit files are simple
 enough to read in the Rust crate. Biopython, scipy (with AnnData as a
-further option), h5py and pybigtools are extras. Each optional function says
+further option), h5py, pybigtools, PyRanges and polars-bio are extras. Each optional function says
 so in its docstring, its tests skip when the extra is missing, and one CI
 job installs every extra.
 
@@ -51,8 +52,9 @@ job installs every extra.
 - Accept and return [polars-bio](https://biodatageeks.org/polars-bio/)
   frames (Rust and Arrow, close to our own stack) and
   [PyRanges v1](https://pyranges.readthedocs.io/) objects for anchors,
-  universes, exclusions and hits. Both use 0-based, end-exclusive
-  coordinates, so conversions need care.
+  universes, exclusions and hits. PyRanges uses 0-based, end-exclusive
+  coordinates and polars-bio records the coordinate system of each frame,
+  so conversions need care.
 - Report scan hits in genomic coordinates when the sequences are windows
   taken from a genome.
 

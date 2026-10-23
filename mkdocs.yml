@@ -27,6 +27,9 @@ theme:
         icon: material/weather-sunny
         name: Switch to light mode
 
+hooks:
+  - hooks/notebooks.py
+
 plugins:
   - search
   - mkdocs-jupyter:

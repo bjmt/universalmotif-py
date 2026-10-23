@@ -46,6 +46,8 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
   hundred MB.
 - **Genomes:** FASTA, bgzip and 2bit genomes read a piece at a time,
   sequences of peaks, and bigWig signal over them to match backgrounds on.
+- **Genomic intervals:** hits moved back to genomic coordinates, and ranges
+  exchanged with PyRanges and polars-bio.
 - **Single-cell ATAC:** sparse peak by motif match matrices, ready for
   AnnData and chromVAR-style analyses.
 - **Deep learning:** motifs as convolution filters and back, one-hot

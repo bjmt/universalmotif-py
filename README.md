@@ -38,7 +38,11 @@ files can be opened with `Genome` and read a piece at a time, so peaks can
 be extracted with `extract_ranges()` and backgrounds drawn with
 `match_bkg()` without loading the whole genome, and `signal_stats()`
 summarises bigWig signal over ranges, which `match_bkg()` can also match
-on, with `pip install universalmotif[bigwig]`.
+on, with `pip install universalmotif[bigwig]`. Ranges can be given as
+PyRanges objects or polars-bio frames anywhere they are taken, and
+`to_pyranges()` and `to_polars_bio()` hand tables back, while
+`genomic_hits()` moves hits found in extracted peaks back to their places
+on the genome.
 
 ## Example
 
