@@ -40,8 +40,7 @@ def test_column_conversions():
         if case["fn"] == "ppm_to_pcm":
             pos, nsites = nums(case["args"]["pos"]), nums(case["args"]["nsites"])[0]
             if r_rounding_differs(pos, nsites):
-                # R adds the whole rounding error to the largest count (see
-                # DIVERGENCES.md in the Rust crate).
+                # R adds the whole rounding error to the largest count.
                 got = um.ppm_to_pcm(pos, nsites)
                 assert got.sum() == nsites
                 assert np.all(np.abs(got - np.array(pos) * nsites) < 1)
@@ -108,8 +107,7 @@ def test_column_metrics_and_averages():
             with pytest.raises(ValueError):
                 call()
         elif case["method"] == "WPCC":
-            # The R package does not normalize the WPCC weights (see
-            # DIVERGENCES.md in the Rust crate), so check against a weighted
+            # The R package does not normalize the WPCC weights, so check against a weighted
             # correlation computed here.
             w = np.add(nums(case["bkg1"]), nums(case["bkg2"]))
             x, y = np.array(nums(case["x"])), np.array(nums(case["y"]))
@@ -182,7 +180,7 @@ def test_masking():
 
     mr = _ref("mask_ranges")
     seqs = dict(zip(mr["names"], mr["seqs"]))
-    # The R package fails on the first and third cases (see DIVERGENCES.md).
+    # The R package fails on the first and third cases.
     fixed = {0: ["------GTACGTACGT", "GGGG----AAAATTTT"], 2: ["NNNNNCGTACGTANNN", "GGGGCCCCAAAATTTT"]}
     for i, case in enumerate(mr["cases"]):
         ranges = list(zip(case["chrom"], case["start"], case["end"]))
@@ -227,8 +225,7 @@ def test_small_helpers(tmp_path):
                            case["overlap"], case["return_incomp"])
         want = nums(case["gc"])
         if not case["return_incomp"] and len(got) == len(want) + 1:
-            # The R package drops a complete last window here (see
-            # calc_windows in DIVERGENCES.md).
+            # The R package drops a complete last window here.
             got = got[:-1]
         assert got == want, case
     with pytest.raises(ValueError):

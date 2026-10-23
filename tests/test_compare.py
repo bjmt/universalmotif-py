@@ -27,9 +27,8 @@ def _opts(a):
 
 def _beyond_null(got, want, a):
     """The R package gives a P-value of 0 to scores beyond what the parametric
-    null can reach, where the port gives the null's highest score's (see
-    DIVERGENCES.md in the Rust crate); such values must be small and positive
-    and are then set to R's 0."""
+    null can reach, where the port gives the null's highest score's; such
+    values must be small and positive and are then set to R's 0."""
     got = np.array(got, dtype=float)
     if a.get("null") == "parametric":
         fix = (want == 0) & (got != 0)
@@ -57,10 +56,10 @@ def test_compare_motifs_reference():
             assert got["offset"].to_list() == [int(x) for x in nums(w["offset"])], ctx
             assert got["strand"].to_list() == list(np.atleast_1d(w["strand"])), ctx
             # The R package writes T in RNA consensus strings; the port
-            # writes U (see DIVERGENCES.md).
+            # writes U.
             fix = (lambda s: s.replace("T", "U")) if case["set"] == "rna" else str
             # The R package builds these with its own 75% rule rather than
-            # the motif consensus rule the port uses (see DIVERGENCES.md). A
+            # the motif consensus rule the port uses. A
             # single base under the 75% rule is also one under the motif rule,
             # so those letters must agree.
             for col in ("subject_consensus", "target_consensus"):

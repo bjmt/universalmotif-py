@@ -972,7 +972,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--test", choices=("seqs", "hits"), default="seqs",
                    help="count sequences with hits, or hits (default: seqs)")
     p.add_argument("--shuffle-k", type=int, default=2,
-                   help="k-let size kept when shuffling targets for a background (default: 2)")
+                   help="k-mer size kept when shuffling targets for a background (default: 2)")
     _seed_arg(p)
     _threads_arg(p)
 
@@ -996,14 +996,14 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--no-rc", dest="rc", action="store_false",
                    help="search only the forward strand")
     p.add_argument("--shuffle-k", type=int, default=2,
-                   help="k-let size kept when shuffling targets for a background (default: 2)")
+                   help="k-mer size kept when shuffling targets for a background (default: 2)")
     _seed_arg(p)
     _threads_arg(p)
 
-    p = command("shuffle", cmd_shuffle, "shuffle sequences, keeping k-let counts")
+    p = command("shuffle", cmd_shuffle, "shuffle sequences, keeping k-mer counts")
     p.add_argument("-s", "--sequences", required=True, help="FASTA file of sequences")
     _out_arg(p, "the shuffled sequences")
-    p.add_argument("-k", type=int, default=1, help="size of the k-lets kept (default: 1)")
+    p.add_argument("-k", type=int, default=1, help="size of the k-mers kept (default: 1)")
     p.add_argument("--method", choices=("euler", "linear", "markov"), default="euler",
                    help="shuffling method (default: euler)")
     _seed_arg(p)

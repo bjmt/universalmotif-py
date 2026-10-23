@@ -114,7 +114,7 @@ def test_writers(tmp_path):
             got, want = path.read_text(), case["text"]
             if case["format"] == "homer":
                 # Thresholds follow HOMER's own scoring rather than the R
-                # package's (see DIVERGENCES.md in the Rust crate).
+                # package's.
                 def strip(t):
                     return [
                         "\t".join(line[1:].split("\t")[:2]) if line.startswith(">") else line

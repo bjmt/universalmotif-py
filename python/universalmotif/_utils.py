@@ -515,7 +515,7 @@ def mask_ranges(sequences: Mapping[str, str], ranges, letter: str = "-") -> dict
 
 
 def shuffle_string(string: str, k: int = 1, method: str = "euler", seed: int | None = None) -> str:
-    """Shuffle one string while keeping its k-let counts, as
+    """Shuffle one string while keeping its k-mer counts, as
     [`shuffle_sequences()`][universalmotif.shuffle_sequences] does.
 
     Examples

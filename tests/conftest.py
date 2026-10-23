@@ -54,7 +54,7 @@ def motif_from_record(r):
         "organism": r["organism"],
         "alphabet": r["alphabet"],
         "type": r["type"],
-        # The port gives CWMs no total IC (see DIVERGENCES.md).
+        # The port gives CWMs no total IC.
         "icscore": math.nan if r["type"] == "CWM" else num(r["icscore"]),
         "nsites": num(r["nsites"]),
         "pseudocount": num(r["pseudocount"]),
@@ -80,7 +80,7 @@ def motif_from_record(r):
 def r_rounding_differs(pos, nsites):
     """Whether R's rounding of a column of probabilities to ``nsites`` counts
     overshoots by more than one count, in which case the port rounds
-    differently (see DIVERGENCES.md)."""
+    differently."""
     n = 100.0 if nsites is None or math.isnan(nsites) or nsites <= 1 else nsites
     total = sum(math.floor(p * n + 0.5) for p in pos)
     return total - n > 1
@@ -106,7 +106,7 @@ def assert_motif_matches(got, record, ctx="", skip_nsites=False, skip_derived=Fa
     """Compare a motif with a record from R. ``skip_derived`` skips the total IC
     and consensus, which the R package leaves as they were after some
     operations where the port recomputes them, and ``skip_matrix`` the matrix
-    too, where R rounds counts differently (see DIVERGENCES.md)."""
+    too, where R rounds counts differently."""
     want = motif_from_record(record)
     fields = ["name", "altname", "family", "organism", "alphabet", "type", "strand",
               "extrainfo", "isgapped", "gaploc", "mingap", "maxgap"]

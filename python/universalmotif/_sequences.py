@@ -1,4 +1,4 @@
-"""k-lets, backgrounds, complexity, shuffling, random sequences, implanting
+"""k-mers, backgrounds, complexity, shuffling, random sequences, implanting
 and motif discovery."""
 
 from __future__ import annotations
@@ -43,38 +43,38 @@ def _restore(sequences, names: list[str], seqs: list[str]):
     return seqs
 
 
-def get_klets(letters: str | Sequence[str], k: int = 1) -> list[str]:
-    """All k-lets of some letters, in order, with the first position varying
+def get_kmers(letters: str | Sequence[str], k: int = 1) -> list[str]:
+    """All k-mers of some letters, in order, with the first position varying
     slowest. The letters are used in the order given.
 
     Examples
     --------
     >>> import universalmotif as um
-    >>> um.get_klets("AC", k=2)
+    >>> um.get_kmers("AC", k=2)
     ['AA', 'AC', 'CA', 'CC']
-    >>> len(um.get_klets("ACGT", k=3))
+    >>> len(um.get_kmers("ACGT", k=3))
     64
     """
     if k < 1:
         raise ValueError("k must be at least 1")
     letters = "".join(letters)
-    return _core._klets(letters, k)
+    return _core._kmers(letters, k)
 
 
-def count_klets(string: str, k: int = 1, alph: str | Sequence[str] | None = None) -> pl.DataFrame:
-    """Count the k-lets in a string.
+def count_kmers(string: str, k: int = 1, alph: str | Sequence[str] | None = None) -> pl.DataFrame:
+    """Count the k-mers in a string.
 
-    Every k-let of ``alph``, which defaults to the letters in the string,
-    gets a row in sorted order; k-lets with letters outside ``alph`` are not
-    counted. Returns a DataFrame with columns ``klet`` and ``count``, as in
+    Every k-mer of ``alph``, which defaults to the letters in the string,
+    gets a row in sorted order; k-mers with letters outside ``alph`` are not
+    counted. Returns a DataFrame with columns ``kmer`` and ``count``, as in
     [`get_bkg()`][universalmotif.get_bkg].
 
     Examples
     --------
     >>> import universalmotif as um
-    >>> um.count_klets("AACGTTAC").rows()
+    >>> um.count_kmers("AACGTTAC").rows()
     [('A', 3), ('C', 2), ('G', 1), ('T', 2)]
-    >>> counts = um.count_klets("AACGTTAC", k=2)
+    >>> counts = um.count_kmers("AACGTTAC", k=2)
     >>> counts.shape
     (16, 2)
     >>> counts.filter(counts["count"] > 0).rows()
@@ -88,8 +88,8 @@ def count_klets(string: str, k: int = 1, alph: str | Sequence[str] | None = None
     if not letters:
         raise ValueError("alph cannot be empty")
     return pl.DataFrame(
-        {"klet": _core._klets(letters, k), "count": _core._count_klets(string, k, letters)},
-        schema={"klet": pl.String, "count": pl.Int64},
+        {"kmer": _core._kmers(letters, k), "count": _core._count_kmers(string, k, letters)},
+        schema={"kmer": pl.String, "count": pl.Int64},
     )
 
 
@@ -234,11 +234,11 @@ def _default_alphabet(seqs: list[str]) -> str:
 def _write_meme_bkg(df: pl.DataFrame, file: str | os.PathLike[str] | IO[str]) -> None:
     lines = []
     order = -1
-    for klet, p in zip(df["klet"], df["probability"]):
-        if len(klet) - 1 != order:
-            order = len(klet) - 1
+    for kmer, p in zip(df["kmer"], df["probability"]):
+        if len(kmer) - 1 != order:
+            order = len(kmer) - 1
             lines.append(f"#   order {order}")
-        lines.append(f"{klet:<8}{p:.3e}")
+        lines.append(f"{kmer:<8}{p:.3e}")
     text = "\n".join(lines) + "\n"
     if isinstance(file, (str, os.PathLike)):
         with open(file, "w") as f:
@@ -260,12 +260,12 @@ def get_bkg(
     to_meme: str | os.PathLike[str] | IO[str] | None = None,
     nthreads: int = 1,
 ) -> pl.DataFrame | None:
-    """k-let counts and frequencies of sequences.
+    """k-mer counts and frequencies of sequences.
 
     Parameters
     ----------
     k
-        k-let sizes to count.
+        k-mer sizes to count.
     pseudocount
         Added to every count.
     alphabet
@@ -291,12 +291,12 @@ def get_bkg(
     Returns
     -------
     polars.DataFrame
-        A DataFrame with columns ``klet``, ``count`` and ``probability``, plus
+        A DataFrame with columns ``kmer``, ``count`` and ``probability``, plus
         ``sequence`` for per-sequence counts and ``start`` and ``stop`` for
-        windows. Without windows, rows are sorted by k-let size and then
+        windows. Without windows, rows are sorted by k-mer size and then
         alphabetically, and per-sequence counts list every sequence in turn
-        under each k-let. With windows, k-lets are sorted alphabetically
-        whatever their size and each k-let's windows follow one another,
+        under each k-mer. With windows, k-mers are sorted alphabetically
+        whatever their size and each k-mer's windows follow one another,
         with per-sequence counts grouped by sequence first.
 
     Examples
@@ -348,12 +348,12 @@ def shuffle_sequences(
     window_overlap: float = 0.01,
     nthreads: int = 1,
 ):
-    """Shuffle sequences while preserving their k-let composition.
+    """Shuffle sequences while preserving their k-mer composition.
 
-    The default ``method``, ``"euler"``, keeps k-let counts exactly, along
+    The default ``method``, ``"euler"``, keeps k-mer counts exactly, along
     with the first and last k-1 letters. ``"linear"`` shuffles
     non-overlapping blocks of k letters, keeping only those blocks' counts,
-    and ``"markov"`` draws a new sequence from the k-let frequencies,
+    and ``"markov"`` draws a new sequence from the k-mer frequencies,
     keeping them only approximately. With ``window``, each
     sliding window is shuffled in turn; ``window_size`` below 1 and
     ``window_overlap`` between 0 and 1 are fractions of each sequence's
@@ -371,7 +371,7 @@ def shuffle_sequences(
     >>> shuffled = um.shuffle_sequences(seq, k=2, seed=1)
     >>> shuffled
     'ACCGTACGGTAACGTT'
-    >>> um.count_klets(shuffled, k=2).equals(um.count_klets(seq, k=2))
+    >>> um.count_kmers(shuffled, k=2).equals(um.count_kmers(seq, k=2))
     True
     """
     if method not in _SHUFFLE_METHODS:
@@ -395,9 +395,9 @@ def create_sequences(
     """Random sequences.
 
     ``alphabet`` is ``"DNA"``, ``"RNA"``, ``"AA"`` or a string of letters.
-    ``freqs`` gives the frequency of every k-let of the alphabet, either as a
-    mapping from k-lets or in the sorted order that
-    [`get_klets()`][universalmotif.get_klets] gives; their number sets k, and
+    ``freqs`` gives the frequency of every k-mer of the alphabet, either as a
+    mapping from k-mers or in the sorted order that
+    [`get_kmers()`][universalmotif.get_kmers] gives; their number sets k, and
     sequences are drawn from the Markov model of order k-1 they define. Letters
     are uniform by default.
 
@@ -422,7 +422,7 @@ def create_sequences(
     if freqs is not None:
         if isinstance(freqs, Mapping):
             k = len(next(iter(freqs)))
-            kl = _core._klets(letters, k)
+            kl = _core._kmers(letters, k)
             missing = [x for x in kl if x not in freqs]
             if missing or len(freqs) != len(kl):
                 raise ValueError(f"freqs must have one value for each of the {len(kl)} {k}-lets")
@@ -669,10 +669,10 @@ def motif_finder(
 __all__ = [
     "calc_complexity",
     "calc_windows",
-    "count_klets",
+    "count_kmers",
     "create_sequences",
     "get_bkg",
-    "get_klets",
+    "get_kmers",
     "implant_motifs",
     "motif_finder",
     "sample_sites",

@@ -1,4 +1,4 @@
-//! Bindings for k-lets, backgrounds, complexity, shuffling, random sequences,
+//! Bindings for k-mers, backgrounds, complexity, shuffling, random sequences,
 //! implanting and motif discovery.
 
 use pyo3::prelude::*;
@@ -25,13 +25,13 @@ fn window(w: Option<(f64, f64)>) -> Option<WindowOptions> {
 }
 
 #[pyfunction]
-fn _klets(letters: &str, k: usize) -> Vec<String> {
-    kmer::klets(&chars(letters), k)
+fn _kmers(letters: &str, k: usize) -> Vec<String> {
+    kmer::kmers(&chars(letters), k)
 }
 
 #[pyfunction]
-fn _count_klets(seq: &str, k: usize, alphabet: &str) -> Vec<u64> {
-    kmer::count_klets(seq, k, &chars(alphabet))
+fn _count_kmers(seq: &str, k: usize, alphabet: &str) -> Vec<u64> {
+    kmer::count_kmers(seq, k, &chars(alphabet))
 }
 
 #[pyfunction]
@@ -90,7 +90,7 @@ fn _sequence_complexity(
     ])
 }
 
-/// k-let counts as a table: `sequence` for per-sequence counts (reverse
+/// k-mer counts as a table: `sequence` for per-sequence counts (reverse
 /// complements take their sequence's name) and `start`/`stop` for windows.
 #[pyfunction]
 #[pyo3(signature = (seqs, names, k, pseudocount, alphabet, rc, merge, window, nthreads))]
@@ -140,7 +140,7 @@ fn _get_bkg(
             i64s(rows.iter().map(|r| r.stop.unwrap_or(0) as i64)),
         ));
     }
-    cols.push(("klet", strs(rows.iter().map(|r| r.klet.as_str()))));
+    cols.push(("kmer", strs(rows.iter().map(|r| r.kmer.as_str()))));
     cols.push(("count", i64s(rows.iter().map(|r| r.count as i64))));
     cols.push(("probability", f64s(rows.iter().map(|r| r.probability))));
     table(cols)
@@ -334,8 +334,8 @@ fn _motif_finder<'py>(
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(_klets, m)?)?;
-    m.add_function(wrap_pyfunction!(_count_klets, m)?)?;
+    m.add_function(wrap_pyfunction!(_kmers, m)?)?;
+    m.add_function(wrap_pyfunction!(_count_kmers, m)?)?;
     m.add_function(wrap_pyfunction!(_windows, m)?)?;
     m.add_function(wrap_pyfunction!(_complexity, m)?)?;
     m.add_function(wrap_pyfunction!(_sequence_complexity, m)?)?;

@@ -18,12 +18,12 @@ def _as_list(x):
     return x if isinstance(x, list) else [x]
 
 
-def test_klets_reference():
+def test_kmers_reference():
     for case in _ref("klets"):
-        assert um.get_klets(case["letters"], case["k"]) == case["klets"]
+        assert um.get_kmers(case["letters"], case["k"]) == case["klets"]
     for case in _ref("count"):
-        got = um.count_klets(case["string"], case["k"], case["alph"])
-        assert got["klet"].to_list() == _as_list(case["klets"])
+        got = um.count_kmers(case["string"], case["k"], case["alph"])
+        assert got["kmer"].to_list() == _as_list(case["klets"])
         assert got["count"].to_list() == nums(case["counts"])
 
 
@@ -47,8 +47,7 @@ def test_windows_reference():
 def test_complexity_reference():
     for case in _ref("complexity"):
         # Without an alphabet, the R package uses the letters of the string
-        # itself; the port uses ACGT for DNA (see DIVERGENCES.md in the Rust
-        # crate), so R's default is passed explicitly.
+        # itself; the port uses ACGT for DNA, so R's default is passed explicitly.
         alph = case["alph"] or "".join(sorted(set(case["string"])))
         got = um.calc_complexity(case["string"], case["method"], alph, case["max_word"])
         assert got == pytest.approx(nums(case["value"])[0], rel=1e-12, abs=1e-15, nan_ok=True), case
@@ -92,15 +91,16 @@ def test_get_bkg_reference():
             window_size=a.get("window.size", 0.1),
             window_overlap=a.get("window.overlap", 0),
         )
-        t = case["table"]
+        # The reference tables name the k-mer column klet.
+        t = {("kmer" if k == "klet" else k): v for k, v in case["table"].items()}
         assert got.columns == list(t), a
-        for col in t:
+        for col, want in t.items():
             if col == "probability":
-                np.testing.assert_allclose(got[col].to_numpy(), nums(t[col]), rtol=1e-12)
-            elif col in ("sequence", "klet"):
-                assert got[col].to_list() == t[col], (a, col)
+                np.testing.assert_allclose(got[col].to_numpy(), nums(want), rtol=1e-12)
+            elif col in ("sequence", "kmer"):
+                assert got[col].to_list() == want, (a, col)
             else:
-                assert got[col].to_list() == nums(t[col]), (a, col)
+                assert got[col].to_list() == nums(want), (a, col)
 
 
 def test_meme_background_reference(tmp_path):
@@ -132,8 +132,7 @@ def test_motif_finder_reference():
             if k not in ("RC",)
         }
         # The port corrects P-values for the words searched and counts every
-        # word in the q-values, where the R package does neither (see
-        # DIVERGENCES.md in the Rust crate). The motifs found are the same,
+        # word in the q-values, where the R package does neither. The motifs found are the same,
         # so each one R reports is looked for among all of the port's.
         kw.setdefault("qvalue", 1e-3)
         kept = um.motif_finder(pos, neg, rc=a.get("RC", True), **kw)
@@ -173,7 +172,7 @@ def test_shuffle_sequences():
     assert out == um.shuffle_sequences(seqs, k=3, seed=5)
     assert out != seqs
     for a, b in zip(seqs, out):
-        assert um.count_klets(a, 3, "ACGT").equals(um.count_klets(b, 3, "ACGT"))
+        assert um.count_kmers(a, 3, "ACGT").equals(um.count_kmers(b, 3, "ACGT"))
     named = um.shuffle_sequences({"x": seqs[0]}, k=1, method="linear", seed=1)
     assert list(named) == ["x"] and sorted(named["x"]) == sorted(seqs[0])
     assert isinstance(um.shuffle_sequences(seqs[0], k=2, method="markov", seed=1), str)
@@ -189,7 +188,7 @@ def test_create_sequences():
     assert len(seqs) == 20 and all(len(s) == 50 and set(s) <= set("ACGU") for s in seqs)
     aa = um.create_sequences("AA", 2, 10, seed=3)
     assert all(set(s) <= set("ACDEFGHIKLMNPQRSTVWY") for s in aa)
-    freqs = {k: 0.0 for k in um.get_klets("ACGT", 2)}
+    freqs = {k: 0.0 for k in um.get_kmers("ACGT", 2)}
     freqs["AA"] = freqs["TT"] = 0.5
     for s in um.create_sequences(seqnum=5, seqlen=20, freqs=freqs, seed=1):
         assert len(set(s)) == 1
@@ -233,7 +232,7 @@ def test_implant_motifs():
 
 def test_get_bkg_defaults():
     df = um.get_bkg(["AAAA", "CCCC"], k=1)
-    assert df["klet"].to_list() == ["A", "C", "G", "T"]
+    assert df["kmer"].to_list() == ["A", "C", "G", "T"]
     assert isinstance(df, pl.DataFrame)
     df = um.get_bkg(["MKV"], k=1)
-    assert df["klet"].to_list() == ["K", "M", "V"]
+    assert df["kmer"].to_list() == ["K", "M", "V"]

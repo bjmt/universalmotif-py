@@ -55,7 +55,7 @@ def test_proximity_reference():
             universe = _ranges(_ref("universe"))
         elif count == "anchors":
             # Without lengths zones are not clipped at chromosome ends, which
-            # is what the R package ends up doing (see DIVERGENCES.md).
+            # is what the R package ends up doing.
             universe = whole
         else:
             universe = lengths

@@ -1,6 +1,6 @@
 # Sequences
 
-Random sequences, shuffling, k-let counts and backgrounds, sequence complexity, sliding windows, masking, and sampling sites from motifs.
+Random sequences, shuffling, k-mer counts and backgrounds, sequence complexity, sliding windows, masking, and sampling sites from motifs.
 
 ::: universalmotif.create_sequences
 
@@ -10,9 +10,9 @@ Random sequences, shuffling, k-let counts and backgrounds, sequence complexity, 
 
 ::: universalmotif.get_bkg
 
-::: universalmotif.count_klets
+::: universalmotif.count_kmers
 
-::: universalmotif.get_klets
+::: universalmotif.get_kmers
 
 ::: universalmotif.calc_windows
 

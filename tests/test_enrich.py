@@ -74,7 +74,7 @@ def _bh(p):
 
 
 def _check_coocc(got, t, ctx):
-    # The port does not test a motif against itself (see DIVERGENCES.md), so
+    # The port does not test a motif against itself, so
     # self pairs are checked on their own and left out of the comparison with
     # R, whose q-values are recomputed without them.
     own = got.filter(pl.col("motif_a") == pl.col("motif_b"))

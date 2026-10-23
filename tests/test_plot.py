@@ -80,7 +80,7 @@ def test_aligned_matrices_reference():
         for (name, m), want in zip(got.items(), case["matrices"]):
             want = np.array([nums(c) for c in want], dtype=float).T
             # The R package's relative entropy is NaN for zero probabilities,
-            # which the port takes as 0 (see DIVERGENCES.md in the Rust crate).
+            # which the port takes as 0.
             want[np.isnan(want)] = 0.0
             np.testing.assert_allclose(m, want, rtol=1e-12, atol=1e-14, err_msg=f"{a} {name}")
 

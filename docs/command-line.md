@@ -27,7 +27,7 @@ umotif scan --help
 | `compare` | Compare motifs with each other or with a database. |
 | `enrich` | Test motifs for enrichment in target sequences. |
 | `find` | Discover motifs *de novo*. |
-| `shuffle` | Shuffle sequences, keeping their k-let counts. |
+| `shuffle` | Shuffle sequences, keeping their k-mer counts. |
 | `extract` | Write the sequences of genomic ranges as FASTA. |
 | `bkg` | Draw background sequences matched to targets on GC content, length and bigWig signal. |
 | `matrix` | Make a peak by motif matrix of matches for single-cell ATAC analyses. |

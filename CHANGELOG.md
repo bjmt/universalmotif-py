@@ -17,7 +17,7 @@ the R package:
 - Motif comparison, merging, clustering and trees.
 - Enrichment, co-occurrence, positional enrichment, proximity to genomic
   anchors, composition-matched backgrounds and *de novo* motif discovery.
-- Sequence utilities: shuffling, random sequences, k-lets, complexity,
+- Sequence utilities: shuffling, random sequences, k-mers, complexity,
   masking and sliding windows.
 - Sequence logos, motif trees and result plots drawn with matplotlib.
 - Links to the wider ecosystem: motifs fetched from JASPAR, HOCOMOCO and
@@ -31,6 +31,8 @@ the R package:
   converting, fetching, curating and drawing motifs, scanning, comparison,
   enrichment, discovery, backgrounds, match matrices, proximity,
   co-occurrence and positional enrichment.
+- k-mers in place of k-lets, so `count_klets()` and `get_klets()` are now
+  `count_kmers()` and `get_kmers()`, and `get_bkg()` has a `kmer` column.
 - Canadian spelling throughout, so `summarise_motifs()` is now
   `summarize_motifs()`, and the `best_center` and `centers` columns of
   `motif_peaks()` are `best_centre` and `centres`.

@@ -1,5 +1,5 @@
 """Behaviour that differs from the R package on purpose, or that it lacks,
-checked directly (see DIVERGENCES.md in the Rust crate)."""
+checked directly."""
 
 import gzip
 

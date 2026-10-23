@@ -93,7 +93,7 @@ found = um.motif_finder(targets, controls, seed=1)
 - **Single-cell ATAC and deep learning:** sparse peak by motif matrices for
   AnnData and pychromVAR, motifs as convolution filters and back, one-hot
   sequences, and TF-MoDISco results.
-- **Sequences:** shuffling that keeps k-let counts, random sequences, k-let
+- **Sequences:** shuffling that keeps k-mer counts, random sequences, k-mer
   backgrounds, complexity, masking and sliding windows.
 - **Plots:** sequence logos, motif trees and plots of the results above,
   with motifs shown as logos in Jupyter and SVG logos for reports.
@@ -126,10 +126,11 @@ back as polars DataFrames. Functions that use random numbers take a `seed`,
 but seeds do not reproduce the R package's results, since the two use
 different random number generators.
 
-A number of bugs found in the R package while porting it are fixed here
-rather than reproduced, and a few features were left out on purpose.
+Bugs found in the R package while porting it are fixed here rather than
+reproduced.
 [DIVERGENCES.md](https://github.com/bjmt/universalmotif-rs/blob/main/DIVERGENCES.md)
-in the Rust crate lists every difference.
+in the Rust crate lists the other differences, including the few features
+left out on purpose.
 
 ## Documentation
 
@@ -155,6 +156,15 @@ uv sync --group dev --no-install-project
 uv run --no-sync maturin develop --release
 uv run --no-sync pytest
 ```
+
+## Citation
+
+If this package has been useful for your research, please cite the article
+describing universalmotif:
+
+Tremblay BJM (2024). universalmotif: An R package for biological motif
+analysis. *Journal of Open Source Software* **9**, 7012.
+DOI: [10.21105/joss.07012](https://doi.org/10.21105/joss.07012)
 
 ## Licence
 

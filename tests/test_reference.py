@@ -45,14 +45,13 @@ def test_create_motif():
             call = lambda: um.create_motif(matrix, letters=inp["rows"], **kwargs)
             if "type" not in kwargs and any(v < 0 for c in cols for v in c):
                 # The R package reads such a matrix as a PWM and converts it
-                # to a PPM; the port asks for the type instead (see
-                # DIVERGENCES.md in the Rust crate).
+                # to a PPM; the port asks for the type instead.
                 with pytest.raises(ValueError, match="negative values"):
                     call()
                 continue
             if len(cols) == 1 and case.get("motif") is None:
                 # The R package fails on single-column matrices with row
-                # names (see DIVERGENCES.md in the Rust crate).
+                # names.
                 assert call().type == "PCM"
                 continue
         else:
@@ -60,8 +59,7 @@ def test_create_motif():
             value = strings[0] if len(strings) == 1 else strings
             call = lambda: um.create_motif(value, **kwargs)
             # A single consensus string becomes probabilities rounded to
-            # nsites counts, which R does unevenly for some ambiguity letters
-            # (see DIVERGENCES.md in the Rust crate).
+            # nsites counts, which R does unevenly for some ambiguity letters.
             n = kwargs.get("nsites")
             if len(strings) == 1 and n is not None:
                 to_ppm = um.consensus_to_ppm
