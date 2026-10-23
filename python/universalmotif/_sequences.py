@@ -427,7 +427,7 @@ def create_sequences(
             kl = _core._kmers(letters, k)
             missing = [x for x in kl if x not in freqs]
             if missing or len(freqs) != len(kl):
-                raise ValueError(f"freqs must have one value for each of the {len(kl)} {k}-lets")
+                raise ValueError(f"freqs must have one value for each of the {len(kl)} {k}-mers")
             f = [float(freqs[x]) for x in kl]
         else:
             f = [float(x) for x in freqs]

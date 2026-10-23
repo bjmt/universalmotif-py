@@ -489,3 +489,12 @@ def test_peaks_argument_errors():
                      ("sequence", "'sequence' or 'sequence_i'")):
         with pytest.raises(ValueError, match=msg):
             um.motif_peaks(hits.drop(col), 100)
+
+
+def test_motif_peaks_rejects_hits_outside_the_sequences():
+    hits = pl.DataFrame({"motif": ["m", "m"], "sequence": ["s1", "s2"], "start": [10, 103],
+                         "end": [16, 109], "score": [1.0, 1.0]})
+    with pytest.raises(ValueError, match="outside sequences of length 100"):
+        um.motif_peaks(hits, seq_length=100)
+    with pytest.raises(ValueError, match="seq_length must be at least 1"):
+        um.motif_peaks(hits, seq_length=0)

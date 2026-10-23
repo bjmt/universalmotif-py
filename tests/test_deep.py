@@ -472,3 +472,13 @@ def test_one_hot_batch_checks():
     assert [s for x in batches for s in um.from_one_hot(x)] == ["AC", "CG", "GT", "TA", "AC"]
     # Iterating again reads the batches afresh.
     assert sum(x.shape[0] for x in batches) == 5
+
+
+def test_filters_are_read_as_their_type():
+    # Log-odds filters need not have negative values, and are not guessed
+    # to be probabilities or counts.
+    f = np.array([[0.5, 1.2, 0.1], [0.2, 0.1, 0.3], [0.1, 0.4, 0.2], [1.5, 0.2, 0.9]])
+    m = um.from_filters(f)[0]
+    assert m.type == "PWM"
+    np.testing.assert_allclose(m.matrix, f)
+    np.testing.assert_allclose(um.from_filters(np.ones((4, 2)) * 2, type="PCM")[0].matrix, 2)

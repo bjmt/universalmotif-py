@@ -144,6 +144,7 @@ def _create_from_matrix(
     matrix: npt.NDArray[np.float64],
     letters: list[str] | None = ...,
     alphabet: str | None = ...,
+    matrix_type: str | None = ...,
     **kwargs: Any,
 ) -> Motif: ...
 def _create_from_strings(strings: list[str], alphabet: str | None = ..., **kwargs: Any) -> Motif: ...

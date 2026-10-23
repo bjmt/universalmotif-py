@@ -197,8 +197,6 @@ def test_scan_hits_are_consistent():
     assert near_n.select("start", "end").rows() == [(0, 6), (9, 15)]
 
 
-@pytest.mark.xfail(strict=True, reason="score_match sums truncated entries in floating point, "
-                   "then truncates the total, and can come out 0.001 below the scan score")
 def test_score_match_agrees_with_scanning():
     gbox = um.example_motifs()[3]
     hit = um.scan_sequences(gbox, "TAACGTGG", pvalue=0.01, rc=False)

@@ -82,6 +82,9 @@ def _range_table(x, what: str) -> pl.DataFrame:
             end = x["start"] + x["width"]
         else:
             raise ValueError(f"{what} needs an end, stop or width column")
+        for name, col in (("start", x["start"]), ("end", end)):
+            if col.dtype.is_float() and (col.drop_nulls() != col.drop_nulls().round()).any():
+                raise ValueError(f"{what} {name} positions must be whole numbers")
         strand = x["strand"].cast(pl.String) if "strand" in x.columns else pl.Series(["*"] * x.height)
         df = pl.DataFrame({
             "chrom": x[chrom].cast(pl.String),
@@ -93,6 +96,8 @@ def _range_table(x, what: str) -> pl.DataFrame:
         rows = [tuple(r) for r in x]
         if any(len(r) not in (3, 4) for r in rows):
             raise ValueError(f"{what} must be (chrom, start, end) or (chrom, start, end, strand) tuples")
+        if any(float(r[1]) != int(r[1]) or float(r[2]) != int(r[2]) for r in rows):
+            raise ValueError(f"{what} positions must be whole numbers")
         df = pl.DataFrame(
             {
                 "chrom": [str(r[0]) for r in rows],
@@ -414,7 +419,8 @@ def match_bkg(
         genome read with [`read_fasta()`][universalmotif.read_fasta], to draw
         ``n_candidates`` random windows from; from a genome on disk, only the
         windows are read. The windows take their widths
-        from the targets, lie on ``chromosomes``, which defaults to all of
+        from the targets, and each target is matched among windows of its
+        own width; they lie on ``chromosomes``, which defaults to all of
         them, and avoid ``exclude``, a range table such as the target peaks.
         ``n_candidates`` defaults to ``max(10000, 10 * len(sequences))``.
     covariates, universe_covariates
@@ -492,6 +498,10 @@ def match_bkg(
             lens = [chrom_lengths[c] for c in chroms]
         else:
             lens = [len(genome[c]) for c in chroms]
+        longest = max(len(s) for s in seqs)
+        if longest > max(lens, default=0):
+            raise ValueError(f"a target of {longest} letters is longer than every chromosome "
+                             "windows can be drawn from")
         windows = _core._genome_windows(lens, [len(s) for s in seqs], n_candidates, exclude_cols,
                                         _seed(seed))
         win_chroms = [chroms[c] for c, _, _ in windows]
@@ -541,8 +551,30 @@ def match_bkg(
             f"({n_per_target * len(seqs)}); some sequences will be drawn more than once",
             stacklevel=2,
         )
-    picked, fallbacks = _core._match_bkg(seqs, uni, cov_specs, n_per_target, n_bins_gc,
-                                         n_bins_length, unique, _seed(seed))
+    if genome is None:
+        picked, fallbacks = _core._match_bkg(seqs, uni, cov_specs, n_per_target, n_bins_gc,
+                                             n_bins_length, unique, _seed(seed))
+    else:
+        # Windows from a genome take exactly the widths of the targets, so
+        # each target is matched among windows of its own width, rather than
+        # in length bins that can lump different widths together.
+        target_w, window_w = [len(s) for s in seqs], [len(u) for u in uni]
+        picked = [0] * (n_per_target * len(seqs))
+        fallbacks = 0
+        for g, w in enumerate(sorted(set(target_w))):
+            ti = [i for i, x in enumerate(target_w) if x == w]
+            ui = [i for i, x in enumerate(window_w) if x == w]
+            if not ui:
+                raise ValueError(f"no windows of width {w} could be drawn; try more n_candidates")
+            specs = [(nm, [t[i] for i in ti], [u[i] for i in ui], b, ty)
+                     for nm, t, u, b, ty in cov_specs]
+            # All of these have one width, so the length bins do nothing.
+            p, f = _core._match_bkg([seqs[i] for i in ti], [uni[i] for i in ui], specs, n_per_target,
+                                    n_bins_gc, 2, unique, _seed(None if seed is None else seed + g))
+            fallbacks += f
+            for k, t in enumerate(ti):
+                for r in range(n_per_target):
+                    picked[t * n_per_target + r] = ui[p[k * n_per_target + r]]
     if fallbacks:
         warnings.warn(
             f"{fallbacks} target(s) ran out of matching sequences nearby and repeated some; "

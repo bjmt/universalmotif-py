@@ -10,6 +10,7 @@ from typing import Any
 
 import numpy as np
 
+from . import _core
 from ._analysis import _sequence_pairs
 from ._api import _check_motif, convert_type, create_motif
 from ._core import Motif
@@ -119,7 +120,10 @@ def from_filters(
             nonzero = np.flatnonzero(np.abs(m).sum(axis=0) > 0)
             if nonzero.size:
                 m = m[:, nonzero[0]:nonzero[-1] + 1]
-        out.append(create_motif(m, alphabet=alphabet, type=type, name=name, bkg=bkg))
+        # The values are of the type given, so it is not guessed from them;
+        # a PWM can have no negative values, and filters of zeros are PWMs.
+        out.append(_core._create_from_matrix(np.ascontiguousarray(m), None, alphabet, matrix_type=type,
+                                             type=type, name=name, bkg=bkg))
     return out
 
 

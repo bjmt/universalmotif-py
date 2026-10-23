@@ -143,13 +143,11 @@ def test_repr_html_rows():
     assert ">Total IC<" not in cwm._repr_html_()
 
 
-def test_repr_html_without_a_logo():
-    # A count matrix with no counts has no logo to draw, but is still shown.
-    empty = um.create_motif(np.zeros((4, 3)), alphabet="DNA", type="PCM")
-    with pytest.raises(ValueError):
-        um.logo_svg(empty)
-    out = empty._repr_html_()
-    assert "<svg" not in out and ">Type</th>" in out and "<details>" in out
+def test_empty_count_matrix_is_rejected():
+    # A count matrix with no counts is not a motif, so there is never one
+    # without a logo to draw.
+    with pytest.raises(ValueError, match="at least one count"):
+        um.create_motif(np.zeros((4, 3)), alphabet="DNA", type="PCM")
 
 
 def test_to_logomaker_types_and_missing_pandas(monkeypatch):

@@ -381,10 +381,10 @@ def view_motifs(
         sort_positions = use_type not in ("PCM", "PPM")
     if fit_to_height is _DEFAULT:
         fit_to_height = 1.0 if use_type == "PPM" else None
-    elif fit_to_height is not None and use_type in ("ICM", "PWM"):
+    elif fit_to_height is not None and use_type in ("ICM", "PWM", "CWM"):
         import warnings
 
-        warnings.warn('fit_to_height is ignored for use_type "ICM" and "PWM"', stacklevel=2)
+        warnings.warn('fit_to_height is ignored for use_type "ICM", "PWM" and "CWM"', stacklevel=2)
         fit_to_height = None
     motifs = [motifs] if isinstance(motifs, Motif) else list(motifs)
     names, mats, offsets, widths, alphabet = _prepare_motifs(

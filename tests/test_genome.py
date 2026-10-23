@@ -256,8 +256,6 @@ def test_genome_extract_and_keys(genome):
     assert g.get("chr9") is None
 
 
-@pytest.mark.xfail(strict=True, reason="a FASTA whose last line has no newline cannot be opened, "
-                                       "although samtools faidx indexes it")
 def test_genome_without_final_newline(tmp_path):
     path = tmp_path / "g.fa"
     path.write_text(">a\nACGT\nAC")

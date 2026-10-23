@@ -320,6 +320,8 @@ def motif_peaks(
         raise ValueError("mode must be 'central' or 'local'")
     if not 0 < qvalue <= 1:
         raise ValueError("qvalue must be in (0, 1]")
+    if seq_length < 1:
+        raise ValueError("seq_length must be at least 1")
     for col in ("motif", "score", "start"):
         if col not in hits.columns:
             raise ValueError(f"hits must have a {col!r} column")
@@ -332,6 +334,10 @@ def motif_peaks(
     motif_names = [str(m) for m in hits["motif"].to_list()]
     seq_values = hits[seq_col].to_list()
     centres = ((hits["start"].cast(pl.Float64) + hits[end_col].cast(pl.Float64) - 1) / 2).to_list()
+    outside = [c for c in centres if not 0 <= c < seq_length]
+    if outside:
+        raise ValueError(f"{len(outside)} hit(s) are centred outside sequences of length {seq_length}, "
+                         f"such as at {outside[0]:g}; check seq_length")
     if seq_strand is not None:
         missing = {s for s in seq_values if s not in seq_strand}
         if missing:

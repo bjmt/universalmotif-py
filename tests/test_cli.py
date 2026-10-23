@@ -708,8 +708,6 @@ def test_run_as_script(monkeypatch, capsys):
     assert capsys.readouterr().out.startswith("name\tfamily\t")
 
 
-@pytest.mark.xfail(strict=True, reason="a BED universe named .txt is read as chrom sizes, "
-                                       "giving chr1 a length of 0 and no hits")
 def test_proximity_bed_universe_named_txt(tmp_path, genome):
     fasta, _bed, _chroms, peaks = genome
     summits = tmp_path / "summits.bed"
@@ -721,3 +719,11 @@ def test_proximity_bed_universe_named_txt(tmp_path, genome):
             tmp_path / f"u.{ext}", "-o", tmp_path / f"{ext}.tsv")
     # read_ranges takes BED files whatever their extension, as for -a.
     assert table(tmp_path / "txt.tsv").equals(table(tmp_path / "bed.tsv"))
+
+
+def test_warning_format_is_restored():
+    import warnings
+
+    before = warnings.showwarning
+    run("summary", DATA / "example.jaspar")
+    assert warnings.showwarning is before

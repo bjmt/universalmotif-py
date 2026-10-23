@@ -77,7 +77,11 @@ def test_scoring_helpers():
         elif f == "motif_score":
             got = um.motif_score(m, nums(a["threshold"]), a["threshold_type"], af)
         elif f == "score_match":
+            # R adds the rounded entries as floats and truncates the total
+            # again, so it can be 0.001 off the grid sum used in scanning.
             got = um.score_match(m, a["matches"], af)
+            np.testing.assert_allclose(got, nums(want), rtol=0, atol=0.001 + 1e-9, err_msg=ctx)
+            continue
         elif f == "get_scores":
             got = um.get_scores(m, af)
         elif f == "get_matches":

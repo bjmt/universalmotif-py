@@ -264,3 +264,18 @@ def test_tree_from_distances_and_labels():
     one = um.merge_motifs(motifs[0])
     assert one.name == "TATA-box" and one.type == "PPM"
     np.testing.assert_allclose(one.matrix, um.convert_type(motifs[0], "PPM").matrix)
+
+
+def test_merging_with_a_reverse_complement_keeps_the_first_motif():
+    m = um.example_motifs()[1]
+    merged = um.merge_motifs([m, um.motif_rc(m)])
+    assert merged.consensus == m.consensus
+
+
+def test_whole_number_matrices_with_uneven_columns():
+    with pytest.raises(ValueError, match="read as counts"):
+        um.create_motif(np.array([[1.0, 2, 3, 4], [5, 6, 7, 8]]).T, alphabet="DNA")
+    # With nsites the counts are rescaled instead.
+    m = um.create_motif(np.array([[1.0, 2, 3, 4], [5, 6, 7, 8]]).T, alphabet="DNA", nsites=10,
+                        type="PCM")
+    assert m.matrix.sum(axis=0).tolist() == [10, 10]

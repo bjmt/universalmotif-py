@@ -439,11 +439,12 @@ fn create_opts(
 }
 
 #[pyfunction]
-#[pyo3(signature = (matrix, letters=None, alphabet=None, **kwargs))]
+#[pyo3(signature = (matrix, letters=None, alphabet=None, matrix_type=None, **kwargs))]
 fn _create_from_matrix(
     matrix: PyReadonlyArray2<'_, f64>,
     letters: Option<Vec<String>>,
     alphabet: Option<&str>,
+    matrix_type: Option<&str>,
     kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<PyMotif> {
     let matrix = matrix_from_numpy(matrix)?;
@@ -462,9 +463,14 @@ fn _create_from_matrix(
             "please provide an alphabet or row letters",
         )),
     })?;
-    create::from_matrix(matrix, letters.as_deref(), alphabet, &opts)
-        .map(PyMotif::from)
-        .map_err(err)
+    match matrix_type {
+        Some(t) => {
+            create::from_typed_matrix(matrix, letters.as_deref(), alphabet, parse_type(t)?, &opts)
+        }
+        None => create::from_matrix(matrix, letters.as_deref(), alphabet, &opts),
+    }
+    .map(PyMotif::from)
+    .map_err(err)
 }
 
 #[pyfunction]

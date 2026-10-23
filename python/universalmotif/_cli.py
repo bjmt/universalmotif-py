@@ -228,6 +228,15 @@ def write_table(df: pl.DataFrame, path: str | None) -> None:
             out.close()
 
 
+def _two_columns(path: str) -> bool:
+    """Whether the first data line of a file has two tab-separated columns,
+    as chromosome sizes do."""
+    for line in _read_bytes(path).decode().splitlines():
+        if line.strip() and not line.startswith(("#", "track", "browser")):
+            return len(line.rstrip("\r").split("\t")) == 2
+    return False
+
+
 def _chrom_sizes(path: str) -> dict[str, int]:
     """Chromosome lengths from a chrom.sizes or .fai file, or a genome."""
     text = _read_bytes(path).decode()
@@ -646,7 +655,10 @@ def cmd_proximity(a):
     universe = None
     if a.universe:
         u = a.universe
-        sizes_like = _stem_suffix(u) in (".fai", ".sizes", ".txt") or u.endswith("chrom.sizes")
+        # A .txt file can hold chromosome sizes or ranges, so it is told
+        # apart by its number of columns.
+        sizes_like = (_stem_suffix(u) in (".fai", ".sizes") or u.endswith("chrom.sizes")
+                      or (_stem_suffix(u) == ".txt" and _two_columns(u)))
         universe = _chrom_sizes(u) if sizes_like or _is_genome(u) else read_ranges(u)
     if a.hits:
         if a.motifs:
@@ -1156,6 +1168,7 @@ def main(argv: list[str] | None = None) -> int:
         prog = "universalmotif"
     parser = build_parser(prog)
     args = parser.parse_args(argv)
+    shown = warnings.showwarning
     warnings.showwarning = _show_warning
     try:
         args.fn(args)
@@ -1174,6 +1187,8 @@ def main(argv: list[str] | None = None) -> int:
         msg = str(e).strip("'\"") or type(e).__name__
         print(f"{prog} {args.command}: error: {msg}", file=sys.stderr)
         return 1
+    finally:
+        warnings.showwarning = shown
     return 0
 
 

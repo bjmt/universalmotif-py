@@ -55,6 +55,8 @@ def compare_motifs(
     ``"empirical"`` null uses the columns of all the motifs given, while the
     ``"parametric"`` null, for DNA and RNA only, uses a Dirichlet grid around
     ``bkg``. Q-values are Benjamini-Hochberg adjusted within each query.
+    P-values are worked out for each query's own columns and alignments, so
+    a P-value matrix need not be symmetric even where the scores are.
 
     By default only the overlap counts, so a short target that matches part
     of a long query can score as well as one that covers all of it. With
@@ -64,8 +66,8 @@ def compare_motifs(
     column scores zero and query columns hanging over the ends of the target
     count as typical, and the P-value of the best alignment is that of the
     best of all the alignments tried. This favours alignments covering more
-    of the query, and comparisons then depend on which motif is the query,
-    so P-value matrices need not be symmetric. Either way, ``score`` is the
+    of the query, and scores then depend on which motif is the query too.
+    Either way, ``score`` is the
     mean column correlation over the overlap.
 
     Returns

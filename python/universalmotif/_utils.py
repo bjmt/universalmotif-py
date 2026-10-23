@@ -182,7 +182,9 @@ def score_match(
     motif: Motif, match: str | Sequence[str], allow_nonfinite: bool = False
 ) -> float | npt.NDArray[np.float64]:
     """The score of each word, which must be as long as the motif, with each
-    PWM entry and the total truncated to three decimals. As in
+    PWM entry truncated to three decimals and then added up, so that a word
+    scores exactly what [`scan_sequences()`][universalmotif.scan_sequences]
+    reports for it. As in
     [`motif_pvalue()`][universalmotif.motif_pvalue], a motif whose PWM would
     have infinite values, such as a count matrix without a pseudocount, gets
     its pseudocount reapplied first, or 1 if it has none, unless
@@ -196,7 +198,7 @@ def score_match(
     >>> um.score_match(motif, "TGACTCA")
     11.652
     >>> um.score_match(motif, ["TGAGTAA", "AAAAAAA"]).round(3).tolist()
-    [9.356, -6.984]
+    [9.356, -6.985]
     """
     words = [match] if isinstance(match, str) else list(match)
     out = np.array(_core._score_match(_one_motif(motif), words, allow_nonfinite))

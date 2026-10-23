@@ -29,6 +29,26 @@
   existing figure.
 - A new guide, motifs and deep learning, works through the TF-MoDISco
   patterns and contribution scores of a published chromBPNet model.
+- Fixes found by new tests:
+  - `score_match()` scores words exactly as `scan_sequences()` does,
+    instead of up to 0.001 apart.
+  - `Genome` opens FASTA files whose last line has no line ending.
+  - `create_sequences()` rejects frequencies that are all zero,
+    `motif_proximity()` an empty `dist_thresholds`, `motif_peaks()` hits
+    centred outside the sequences, and range tables positions that are
+    not whole numbers.
+  - `from_filters()` reads filters as the type given rather than guessing
+    it, so log-odds filters with no negative values stay as they are.
+  - `match_bkg()` matches each target to genome windows of its own width,
+    and explains when a target is longer than every chromosome.
+  - `umotif proximity --universe` reads a `.txt` file of ranges as ranges
+    rather than as chromosome sizes.
+  - `view_motifs()` warns that `fit_to_height` is ignored for CWMs, as for
+    ICMs and PWMs.
+  - Count matrices with an empty column are rejected, and matrices read as
+    counts with uneven columns say why.
+  - Merging a motif with its reverse complement keeps the first as the
+    anchor, and the command line restores the warning format after a run.
 - Logos keep their top y-axis tick when the axis ends at a value that
   rounds up, as for information content logos of six-letter alphabets.
 - Logos draw negative letters smaller than 0.03, so contribution weight

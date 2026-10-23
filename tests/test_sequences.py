@@ -271,8 +271,8 @@ _M = um.create_motif("ACGT")
         (lambda: um.create_sequences(""), "alphabet cannot be empty"),
         (lambda: um.create_sequences(seqnum=-1), "seqnum must be non-negative"),
         (lambda: um.create_sequences(seqlen=0), "seqlen positive"),
-        (lambda: um.create_sequences(freqs={"A": 0.5, "C": 0.5}), "one value for each of the 4 1-lets"),
-        (lambda: um.create_sequences(freqs={"AA": 0.5, "AC": 0.5}), "16 2-lets"),
+        (lambda: um.create_sequences(freqs={"A": 0.5, "C": 0.5}), "one value for each of the 4 1-mers"),
+        (lambda: um.create_sequences(freqs={"AA": 0.5, "AC": 0.5}), "16 2-mers"),
         (lambda: um.create_sequences(freqs=[0.5, 0.5]), "power of the alphabet size"),
         (lambda: um.create_sequences(freqs=[-1, 1, 1, 1]), "non-negative"),
         (lambda: um.shuffle_motifs(_M, k=0), "k must be at least 1"),
@@ -397,7 +397,6 @@ def test_create_sequences_shapes():
         seqnum=3, seqlen=8, seed=5, nthreads=2)
 
 
-@pytest.mark.xfail(strict=True, reason="frequencies that are all zero silently give sequences of A")
 def test_create_sequences_rejects_zero_frequencies():
     with pytest.raises(ValueError):
         um.create_sequences(seqnum=2, seqlen=10, freqs=[0, 0, 0, 0], seed=1)

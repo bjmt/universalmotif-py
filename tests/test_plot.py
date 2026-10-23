@@ -589,8 +589,6 @@ def test_view_motifs_contribution_weights():
     assert ext[2][0] < -0.05 and ext[2][1] == pytest.approx(0.3, abs=0.01)
 
 
-@pytest.mark.xfail(strict=True, reason="fit_to_height is silently ignored for CWMs, where ICMs "
-                   "and PWMs warn that it is")
 def test_view_motifs_fit_to_height_ignored_for_cwm_warns():
     cwm = um.create_motif(np.array([[0.5, -0.2, 0.1, 0], [0, 0, 0.3, -0.1]]).T, alphabet="DNA",
                           type="CWM")
@@ -602,7 +600,7 @@ def test_view_motifs_fit_to_height_warning():
     m = um.example_motifs()[3]
     plain = [p.vertices for p in um.view_motifs(m).axes[0].collections[0].get_paths()]
     for ut in ("ICM", "PWM"):
-        with pytest.warns(UserWarning, match='ignored for use_type "ICM" and "PWM"'):
+        with pytest.warns(UserWarning, match='ignored for use_type "ICM", "PWM" and "CWM"'):
             fig = um.view_motifs(m, use_type=ut, fit_to_height=1.0)
         if ut == "ICM":
             got = [p.vertices for p in fig.axes[0].collections[0].get_paths()]

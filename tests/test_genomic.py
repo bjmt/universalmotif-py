@@ -490,8 +490,6 @@ def test_proximity_genome_without_anchored_chromosomes(tmp_path):
                            sequences=um.Genome(path))
 
 
-@pytest.mark.xfail(strict=True, reason="an empty dist_thresholds silently gives a null P-value "
-                                       "with a q-value of 1 instead of an error")
 def test_proximity_empty_dist_thresholds():
     hits = _hit_table([("a", "c1", 10, 20, "+", 1.0)])
     with pytest.raises((ValueError, UserWarning)):
@@ -597,3 +595,24 @@ def test_match_bkg_named_repeats():
         out = um.match_bkg(["ACGTACGTAC"], {"u": "ACGTACGTAC"}, n_per_target=3, seed=1)
     assert any("smaller than n_per_target" in str(w.message) for w in record)
     assert out == {"u": "ACGTACGTAC", "u.1": "ACGTACGTAC", "u.2": "ACGTACGTAC"}
+
+
+def test_match_bkg_genome_windows_keep_each_targets_width():
+    chroms = {"c1": "ACGT" * 500, "c2": "AATTGGCC" * 250}
+    targets = {"a": "ACGTACGTAC" * 4, "b": "GGCCAATT" * 5 + "ACGTACGTAC" * 2}
+    res = um.match_bkg(targets, genome=chroms, n_per_target=5, n_candidates=200, seed=1,
+                       return_indices=True)
+    assert (res["target_length"] == res["universe_length"]).all()
+    with pytest.raises(ValueError, match="longer than every chromosome"):
+        um.match_bkg({"t": "A" * 3000}, genome=chroms, seed=1)
+
+
+def test_range_positions_must_be_whole_numbers():
+    with pytest.raises(ValueError, match="whole numbers"):
+        um.extract_ranges({"c1": "ACGTACGT"}, [("c1", 1.5, 4)])
+    frame = pl.DataFrame({"chrom": ["c1"], "start": [1.5], "end": [4.0]})
+    with pytest.raises(ValueError, match="whole numbers"):
+        um.extract_ranges({"c1": "ACGTACGT"}, frame)
+    # Floats holding whole numbers are fine.
+    frame = pl.DataFrame({"chrom": ["c1"], "start": [1.0], "end": [4.0]})
+    assert um.extract_ranges({"c1": "ACGTACGT"}, frame) == {"c1:1-4": "CGT"}
