@@ -27,7 +27,9 @@ which caches its downloads, and converted to and from Biopython's
 `Bio.motifs` with `pip install universalmotif[biopython]`. In Jupyter,
 motifs are shown as a logo next to their metadata, `logo_svg()` draws the
 same logo as an SVG image, and `to_logomaker()` exports letter heights for
-logomaker.
+logomaker. For single-cell ATAC data, `match_motifs()` gives a sparse peak by motif
+matrix of matches, counts or best scores without keeping every hit, and
+`add_motif_matches()` stores it in an AnnData object as pychromVAR expects.
 
 ## Example
 

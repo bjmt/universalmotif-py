@@ -10,6 +10,7 @@ from ._analysis import dedup_hits, motif_pvalue, scan_sequences
 from ._biopython import from_biopython, to_biopython
 from ._display import _repr_html_ as _motif_html
 from ._display import logo_svg, to_logomaker
+from ._matches import MotifMatches, add_motif_matches, match_motifs
 from . import databases
 from ._data import example_file, example_motifs, example_sequences
 from ._packed import PackedSequences, pack_sequences
@@ -101,9 +102,11 @@ except PackageNotFoundError:  # pragma: no cover
 
 __all__ = [
     "Motif",
+    "MotifMatches",
     "MotifTree",
     "PackedSequences",
     "add_gap",
+    "add_motif_matches",
     "average_ic",
     "calc_complexity",
     "calc_windows",
@@ -135,6 +138,7 @@ __all__ = [
     "mask_ranges",
     "mask_seqs",
     "match_bkg",
+    "match_motifs",
     "meme_alph",
     "merge_motifs",
     "merge_similar",

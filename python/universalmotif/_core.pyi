@@ -256,6 +256,17 @@ def _scan_sequences(
     motif_names: list[str],
     sequence_names: list[str],
 ) -> ArrowTable: ...
+def _motif_matches(
+    motifs: list[Motif],
+    sequences: list[str] | None,
+    packed: _PackedSequences | None,
+    pvalue: float,
+    rc: bool,
+    no_overlaps: tuple[str, bool, bool] | None,
+    nthreads: int,
+    use_gaps: bool,
+    value: str,
+) -> tuple[int, int, npt.NDArray[np.uint32], npt.NDArray[np.uint32], npt.NDArray[np.float64]]: ...
 def _scan_packed(
     motifs: list[Motif],
     packed: _PackedSequences,

@@ -9,8 +9,10 @@ use universalmotif::compare::{self, CompareOptions, NullModel};
 use universalmotif::dedup::{Interval, dedup};
 use universalmotif::merge::{self, MergeOptions, MergeSimilarOptions};
 use universalmotif::pvalue::{self, PvalueOptions};
+use universalmotif::packed::EncodedSequences;
 use universalmotif::scan::{
-    HitTable, NoOverlaps, OverlapPriority, ScanOptions, scan_encoded, scan_fasta, scan_table,
+    HitTable, MatchValue, NoOverlaps, OverlapPriority, ScanOptions, motif_matches, scan_encoded,
+    scan_fasta, scan_table,
 };
 
 use pyo3_arrow::PyTable;
@@ -193,6 +195,61 @@ fn _scan_sequences<'py>(
         .map_err(err)?;
     let letters = matched_column(t.len(), |i, buf| t.matched_into(i, &sequences, buf));
     hit_table(t, letters, &motif_names, &sequence_names)
+}
+
+/// A sparse sequences by motifs matrix of matches, counts or best scores, as
+/// (rows, columns, sequence indices, motif indices, values).
+type Matches<'py> = (
+    usize,
+    usize,
+    Bound<'py, numpy::PyArray1<u32>>,
+    Bound<'py, numpy::PyArray1<u32>>,
+    Bound<'py, numpy::PyArray1<f64>>,
+);
+
+#[pyfunction]
+#[pyo3(signature = (motifs, sequences, packed, pvalue, rc, no_overlaps, nthreads, use_gaps, value))]
+#[allow(clippy::too_many_arguments)]
+fn _motif_matches<'py>(
+    py: Python<'py>,
+    motifs: Vec<PyRef<'py, PyMotif>>,
+    sequences: Option<Vec<PyBackedStr>>,
+    packed: Option<Bound<'py, PyPacked>>,
+    pvalue: f64,
+    rc: bool,
+    no_overlaps: Option<(String, bool, bool)>,
+    nthreads: usize,
+    use_gaps: bool,
+    value: &str,
+) -> PyResult<Matches<'py>> {
+    use numpy::IntoPyArray;
+
+    let motifs = unwrap(&motifs);
+    let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, false)?;
+    let value = MatchValue::parse(value).map_err(err)?;
+    let m = match (&packed, sequences) {
+        (Some(p), _) => {
+            let p = p.get();
+            py.detach(|| motif_matches(&motifs, &p.seqs, &opts, value))
+        }
+        (None, Some(seqs)) => py.detach(|| {
+            let alphabet = motifs
+                .first()
+                .map(|m| m.alphabet.clone())
+                .ok_or_else(|| universalmotif::Error::Argument("no motifs to scan with".into()))?;
+            let enc = EncodedSequences::new(&seqs, &alphabet, nthreads)?;
+            motif_matches(&motifs, &enc, &opts, value)
+        }),
+        (None, None) => return Err(pyo3::exceptions::PyValueError::new_err("no sequences")),
+    }
+    .map_err(err)?;
+    Ok((
+        m.n_sequences,
+        m.n_motifs,
+        m.sequence.into_pyarray(py),
+        m.motif.into_pyarray(py),
+        m.value.into_pyarray(py),
+    ))
 }
 
 #[pyfunction]
@@ -515,6 +572,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_min_pvalues, m)?)?;
     m.add_function(wrap_pyfunction!(_scan_sequences, m)?)?;
     m.add_function(wrap_pyfunction!(_scan_packed, m)?)?;
+    m.add_function(wrap_pyfunction!(_motif_matches, m)?)?;
     m.add_function(wrap_pyfunction!(_scan_fasta, m)?)?;
     m.add_function(wrap_pyfunction!(_dedup, m)?)?;
     Ok(())

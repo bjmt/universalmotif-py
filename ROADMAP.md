@@ -1,7 +1,7 @@
 # Possible extensions
 
 Ideas for connecting the package to the rest of the Python ecosystem. The
-first two are done; the others are planned in the order below.
+first three are done; the others are planned in the order below.
 
 ## Plan
 
@@ -12,7 +12,8 @@ In order:
    `from_biopython()`).
 2. Jupyter display with an inline logo, and logomaker export (done:
    `Motif._repr_html_`, `logo_svg()` and `to_logomaker()`).
-3. A sparse motif-by-peak matrix for single-cell ATAC analyses.
+3. A sparse motif-by-peak matrix for single-cell ATAC analyses (done:
+   `match_motifs()` and `add_motif_matches()`).
 4. Deep-learning interoperability, and a check of `compare_motifs()`
    against TOMTOM.
 5. Indexed genomes and bigWig covariates.

@@ -44,6 +44,8 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
 - **Scanning:** exact P-value thresholds, both strands, any alphabet, gapped
   motifs, and whole genomes scanned straight from a FASTA file in a few
   hundred MB.
+- **Single-cell ATAC:** sparse peak by motif match matrices, ready for
+  AnnData and chromVAR-style analyses.
 - **Comparison:** motif similarity with P-values, merging of similar motifs,
   and trees.
 - **Statistics:** enrichment, co-occurrence, positional enrichment,

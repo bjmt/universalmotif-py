@@ -30,6 +30,10 @@ optimisations.
 ## Optional dependencies
 
 - `plot`: matplotlib, for logos and the other plotting functions.
+- `scipy`: SciPy, for the sparse matrices of
+  [`match_motifs()`](reference/scanning.md#motif-match-matrices).
+- `anndata`: AnnData and SciPy, for storing motif matches with single-cell
+  ATAC data.
 - `biopython`: Biopython, for converting motifs to and from `Bio.motifs`
   with `to_biopython()` and `from_biopython()`. The database functions need
   no extra, since they download with the standard library.
