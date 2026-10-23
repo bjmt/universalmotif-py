@@ -4,12 +4,13 @@ use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::{PyDict, PyList};
 use universalmotif::Motif;
-use universalmotif::cluster::{self, Method, Tree, TreeOptions};
+use universalmotif::Strand;
+use universalmotif::cluster::{self, Linkage, Tree, TreeOptions};
 use universalmotif::compare::{self, CompareOptions, NullModel};
 use universalmotif::dedup::{Interval, dedup};
 use universalmotif::merge::{self, MergeOptions, MergeSimilarOptions};
-use universalmotif::pvalue::{self, PvalueOptions};
 use universalmotif::packed::EncodedSequences;
+use universalmotif::pvalue::{self, PvalueOptions};
 use universalmotif::scan::{
     HitTable, MatchValue, NoOverlaps, OverlapPriority, ScanOptions, motif_matches, scan_encoded,
     scan_fasta, scan_table,
@@ -74,7 +75,7 @@ fn _motif_pvalue(
     };
     py.detach(|| {
         if to_score {
-            pvalue::motif_score(&motifs, &queries, &opts)
+            pvalue::pvalue_to_score(&motifs, &queries, &opts)
         } else {
             pvalue::motif_pvalue(&motifs, &queries, &opts)
         }
@@ -94,7 +95,8 @@ fn _min_pvalues(
         bkg: Vec::new(),
         nthreads,
     };
-    py.detach(|| pvalue::min_pvalues(&motifs, &opts)).map_err(err)
+    py.detach(|| pvalue::min_pvalues(&motifs, &opts))
+        .map_err(err)
 }
 
 fn scan_options(
@@ -226,7 +228,7 @@ fn _motif_matches<'py>(
 
     let motifs = unwrap(&motifs);
     let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, false)?;
-    let value = MatchValue::parse(value).map_err(err)?;
+    let value = value.parse::<MatchValue>().map_err(err)?;
     let m = match (&packed, sequences) {
         (Some(p), _) => {
             let p = p.get();
@@ -322,7 +324,11 @@ fn _dedup(
         .map(|i| Interval {
             sequence: sequence[i],
             motif: motif[i],
-            strand: strand[i],
+            strand: match strand[i] {
+                0 => Strand::Plus,
+                1 => Strand::Minus,
+                _ => Strand::Both,
+            },
             start: start[i],
             end: end[i],
             priority: priority[i],
@@ -471,8 +477,8 @@ fn _merge_motifs(
         weighted,
         nthreads,
     };
-    py.detach(|| merge::merge_motifs_used(&motifs, &opts))
-        .map(|(m, used)| (PyMotif::from(m), used))
+    py.detach(|| merge::merge_motifs_detailed(&motifs, &opts))
+        .map(|m| (PyMotif::from(m.motif), m.used))
         .map_err(err)
 }
 
@@ -500,10 +506,13 @@ fn _merge_similar(
         weighted,
         nthreads,
     };
-    let (clusters, merged) = py
+    let res = py
         .detach(|| merge::merge_similar(&motifs, &opts))
         .map_err(err)?;
-    Ok((clusters, merged.into_iter().map(PyMotif::from).collect()))
+    Ok((
+        res.clusters,
+        res.motifs.into_iter().map(PyMotif::from).collect(),
+    ))
 }
 
 fn tree_dict<'py>(py: Python<'py>, tree: &Tree, labels: &[String]) -> PyResult<Bound<'py, PyDict>> {
@@ -525,8 +534,8 @@ fn tree_dict<'py>(py: Python<'py>, tree: &Tree, labels: &[String]) -> PyResult<B
     Ok(d)
 }
 
-fn method(m: &str) -> PyResult<Method> {
-    Method::parse(m).map_err(err)
+fn method(m: &str) -> PyResult<Linkage> {
+    m.parse::<Linkage>().map_err(err)
 }
 
 #[pyfunction]

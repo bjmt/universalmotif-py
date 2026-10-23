@@ -32,11 +32,12 @@ def test_windows_reference():
         if not case["incomplete"]:
             continue  # the R package also drops complete last windows
         got = um.calc_windows(case["n"], case["window"], case["overlap"])
-        assert got["start"].to_list() == nums(case["start"])
-        assert got["stop"].to_list() == nums(case["stop"])
-        complete = got.filter(pl.col("stop") - pl.col("start") + 1 == case["window"])
+        # R counts positions from 1, with the end included.
+        assert got["start"].to_list() == [x - 1 for x in nums(case["start"])]
+        assert got["end"].to_list() == nums(case["stop"])
+        complete = got.filter(pl.col("end") - pl.col("start") == case["window"])
         assert um.calc_windows(case["n"], case["window"], case["overlap"], False).equals(complete)
-    assert um.calc_windows(5, 10).rows() == [(1, 5)]
+    assert um.calc_windows(5, 10).rows() == [(0, 5)]
     assert um.window_string("ACGTACGTAC", 4, 1) == ["ACGT", "TACG", "GTAC"]
     assert um.window_string("ACGTACGTAC", 4, 1, return_incomp=False) == ["ACGT", "TACG", "GTAC"]
     assert um.window_string("ACGTACGTA", 4, 0, return_incomp=False) == ["ACGT", "ACGT"]
@@ -71,8 +72,8 @@ def test_sequence_complexity_reference():
         )
         t = case["table"]
         assert got["sequence"].to_list() == t["sequence"], a
-        assert got["start"].to_list() == nums(t["start"]), a
-        assert got["stop"].to_list() == nums(t["stop"]), a
+        assert got["start"].to_list() == [x - 1 for x in nums(t["start"])], a
+        assert got["end"].to_list() == nums(t["stop"]), a
         np.testing.assert_allclose(got["complexity"].to_numpy(), nums(t["complexity"]), rtol=1e-12)
 
 
@@ -91,8 +92,12 @@ def test_get_bkg_reference():
             window_size=a.get("window.size", 0.1),
             window_overlap=a.get("window.overlap", 0),
         )
-        # The reference tables name the k-mer column klet.
-        t = {("kmer" if k == "klet" else k): v for k, v in case["table"].items()}
+        # The reference tables name the k-mer column klet and the window end
+        # stop, and count positions from 1.
+        names = {"klet": "kmer", "stop": "end"}
+        t = {names.get(k, k): v for k, v in case["table"].items()}
+        if "start" in t:
+            t["start"] = [x - 1 for x in nums(t["start"])]
         assert got.columns == list(t), a
         for col, want in t.items():
             if col == "probability":
@@ -218,8 +223,8 @@ def test_implant_motifs():
     assert idx.columns == ["sequence_i", "motif_i", "start", "width", "strand", "planted"]
     for row in idx.iter_rows(named=True):
         s = out[["s1", "s2"][row["sequence_i"]]]
-        assert s[row["start"] - 1 : row["start"] - 1 + row["width"]] == row["planted"]
-    out = um.implant_motifs(m, ["A" * 20], positions=[[1, 14]], strand="+", seed=1)
+        assert s[row["start"]:row["start"] + row["width"]] == row["planted"]
+    out = um.implant_motifs(m, ["A" * 20], positions=[[0, 13]], strand="+", seed=1)
     assert out[0].startswith("GGGGGG")
     with pytest.warns(UserWarning, match="out-of-bounds"):
         um.implant_motifs(m, ["A" * 20], positions=[[18]], seed=1)

@@ -26,7 +26,8 @@ def _check_scans(motifs, seqs, cases, label):
         assert got.height == len(w["start"]), ctx
         assert got["motif_i"].to_list() == [int(x) - 1 for x in w["motif.i"]], ctx
         assert got["sequence_i"].to_list() == [int(x) - 1 for x in w["sequence.i"]], ctx
-        assert got["start"].to_list() == [int(x) for x in w["start"]], ctx
+        # R counts positions from 1.
+        assert got["start"].to_list() == [int(x) - 1 for x in w["start"]], ctx
         assert got["end"].to_list() == [int(x) for x in w["stop"]], ctx
         assert set(got["strand"].to_list()) <= {"+"}, ctx
         assert got["match"].to_list() == w["match"], ctx

@@ -276,8 +276,10 @@ def scan_sequences(
         ``score_pct`` is the score as a percentage of the motif's maximum, and
         ``match`` is the matched sequence, reverse complemented on the ``-``
         strand. ``motif_i`` and ``sequence_i`` are 0-based indices into the
-        inputs; ``start`` and ``end`` are 1-based, inclusive and on the forward
-        strand. Rows are ordered by motif, sequence and start.
+        inputs; ``start`` and ``end`` are positions on the forward strand,
+        counted from 0 with the end left out, so a hit's letters are
+        ``sequence[start:end]``. Rows are ordered by motif, sequence and
+        start.
 
     Examples
     --------
@@ -287,7 +289,7 @@ def scan_sequences(
     >>> hits.shape
     (30, 11)
     >>> hits.select("sequence", "start", "end", "strand", "match").row(0)
-    ('target_004', 449, 457, '-', 'GTTTGACCG')
+    ('target_004', 448, 457, '-', 'GTTTGACCG')
     >>> round(hits["pvalue"][0], 7)
     3.43e-05
     """
@@ -350,7 +352,7 @@ def dedup_hits(
     starts with ``pval`` and higher values otherwise; ``reverse`` flips this,
     and ties go to the earlier row. ``ignore_strand`` and ``ignore_motif``
     compare hits across strands and motifs. ``start`` and ``end`` columns are
-    required and are inclusive.
+    required, with the end left out as in a slice.
 
     Examples
     --------
@@ -360,9 +362,9 @@ def dedup_hits(
     >>> gbox = um.example_motifs()[3]
     >>> hits = um.scan_sequences(gbox, "TTACACGTGTTAAACCACGTGGTT", pvalue=1e-3)
     >>> hits.select("start", "end", "strand").rows()
-    [(3, 10, '+'), (3, 10, '-'), (15, 22, '+'), (15, 22, '-')]
+    [(2, 10, '+'), (2, 10, '-'), (14, 22, '+'), (14, 22, '-')]
     >>> um.dedup_hits(hits, ignore_strand=True).select("start", "end", "strand").rows()
-    [(3, 10, '+'), (15, 22, '+')]
+    [(2, 10, '+'), (14, 22, '+')]
     """
     for col in (seq, motif, strand, "start", "end", by):
         if col not in hits.columns:

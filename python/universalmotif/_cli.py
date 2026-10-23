@@ -176,9 +176,9 @@ def open_genome(path: str):
 
 
 def read_ranges(path: str) -> pl.DataFrame:
-    """Ranges from a BED file, with positions moved to 1-based, or from a
-    tab-separated table with a header naming chrom, start and end (or
-    width) columns, already 1-based."""
+    """Ranges from a BED file, or from a tab-separated table with a header
+    naming chrom, start and end (or width) columns, with positions counted
+    from 0 and the end left out, as in BED files."""
     if path != "-" and not Path(path).exists():
         raise CliError(f"no such file: {path}")
     lines = [ln for ln in _read_bytes(path).decode().splitlines()
@@ -195,7 +195,7 @@ def read_ranges(path: str) -> pl.DataFrame:
         df = pl.read_csv(io.StringIO("\n".join(lines)), separator="\t", has_header=False,
                          new_columns=names, schema_overrides={"chrom": pl.String},
                          infer_schema_length=10000)
-        return df.with_columns(pl.col("start") + 1)
+        return df
     return pl.read_csv(io.StringIO("\n".join(lines)), separator="\t", null_values="NA",
                        infer_schema_length=10000)
 

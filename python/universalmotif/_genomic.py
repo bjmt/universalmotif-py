@@ -22,43 +22,43 @@ _CHROM_COLUMNS = ("chrom", "seqnames", "sequence", "chr", "chromosome")
 _PYRANGES_COLUMNS = {"Chromosome": "chrom", "Start": "start", "End": "end", "Strand": "strand"}
 
 
-def _zero_based_polars_bio(x) -> bool:
-    """Whether a polars frame is marked as 0-based by polars-bio, which keeps
-    the coordinate system of each frame as metadata."""
+def _one_based_polars_bio(x) -> bool:
+    """Whether a polars frame is marked as 1-based by polars-bio, which keeps
+    the coordinate system of each frame as metadata. Frames without that
+    metadata are taken to be 0-based."""
     pb = sys.modules.get("polars_bio")
     if pb is None:
         return False
     try:
-        return bool(pb.get_metadata(x).get("coordinate_system_zero_based"))
+        return pb.get_metadata(x).get("coordinate_system_zero_based") is False
     except (AttributeError, KeyError, TypeError, ValueError):
         return False
 
 
 def _ranges_frame(x):
-    """Ranges from other libraries as a polars DataFrame with 1-based,
-    inclusive positions, or ``x`` unchanged if it is not a data frame.
+    """Ranges from other libraries as a polars DataFrame with 0-based,
+    half-open positions, or ``x`` unchanged if it is not a data frame.
 
-    PyRanges objects, and pandas DataFrames with their ``Chromosome``,
-    ``Start`` and ``End`` columns, are 0-based and end-exclusive, as are
-    polars-bio frames marked as 0-based. Other pandas DataFrames and polars
-    frames, including LazyFrames, are taken to be 1-based already."""
+    PyRanges objects, pandas DataFrames and polars frames, including
+    LazyFrames, are taken to be 0-based and half-open already, as PyRanges
+    and BED are. polars-bio frames marked as 1-based, as polars-bio makes
+    them by default, are moved to 0-based."""
     if type(x).__name__ == "PyRanges" and not hasattr(x, "columns") and hasattr(x, "df"):
         x = x.df  # PyRanges before version 1
-    zero_based = False
+    one_based = False
     if isinstance(x, pl.LazyFrame):
-        zero_based = _zero_based_polars_bio(x)
+        one_based = _one_based_polars_bio(x)
         x = x.collect()
     elif isinstance(x, pl.DataFrame):
-        zero_based = _zero_based_polars_bio(x)
+        one_based = _one_based_polars_bio(x)
     else:
         pd = sys.modules.get("pandas")
         if pd is None or not isinstance(x, pd.DataFrame):
             return x
-        zero_based = {"Chromosome", "Start", "End"} <= {str(c) for c in x.columns}
         x = pl.from_pandas(pd.DataFrame(x).reset_index(drop=True))
         x = x.rename({k: v for k, v in _PYRANGES_COLUMNS.items() if k in x.columns and v not in x.columns})
-    if zero_based and "start" in x.columns:
-        x = x.with_columns(pl.col("start") + 1)
+    if one_based and "start" in x.columns:
+        x = x.with_columns(pl.col("start") - 1)
     return x
 
 
@@ -66,8 +66,9 @@ def _range_table(x, what: str) -> pl.DataFrame:
     """Ranges as a DataFrame with chrom, start, end and strand columns, from
     either a DataFrame or (chrom, start, end[, strand]) tuples. A DataFrame
     needs a chromosome column named chrom, seqnames, sequence, chr or
-    chromosome, a start column, and an end or width column. PyRanges and
-    pandas DataFrames, and polars-bio frames, are converted first."""
+    chromosome, a start column, and an end or width column, with 0-based,
+    half-open positions. PyRanges and pandas DataFrames, and polars-bio
+    frames, are converted first."""
     x = _ranges_frame(x)
     if isinstance(x, pl.DataFrame):
         chrom = next((c for c in _CHROM_COLUMNS if c in x.columns), None)
@@ -78,7 +79,7 @@ def _range_table(x, what: str) -> pl.DataFrame:
         elif "stop" in x.columns:
             end = x["stop"]
         elif "width" in x.columns:
-            end = x["start"] + x["width"] - 1
+            end = x["start"] + x["width"]
         else:
             raise ValueError(f"{what} needs an end, stop or width column")
         strand = x["strand"].cast(pl.String) if "strand" in x.columns else pl.Series(["*"] * x.height)
@@ -229,7 +230,7 @@ def motif_proximity(
     >>> import universalmotif as um
     >>> motifs = [um.example_motifs()[i] for i in (3, 5)]
     >>> targets = um.example_sequences("targets")
-    >>> anchors = [(name, 500, 500) for name in targets]
+    >>> anchors = [(name, 499, 500) for name in targets]
     >>> res = um.motif_proximity(anchors=anchors, motifs=motifs, sequences=targets, nthreads=1)
     >>> res.select("motif", "nhits", "best_dist", "hits_near").row(0)
     ('W-box', 30, 250, 27)
@@ -293,7 +294,7 @@ def motif_proximity(
     if isinstance(universe, Mapping):
         lengths = {str(k): int(v) for k, v in universe.items()}
         uni = pl.DataFrame(
-            {"chrom": list(lengths), "start": [1] * len(lengths), "end": list(lengths.values()),
+            {"chrom": list(lengths), "start": [0] * len(lengths), "end": list(lengths.values()),
              "strand": ["*"] * len(lengths)},
             schema={"chrom": pl.String, "start": pl.Int64, "end": pl.Int64, "strand": pl.String},
         )
@@ -501,7 +502,7 @@ def match_bkg(
         elif isinstance(genome, PackedSequences):
             uni = [genome.subseq(c, s, e) for c, s, e in zip(win_chroms, win_starts, win_ends)]
         else:
-            uni = [genome[c][s - 1:e] for c, s, e in zip(win_chroms, win_starts, win_ends)]
+            uni = [genome[c][s:e] for c, s, e in zip(win_chroms, win_starts, win_ends)]
         names = [f"{c}:{s}-{e}" for c, s, e in zip(win_chroms, win_starts, win_ends)]
         seed = None if seed is None else seed + 1
         if bigwig is not None:

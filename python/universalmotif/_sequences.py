@@ -94,8 +94,9 @@ def count_kmers(string: str, k: int = 1, alph: str | Sequence[str] | None = None
 
 
 def calc_windows(n: int, window: int = 1, overlap: int = 0, return_incomp: bool = True) -> pl.DataFrame:
-    """Start and stop coordinates of sliding windows over a sequence of
-    length ``n``, 1-based and inclusive.
+    """Start and end positions of sliding windows over a sequence of length
+    ``n``, counted from 0 with the end left out, so that each window is
+    ``sequence[start:end]``.
 
     The last window may be shorter than the others unless ``return_incomp``
     is false. A window wider than ``n`` shrinks to ``n``.
@@ -104,9 +105,9 @@ def calc_windows(n: int, window: int = 1, overlap: int = 0, return_incomp: bool 
     --------
     >>> import universalmotif as um
     >>> um.calc_windows(11, window=4, overlap=1).rows()
-    [(1, 4), (4, 7), (7, 10), (10, 11)]
+    [(0, 4), (3, 7), (6, 10), (9, 11)]
     >>> um.calc_windows(11, window=4, overlap=1, return_incomp=False).rows()
-    [(1, 4), (4, 7), (7, 10)]
+    [(0, 4), (3, 7), (6, 10)]
     """
     n, window, overlap = int(n), int(window), int(overlap)
     if n < 1:
@@ -121,8 +122,8 @@ def calc_windows(n: int, window: int = 1, overlap: int = 0, return_incomp: bool 
         raise ValueError("overlap cannot be greater or equal to window")
     wins = _core._windows(n, window, overlap, return_incomp)
     return pl.DataFrame(
-        {"start": [w[0] for w in wins], "stop": [w[1] for w in wins]},
-        schema={"start": pl.Int64, "stop": pl.Int64},
+        {"start": [w[0] for w in wins], "end": [w[1] for w in wins]},
+        schema={"start": pl.Int64, "end": pl.Int64},
     )
 
 
@@ -141,7 +142,7 @@ def window_string(string: str, window: int = 1, overlap: int = 0, return_incomp:
     if not string:
         raise ValueError("string cannot be empty")
     w = calc_windows(len(string), window, overlap, return_incomp)
-    return [string[s - 1 : e] for s, e in w.iter_rows()]
+    return [string[s:e] for s, e in w.iter_rows()]
 
 
 _COMPLEXITY_METHODS = ("WoottonFederhen", "WoottonFederhenFast", "Trifonov", "TrifonovFast", "DUST")
@@ -198,15 +199,16 @@ def sequence_complexity(
     is ``window_overlap`` between 0 and 1, which defaults to half the
     window, rounded. A window longer than a sequence shrinks to it. See
     [`calc_complexity()`][universalmotif.calc_complexity] for the methods. Returns a DataFrame with
-    columns ``sequence``, ``start``, ``stop`` and ``complexity``.
+    columns ``sequence``, ``start``, ``end`` and ``complexity``, where
+    positions count from 0 and leave the end out.
 
     Examples
     --------
     >>> import universalmotif as um
     >>> seqs = {"seq": "ACGTTGCAACATATATATATATATAT"}
     >>> res = um.sequence_complexity(seqs, window_size=10, window_overlap=5)
-    >>> res.select("start", "stop").rows()
-    [(1, 10), (6, 15), (11, 20), (16, 25), (21, 26)]
+    >>> res.select("start", "end").rows()
+    [(0, 10), (5, 15), (10, 20), (15, 25), (20, 26)]
     >>> res["complexity"].round(3).to_list()
     [0.731, 0.644, 0.399, 0.399, 0.36]
     """
@@ -218,7 +220,7 @@ def sequence_complexity(
         trifonov_max_word_size, nthreads,
     )
     return pl.DataFrame(windows).cast(
-        {"sequence": pl.String, "start": pl.Int64, "stop": pl.Int64, "complexity": pl.Float64}
+        {"sequence": pl.String, "start": pl.Int64, "end": pl.Int64, "complexity": pl.Float64}
     )
 
 
@@ -292,8 +294,8 @@ def get_bkg(
     -------
     polars.DataFrame
         A DataFrame with columns ``kmer``, ``count`` and ``probability``, plus
-        ``sequence`` for per-sequence counts and ``start`` and ``stop`` for
-        windows. Without windows, rows are sorted by k-mer size and then
+        ``sequence`` for per-sequence counts and ``start`` and ``end`` for
+        windows, counted from 0 with the end left out. Without windows, rows are sorted by k-mer size and then
         alphabetically, and per-sequence counts list every sequence in turn
         under each k-mer. With windows, k-mers are sorted alphabetically
         whatever their size and each k-mer's windows follow one another,
@@ -502,7 +504,8 @@ def implant_motifs(
 
     Each sequence gets ``n_per_seq`` sites, a Poisson number with mean
     ``rate`` times its length if ``rate`` is given, or one site at each of
-    its ``positions``, given as 1-based starts with one list per sequence.
+    its ``positions``, given as starts counted from 0 with one list per
+    sequence.
     Every site
     comes from a motif chosen at random, on a random strand unless
     ``strand="+"``, and overwrites the sequence where it lands.
@@ -515,7 +518,7 @@ def implant_motifs(
     Returns the new sequences in the same form as the input, and with
     ``return_indices`` also a DataFrame of the sites with the columns
     ``sequence_i``, ``motif_i``, ``start``, ``width``, ``strand`` and
-    ``planted``. The indices are 0-based, ``start`` is 1-based, and
+    ``planted``. The indices and ``start`` count from 0, and
     ``planted`` is the site as it reads on the forward strand.
 
     Examples
@@ -527,7 +530,7 @@ def implant_motifs(
     >>> new
     ['TTTGGATCTTGACTATCGAA', 'TGGTAGGTCAAAGTGAGCTG', 'AGCTCGACCGGTCTGTCTAG']
     >>> sites.select("sequence_i", "start", "strand", "planted").rows()
-    [(0, 7, '+', 'TCTTGACTA'), (1, 5, '-', 'AGGTCAAAG'), (2, 2, '+', 'GCTCGACCG')]
+    [(0, 6, '+', 'TCTTGACTA'), (1, 4, '-', 'AGGTCAAAG'), (2, 1, '+', 'GCTCGACCG')]
     """
     if strand not in ("both", "+"):
         raise ValueError("strand must be 'both' or '+'")
@@ -536,8 +539,8 @@ def implant_motifs(
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
     names, seqs = _sequence_pairs(sequences)
     pos = None if positions is None else [[int(p) for p in ps] for ps in positions]
-    if pos is not None and any(p < 1 for ps in pos for p in ps):
-        raise ValueError("positions must be 1-based")
+    if pos is not None and any(p < 0 for ps in pos for p in ps):
+        raise ValueError("positions must be at least 0")
     new, idx, warns = _core._implant_motifs(
         ms, seqs, n_per_seq, rate, pos, strand == "both", centre_bias, min_spacing, max_retries, _seed(seed)
     )

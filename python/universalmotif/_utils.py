@@ -340,9 +340,9 @@ def _ints(x: int | Sequence[int], what: str) -> list[int]:
 
 def add_gap(motifs, gaploc: int | Sequence[int] | None = None, mingap: int | Sequence[int] = 1,
             maxgap: int | Sequence[int] = 5):
-    """Add gaps to motifs. Gap ``i`` follows position ``gaploc[i]``, counting
-    from 1 and defaulting to the middle of the motif, and spans ``mingap[i]``
-    to ``maxgap[i]`` positions; shorter lists are recycled.
+    """Add gaps to motifs. Gap ``i`` comes after the first ``gaploc[i]``
+    positions, in the middle of the motif by default, and spans
+    ``mingap[i]`` to ``maxgap[i]`` positions; shorter lists are recycled.
 
     Examples
     --------
@@ -483,8 +483,9 @@ def mask_seqs(sequences, pattern: str, rc: bool = False, letter: str = "-", alph
 def mask_ranges(sequences: Mapping[str, str], ranges, letter: str = "-") -> dict[str, str]:
     """Replace the positions in ``ranges`` with ``letter``.
 
-    ``sequences`` maps names to sequences and ``ranges`` names 1-based,
-    inclusive positions on them, either as ``(chrom, start, end)`` tuples or
+    ``sequences`` maps names to sequences and ``ranges`` names positions on
+    them, counted from 0 with the end left out as in a slice, either as
+    ``(chrom, start, end)`` tuples or
     as a DataFrame with a ``start`` column, an ``end``, ``stop`` or
     ``width`` column, and the sequence names in a column called ``chrom``,
     ``seqnames``, ``sequence``, ``chr`` or ``chromosome``, so that the hits
@@ -496,7 +497,7 @@ def mask_ranges(sequences: Mapping[str, str], ranges, letter: str = "-") -> dict
     --------
     >>> import universalmotif as um
     >>> seqs = {"chr1": "ACGTACGTACGT", "chr2": "TTTTGGGG"}
-    >>> um.mask_ranges(seqs, [("chr1", 3, 6), ("chr2", 1, 2)])
+    >>> um.mask_ranges(seqs, [("chr1", 2, 6), ("chr2", 0, 2)])
     {'chr1': 'AC----GTACGT', 'chr2': '--TTGGGG'}
     """
     if len(letter) != 1:

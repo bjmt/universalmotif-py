@@ -8,7 +8,6 @@ use numpy::{PyArray2, PyReadonlyArray2};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
-use rand::SeedableRng;
 use universalmotif::create::{self, CreateOptions};
 use universalmotif::ops::{self, TrimFrom};
 use universalmotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, Strand, convert};
@@ -16,9 +15,9 @@ use universalmotif::{Alphabet, GapInfo, Matrix, Motif, MotifParts, MotifType, St
 mod analysis;
 mod arrow;
 mod enrichment;
+mod genome;
 mod genomic;
 mod io;
-mod genome;
 mod packed;
 mod plot;
 mod sequences;
@@ -29,15 +28,15 @@ pub(crate) fn err(e: universalmotif::Error) -> PyErr {
 }
 
 pub(crate) fn parse_type(s: &str) -> PyResult<MotifType> {
-    MotifType::parse(s).map_err(err)
+    s.parse::<MotifType>().map_err(err)
 }
 
 pub(crate) fn parse_alphabet(s: &str) -> PyResult<Alphabet> {
-    Alphabet::parse(s).map_err(err)
+    s.parse::<Alphabet>().map_err(err)
 }
 
 fn parse_strand(s: &str) -> PyResult<Strand> {
-    Strand::parse(s).map_err(err)
+    s.parse::<Strand>().map_err(err)
 }
 
 fn one_char(s: &str, what: &str) -> PyResult<char> {
@@ -496,11 +495,8 @@ fn _create_random(
 ) -> PyResult<PyMotif> {
     let alphabet = parse_alphabet(alphabet)?;
     let opts = create_opts(kwargs, || Ok(alphabet.clone()))?;
-    let mut rng = match seed {
-        Some(s) => rand::rngs::StdRng::seed_from_u64(s),
-        None => rand::make_rng(),
-    };
-    create::random(width, alphabet, &opts, &mut rng)
+    let seed = seed.unwrap_or_else(rand::random);
+    create::random(width, alphabet, &opts, seed)
         .map(PyMotif::from)
         .map_err(err)
 }
@@ -536,7 +532,7 @@ fn _trim_motif(
     min_ic: f64,
     trim_from: &str,
 ) -> PyResult<Option<PyMotif>> {
-    let tf = TrimFrom::parse(trim_from).map_err(err)?;
+    let tf = trim_from.parse::<TrimFrom>().map_err(err)?;
     ops::trim_motif(&motif.inner, min_ic, tf)
         .map(|m| m.map(PyMotif::from))
         .map_err(err)
@@ -550,7 +546,7 @@ fn _trim_cwm(
     abs_threshold: Option<f64>,
     trim_from: &str,
 ) -> PyResult<Option<PyMotif>> {
-    let tf = TrimFrom::parse(trim_from).map_err(err)?;
+    let tf = trim_from.parse::<TrimFrom>().map_err(err)?;
     ops::trim_cwm(&motif.inner, trim_threshold, abs_threshold, tf)
         .map(|m| m.map(PyMotif::from))
         .map_err(err)

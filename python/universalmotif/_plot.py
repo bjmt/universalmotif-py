@@ -456,7 +456,7 @@ def plot_motif_peaks(
         if centres.size:
             ax.hist(centres, bins=bins, color="black")
         if seq_length:
-            ax.set_xlim(0, seq_length + 1)
+            ax.set_xlim(-1, seq_length)
         enr = row.get("enrichment")
         enr_text = "NA" if enr is None else f"{enr:.1f}"
         ax.set_title(f"{row['motif']}  (p = {row['pvalue']:.2g} | {enr_text}x)", fontsize=10)

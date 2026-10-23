@@ -42,11 +42,11 @@ def test_genome_is_a_mapping(genome):
     assert g.lengths == {c: len(s) for c, s in chroms.items()}
     assert g["chr2"] == chroms["chr2"]
     assert dict(g) == chroms
-    assert g.subseq("chr1", 59, 122) == chroms["chr1"][58:122]
+    assert g.subseq("chr1", 58, 122) == chroms["chr1"][58:122]
     with pytest.raises(KeyError):
         g["chr9"]
     with pytest.raises(IndexError):
-        g.subseq("chr1", 0, 10)
+        g.subseq("chr1", -1, 10)
     with pytest.raises(ValueError, match="outside"):
         g.subseq("chr1", 10, 6001)
     assert "3 sequences, 8,570 letters" in repr(g)
@@ -58,8 +58,8 @@ def test_extract_ranges(genome):
     ranges = []
     for _ in range(100):
         c = rng.choice(list(chroms))
-        s = rng.randint(1, len(chroms[c]))
-        ranges.append((c, s, rng.randint(s, min(len(chroms[c]), s + 400)), rng.choice("+-*")))
+        s = rng.randint(0, len(chroms[c]) - 1)
+        ranges.append((c, s, rng.randint(s + 1, min(len(chroms[c]), s + 400)), rng.choice("+-*")))
     got = um.extract_ranges(g, ranges, nthreads=2)
     assert got == um.extract_ranges(chroms, ranges)
     # Packed sequences lose soft-masking.
@@ -68,11 +68,11 @@ def test_extract_ranges(genome):
     # Minus-strand ranges are reverse complemented, keeping the case.
     seq = chroms["chr1"][99:110]
     rc = seq[::-1].translate(str.maketrans("ACGTNacgtn", "TGCANtgcan"))
-    assert um.extract_ranges(g, [("chr1", 100, 110, "-")]) == {"chr1:100-110(-)": rc}
+    assert um.extract_ranges(g, [("chr1", 99, 110, "-")]) == {"chr1:99-110(-)": rc}
     df = pl.DataFrame({"seqnames": ["chr2", "chr2"], "start": [5, 5], "width": [10, 10]})
-    assert list(um.extract_ranges(g, df)) == ["chr2:5-14", "chr2:5-14.1"]
+    assert list(um.extract_ranges(g, df)) == ["chr2:5-15", "chr2:5-15.1"]
     with pytest.raises(ValueError, match="not in the genome"):
-        um.extract_ranges(g, [("chr9", 1, 5)])
+        um.extract_ranges(g, [("chr9", 0, 5)])
     with pytest.raises(ValueError, match="does not fit"):
         um.extract_ranges(g, [("chrM", 60, 80)])
 
@@ -90,15 +90,15 @@ def test_genome_scans_like_a_dict(genome):
 
 def test_match_bkg_reads_only_windows(genome):
     g, chroms = genome
-    targets = list(um.extract_ranges(chroms, [("chr1", 100, 199), ("chr2", 1000, 1149)]).values())
-    exclude = [("chr1", 100, 199)]
+    targets = list(um.extract_ranges(chroms, [("chr1", 99, 199), ("chr2", 999, 1149)]).values())
+    exclude = [("chr1", 99, 199)]
     a = um.match_bkg(targets, genome=g, exclude=exclude, n_candidates=200, seed=3)
     b = um.match_bkg(targets, genome=chroms, exclude=exclude, n_candidates=200, seed=3)
     assert a == b
     for name, seq in a.items():
         c, span = name.rsplit(":", 1)
         s, e = map(int, span.split("-"))
-        assert chroms[c][s - 1:e] == seq
+        assert chroms[c][s:e] == seq
 
 
 def _bigwig(path, lengths, entries):
@@ -111,7 +111,7 @@ def _bigwig(path, lengths, entries):
 def test_signal_stats(tmp_path):
     path = _bigwig(tmp_path / "s.bw", {"chr1": 1000, "chr2": 500},
                    [("chr1", 0, 100, 1.0), ("chr1", 100, 200, 3.0), ("chr2", 10, 20, 5.0)])
-    ranges = [("chr1", 51, 250), ("chr1", 301, 400), ("chr2", 1, 500), ("chrX", 1, 10)]
+    ranges = [("chr1", 50, 250), ("chr1", 300, 400), ("chr2", 0, 500), ("chrX", 0, 10)]
     df = um.signal_stats(path, ranges)
     assert df.columns == ["signal"]
     assert np.allclose(df["signal"], [(50 * 1 + 100 * 3) / 200, 0, 50 / 500, 0])
@@ -134,7 +134,7 @@ def test_match_bkg_on_signal(tmp_path):
     entries = [(c, i, min(n, i + 50), 10.0 if c == "chr1" and i < 3000 else 0.5)
                for c, n in lengths.items() for i in range(0, n, 50)]
     path = _bigwig(tmp_path / "s.bw", lengths, entries)
-    target_ranges = [("chr1", s, s + 99) for s in range(200, 2200, 200)]
+    target_ranges = [("chr1", s, s + 100) for s in range(200, 2200, 200)]
     targets = list(um.extract_ranges(chroms, target_ranges).values())
     plain = um.match_bkg(targets, genome=chroms, n_candidates=500, seed=1, return_indices=True)
     matched = um.match_bkg(targets, genome=chroms, n_candidates=500, seed=1, return_indices=True,
@@ -144,7 +144,7 @@ def test_match_bkg_on_signal(tmp_path):
     plain_ranges = [(n.split(":")[0], *map(int, n.split(":")[1].split("-")))
                     for n in plain["universe_name"]]
     assert matched["universe_atac"].mean() > 9
-    assert um.signal_stats(path, plain_ranges)["signal"].mean() < 6
+    assert um.signal_stats(path, plain_ranges)["signal"].mean() < matched["universe_atac"].mean() - 2
     with pytest.raises(ValueError, match="go together"):
         um.match_bkg(targets, genome=chroms, bigwig=path)
     with pytest.raises(ValueError, match="needs a genome"):

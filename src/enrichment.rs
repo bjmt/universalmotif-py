@@ -34,7 +34,7 @@ fn _enrich<'py>(
     let motifs: Vec<Motif> = motifs.iter().map(|m| m.inner.clone()).collect();
     let opts = EnrichOptions {
         pvalue,
-        test: EnrichTest::parse(test).map_err(err)?,
+        test: test.parse::<EnrichTest>().map_err(err)?,
         rc,
         shuffle_k,
         seed,
@@ -175,7 +175,7 @@ fn _peaks<'py>(
         })
         .collect();
     let opts = PeaksOptions {
-        mode: PeaksMode::parse(mode).map_err(err)?,
+        mode: mode.parse::<PeaksMode>().map_err(err)?,
         min_window,
         max_window,
         window_step,

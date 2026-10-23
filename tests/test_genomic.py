@@ -18,9 +18,10 @@ def _chroms():
 
 
 def _ranges(t):
+    # R counts positions from 1, with the end included.
     return pl.DataFrame({
         "chrom": t["seqnames"],
-        "start": [int(x) for x in nums(t["start"])],
+        "start": [int(x) - 1 for x in nums(t["start"])],
         "end": [int(x) for x in nums(t["end"])],
         "strand": t["strand"] if isinstance(t["strand"], list) else [t["strand"]] * len(t["seqnames"]),
     })
@@ -31,7 +32,7 @@ def _hits():
     return pl.DataFrame({
         "motif": h["motif"],
         "sequence": h["seqnames"],
-        "start": [int(x) for x in nums(h["start"])],
+        "start": [int(x) - 1 for x in nums(h["start"])],
         "end": [int(x) for x in nums(h["end"])],
         "strand": h["strand"],
         "score": nums(h["score"]),
@@ -46,7 +47,7 @@ def _close(got, want, ctx):
 def test_proximity_reference():
     chroms = _chroms()
     lengths = {k: len(v) for k, v in chroms.items()}
-    whole = pl.DataFrame({"chrom": list(lengths), "start": [1] * 3, "end": list(lengths.values())})
+    whole = pl.DataFrame({"chrom": list(lengths), "start": [0] * 3, "end": list(lengths.values())})
     hits, anchors = _hits(), _ranges(_ref("anchors"))
     for case in _ref("proximity"):
         a = args(case["args"])
@@ -164,14 +165,14 @@ def test_match_bkg():
 def test_match_bkg_genome():
     chroms = _chroms()
     targets = _ref("match_targets")
-    exclude = pl.DataFrame({"chrom": ["chr1"], "start": [1], "end": [6000]})
+    exclude = pl.DataFrame({"chrom": ["chr1"], "start": [0], "end": [6000]})
     out = um.match_bkg(targets, genome=chroms, exclude=exclude, n_candidates=300, seed=4,
                        n_per_target=2)
     assert len(out) == 24
     for name, seq in out.items():
         chrom, span = name.split(".")[0].split(":")
         s, e = map(int, span.split("-"))
-        assert chrom != "chr1" and chroms[chrom][s - 1 : e] == seq and len(seq) == 150
+        assert chrom != "chr1" and chroms[chrom][s:e] == seq and len(seq) == 150
     only = um.match_bkg(targets[:1], genome=chroms, chromosomes=["chr3"], seed=1, return_indices=True)
     assert only["universe_name"][0].startswith("chr3:") and only["universe_length"][0] == 150
 
@@ -207,9 +208,9 @@ def test_packed_genomes():
     b = um.motif_proximity(anchors=anchors, motifs=motifs, sequences=packed, scan_pvalue=1e-3, qvalue=1)
     assert a.equals(b)
     targets = _ref("match_targets")
-    exclude = pl.DataFrame({"chrom": ["chr1"], "start": [1], "end": [6000]})
+    exclude = pl.DataFrame({"chrom": ["chr1"], "start": [0], "end": [6000]})
     opts = dict(exclude=exclude, n_candidates=300, seed=4, n_per_target=2)
     assert um.match_bkg(targets, genome=packed, **opts) == um.match_bkg(targets, genome=chroms, **opts)
-    assert packed.subseq("chr2", 5, 9) == chroms["chr2"][4:9]
+    assert packed.subseq("chr2", 4, 9) == chroms["chr2"][4:9]
     with pytest.raises(IndexError):
         packed.subseq("chr2", 1, len(chroms["chr2"]) + 1)

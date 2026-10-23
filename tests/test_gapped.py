@@ -22,7 +22,8 @@ def test_gapped_scans_match_r(tmp_path):
             got = got.sort(["motif_i", "sequence_i", "start", "match"])
             assert got["motif_i"].to_list() == [int(x) - 1 for x in nums(w["motif.i"])]
             assert got["sequence_i"].to_list() == [int(x) - 1 for x in nums(w["sequence.i"])]
-            assert got["start"].to_list() == [int(x) for x in nums(w["start"])]
+            # R counts positions from 1.
+            assert got["start"].to_list() == [int(x) - 1 for x in nums(w["start"])]
             assert got["end"].to_list() == [int(x) for x in nums(w["stop"])]
             assert got["match"].to_list() == list(np.atleast_1d(w["match"]))
             np.testing.assert_allclose(got["score"].to_numpy(), nums(w["score"]), rtol=1e-12)

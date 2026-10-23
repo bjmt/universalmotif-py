@@ -4,7 +4,7 @@
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use universalmotif::io::meme::{AlphabetDefinition, write_alphabet};
-use universalmotif::metrics::{Average, ColumnMetric};
+use universalmotif::metrics::{Average, Column, ColumnMetric};
 use universalmotif::scoring::{self, ThresholdType};
 use universalmotif::{convert, mask, metrics, ops, pvalue};
 
@@ -52,7 +52,7 @@ fn _motif_score(
     threshold_type: &str,
     allow_nonfinite: bool,
 ) -> PyResult<Vec<f64>> {
-    let t = ThresholdType::parse(threshold_type).map_err(err)?;
+    let t = threshold_type.parse::<ThresholdType>().map_err(err)?;
     scoring::motif_score(&motif.inner, &thresholds, t, allow_nonfinite).map_err(err)
 }
 
@@ -113,13 +113,15 @@ fn _compare_columns(
     nsites1: f64,
     nsites2: f64,
 ) -> PyResult<f64> {
-    let metric = ColumnMetric::parse(method).map_err(err)?;
-    metrics::compare_columns(&x, &y, metric, &bkg1, &bkg2, nsites1, nsites2).map_err(err)
+    let metric = method.parse::<ColumnMetric>().map_err(err)?;
+    let cx = Column::new(&x).with_bkg(&bkg1).with_nsites(nsites1);
+    let cy = Column::new(&y).with_bkg(&bkg2).with_nsites(nsites2);
+    metrics::compare_columns(&cx, &cy, metric).map_err(err)
 }
 
 #[pyfunction]
 fn _average_ic(motifs: Vec<PyRef<'_, PyMotif>>, average: &str) -> PyResult<Vec<f64>> {
-    let how = Average::parse(average).map_err(err)?;
+    let how = average.parse::<Average>().map_err(err)?;
     let motifs: Vec<_> = motifs.iter().map(|m| m.inner.clone()).collect();
     metrics::average_ic(&motifs, how).map_err(err)
 }

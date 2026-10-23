@@ -58,10 +58,13 @@ fn _anchor_layout(
         nthreads,
         ..Default::default()
     };
-    let (placements, width) = py
+    let layout = py
         .detach(|| anchor_layout(&motifs, anchor, &opts))
         .map_err(err)?;
-    Ok((placements.iter().map(|p| (p.left, p.rc)).collect(), width))
+    Ok((
+        layout.placements.iter().map(|p| (p.left, p.rc)).collect(),
+        layout.width,
+    ))
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

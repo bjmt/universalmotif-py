@@ -41,7 +41,7 @@ class Genome(Mapping[str, str]):
     --------
     >>> import universalmotif as um
     >>> genome = um.Genome("TAIR10.fa.gz")  # doctest: +SKIP
-    >>> genome.subseq("1", 1001, 1020)  # doctest: +SKIP
+    >>> genome.subseq("1", 1000, 1020)  # doctest: +SKIP
     'GGTTATAAATTATTAGAAGT'
     """
 
@@ -76,12 +76,13 @@ class Genome(Mapping[str, str]):
         return dict(zip(self._inner.names(), self._inner.lengths()))
 
     def subseq(self, name: str, start: int, end: int) -> str:
-        """Positions ``start`` to ``end`` of the chromosome called ``name``,
-        counted from 1 and inclusive, reading only those."""
+        """Positions ``start`` up to but not including ``end`` of the
+        chromosome called ``name``, counted from 0 as in a slice, reading only
+        those."""
         i = self._index(name)
-        if start < 1:
-            raise IndexError("start must be at least 1")
-        return self._inner.fetch(i, start - 1, end)
+        if start < 0:
+            raise IndexError("start must be at least 0")
+        return self._inner.fetch(i, start, end)
 
     def extract(self, ranges, nthreads: int = 1) -> dict[str, str]:
         """The sequences of genomic ranges; see
@@ -90,10 +91,10 @@ class Genome(Mapping[str, str]):
 
     def _fetch(self, chroms: list[str], starts: list[int], ends: list[int],
                nthreads: int = 1) -> list[str]:
-        """Many ranges, with 1-based inclusive positions, read in parallel."""
+        """Many ranges, with 0-based, half-open positions, read in parallel."""
         index = {c: self._index(c) for c in set(chroms)}
         return self._inner.fetch_many(
-            [(index[c], s - 1, e) for c, s, e in zip(chroms, starts, ends)], nthreads
+            [(index[c], s, e) for c, s, e in zip(chroms, starts, ends)], nthreads
         )
 
     def __repr__(self) -> str:
@@ -118,8 +119,9 @@ def extract_ranges(
     chromosome names to sequences. ``ranges`` is a DataFrame with ``chrom``
     (or ``seqnames``, ``chr`` and the like), ``start`` and ``end`` or
     ``width`` columns, or (chrom, start, end[, strand]) tuples, with
-    positions counted from 1 and inclusive. Ranges on the ``-`` strand are
-    reverse complemented. Each sequence is named ``chrom:start-end``, with
+    positions counted from 0 and the end left out, as in BED files and
+    Python slices. Ranges on the ``-`` strand are reverse complemented.
+    Each sequence is named ``chrom:start-end`` in the same positions, with
     ``(-)`` added on the minus strand, and repeated ranges get ``.1``,
     ``.2`` and so on. A genome on disk reads the ranges with ``nthreads``
     threads.
@@ -128,8 +130,8 @@ def extract_ranges(
     --------
     >>> import universalmotif as um
     >>> genome = {"chr1": "AACCGGTTACGT"}
-    >>> um.extract_ranges(genome, [("chr1", 2, 5), ("chr1", 2, 5, "-")])
-    {'chr1:2-5': 'ACCG', 'chr1:2-5(-)': 'CGGT'}
+    >>> um.extract_ranges(genome, [("chr1", 1, 5), ("chr1", 1, 5, "-")])
+    {'chr1:1-5': 'ACCG', 'chr1:1-5(-)': 'CGGT'}
     """
     from ._genomic import _range_table
     from ._packed import PackedSequences
@@ -141,14 +143,14 @@ def extract_ranges(
         if c not in genome:
             raise ValueError(f"the chromosome {c!r} is not in the genome")
         n = lengths[c] if lengths is not None else len(genome[c])
-        if s < 1 or e > n or s > e + 1:
+        if s < 0 or e > n or s > e:
             raise ValueError(f"the range {c}:{s}-{e} does not fit in {c} (length {n})")
     if isinstance(genome, Genome):
         seqs = genome._fetch(chroms, starts, ends, nthreads)
     elif isinstance(genome, PackedSequences):
         seqs = [genome.subseq(c, s, e) for c, s, e in zip(chroms, starts, ends)]
     else:
-        seqs = [genome[c][s - 1:e] for c, s, e in zip(chroms, starts, ends)]
+        seqs = [genome[c][s:e] for c, s, e in zip(chroms, starts, ends)]
     strands = df["strand"].to_list()
     seqs = [_reverse_complement(x) if st == "-" else x for x, st in zip(seqs, strands)]
     names = [f"{c}:{s}-{e}" + ("(-)" if st == "-" else "")
@@ -170,8 +172,8 @@ def signal_stats(
 
     ``bigwig`` is the path of one bigWig file, giving a column called
     ``signal``, or a mapping from column names to paths. ``ranges`` is a
-    range table or (chrom, start, end[, strand]) tuples, with positions
-    counted from 1 and inclusive, as for
+    range table or (chrom, start, end[, strand]) tuples, with 0-based,
+    half-open positions, as for
     [`extract_ranges()`][universalmotif.extract_ranges]. ``stat`` is
     ``"mean"``, ``"max"`` or ``"min"``. Bases the file has no value for
     count as ``uncovered``, zero by default as is usual for coverage; with
@@ -187,7 +189,7 @@ def signal_stats(
     Examples
     --------
     >>> import universalmotif as um
-    >>> peaks = [("chr1", 1001, 1200), ("chr2", 501, 700)]
+    >>> peaks = [("chr1", 1000, 1200), ("chr2", 500, 700)]
     >>> um.signal_stats({"atac": "atac.bw"}, peaks)  # doctest: +SKIP
     """
     try:
@@ -212,7 +214,7 @@ def signal_stats(
         sizes = reader.chroms()
         values = np.empty(len(chroms))
         for k, (c, s, e) in enumerate(zip(chroms, starts, ends)):
-            if s > e:
+            if s >= e:
                 values[k] = np.nan
                 continue
             if c not in sizes:
@@ -220,9 +222,9 @@ def signal_stats(
                 # the file for having no reads.
                 values[k] = np.nan if uncovered is None else uncovered
                 continue
-            if s < 1 or e > sizes[c]:
+            if s < 0 or e > sizes[c]:
                 raise ValueError(f"the range {c}:{s}-{e} does not fit in {c} in {path}")
-            values[k] = reader.values(c, s - 1, e, bins=1, summary=stat, exact=True,
+            values[k] = reader.values(c, s, e, bins=1, summary=stat, exact=True,
                                       fillna=np.nan, uncovered=uncovered)[0]
         out[str(name)] = values
     return pl.DataFrame(out)

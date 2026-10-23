@@ -1,6 +1,6 @@
 # Genomes and signal
 
-Genomes read from disk a piece at a time, the sequences of genomic ranges, and bigWig signal over them. Ranges are 1-based and include both ends, and can be given as DataFrames or tuples, as for [genomic intervals](genomic.md).
+Genomes read from disk a piece at a time, the sequences of genomic ranges, and bigWig signal over them. Positions count from 0 and leave the end out, and ranges can be given as DataFrames or tuples, as for [genomic intervals](genomic.md).
 
 ::: universalmotif.Genome
     options:

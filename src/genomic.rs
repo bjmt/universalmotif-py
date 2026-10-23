@@ -21,7 +21,9 @@ fn granges(cols: RangeCols) -> PyResult<Vec<GRange>> {
                 chrom: chrom[i],
                 start: start[i],
                 end: end[i],
-                strand: GStrand::parse(strand.get(i).map_or("*", |s| s.as_str())).map_err(err)?,
+                strand: (strand.get(i).map_or("*", |s| s.as_str()))
+                    .parse::<GStrand>()
+                    .map_err(err)?,
             })
         })
         .collect()
@@ -61,9 +63,9 @@ fn _proximity<'py>(
     let anchors = granges(anchors)?;
     let universe = granges(universe)?;
     let opts = ProximityOptions {
-        method: ProximityMethod::parse(method).map_err(err)?,
-        count: ProximityCount::parse(count).map_err(err)?,
-        orientation: Orientation::parse(orientation).map_err(err)?,
+        method: method.parse::<ProximityMethod>().map_err(err)?,
+        count: count.parse::<ProximityCount>().map_err(err)?,
+        orientation: orientation.parse::<Orientation>().map_err(err)?,
         dist_thresholds,
         n_perm,
         perm_per_chrom,
@@ -147,7 +149,7 @@ fn _match_bkg(
                 targets: t,
                 universe: u,
                 n_bins,
-                bin_type: BinType::parse(&bt).map_err(err)?,
+                bin_type: bt.parse::<BinType>().map_err(err)?,
             })
         })
         .collect::<PyResult<_>>()?;

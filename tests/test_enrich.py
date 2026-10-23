@@ -151,7 +151,8 @@ def test_peaks_reference():
     hits = pl.DataFrame({
         "motif": h["motif"],
         "sequence": h["sequence"],
-        "start": [int(x) for x in h["start"]],
+        # R counts positions from 1.
+        "start": [int(x) - 1 for x in h["start"]],
         "end": [int(x) for x in h["end"]],
         "score": nums(h["score"]),
     })
@@ -176,11 +177,14 @@ def test_peaks_reference():
             assert got[col].to_list() == nums(t[col.replace("_", ".")]), (ctx, col)
         for col in ("best_window", "best_centre", "expected_in", "enrichment", "log2_enrichment",
                     "pvalue", "qvalue"):
-            _close(got[col].to_list(), t[col.replace("_", ".").replace("centre", "center")], f"{ctx} {col}")
-        assert got["centres"].to_list() == [[int(v) for v in nums(c)] for c in t["centers"]], ctx
+            want = t[col.replace("_", ".").replace("centre", "center")]
+            if col == "best_centre":
+                want = [None if x is None else x - 1 for x in nums(want)]
+            _close(got[col].to_list(), want, f"{ctx} {col}")
+        assert got["centres"].to_list() == [[int(v) - 1 for v in nums(c)] for c in t["centers"]], ctx
     # Hits straight from scan_sequences work too.
     scanned = um.scan_sequences(_motifs()[:1], _ref("peak_sequences"), pvalue=1e-3)
-    assert um.motif_peaks(scanned, 300, qvalue=1)["best_centre"].to_list() == [150.0]
+    assert um.motif_peaks(scanned, 300, qvalue=1)["best_centre"].to_list() == [149.0]
 
 
 def test_cutree():
@@ -197,3 +201,11 @@ def test_cutree():
         tree.cutree()
     with pytest.raises(ValueError):
         tree.cutree(0)
+
+
+def test_coocc_hits_can_start_at_zero():
+    motifs = um.example_motifs()[:2]
+    hits = pl.DataFrame({"motif_i": [0, 1], "sequence_i": [0, 0], "start": [0, 5]})
+    res = um.motif_coocc(motifs, hits=hits, n_sequences=2, max_distance=10)
+    assert res["both"].to_list() == [1]
+    assert res["median_distance"].to_list() == [5.0]

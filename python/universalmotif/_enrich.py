@@ -129,8 +129,8 @@ def _coocc_hits(hits: pl.DataFrame, names: list[str], n_sequences: int, need_sta
         if "start" not in hits.columns:
             raise ValueError("hits must have a start column when max_distance is given")
         start = hits["start"].to_list()
-        if any(s is None or s < 1 for s in start):
-            raise ValueError("hit starts must be positive integers")
+        if any(s is None or s < 0 for s in start):
+            raise ValueError("hit starts must be non-negative integers")
     return motif, sequence, start
 
 
@@ -286,7 +286,7 @@ def motif_peaks(
     seq_strand
         A mapping from the values in the sequence column to ``"+"`` or
         ``"-"``. Centres on ``-`` sequences are reflected to
-        ``seq_length + 1 - centre`` so they read in the feature's
+        ``seq_length - 1 - centre`` so they read in the feature's
         orientation, which matters only for local mode.
 
     Returns
@@ -312,7 +312,7 @@ def motif_peaks(
     >>> hits = um.scan_sequences(wbox, um.example_sequences("targets"), nthreads=1)
     >>> peaks = um.motif_peaks(hits, seq_length=1000, nthreads=1)
     >>> peaks.select("motif", "nhits", "best_window", "best_centre", "hits_in").row(0)
-    ('W-box', 30, 490, 500.0, 27)
+    ('W-box', 30, 490, 499.0, 27)
     >>> f"{peaks['pvalue'][0]:.1e}"
     '1.3e-04'
     """
@@ -331,14 +331,14 @@ def motif_peaks(
         raise ValueError("hits must have a 'sequence' or 'sequence_i' column")
     motif_names = [str(m) for m in hits["motif"].to_list()]
     seq_values = hits[seq_col].to_list()
-    centres = ((hits["start"].cast(pl.Float64) + hits[end_col].cast(pl.Float64)) / 2).to_list()
+    centres = ((hits["start"].cast(pl.Float64) + hits[end_col].cast(pl.Float64) - 1) / 2).to_list()
     if seq_strand is not None:
         missing = {s for s in seq_values if s not in seq_strand}
         if missing:
             raise ValueError(f"seq_strand is missing sequences: {sorted(map(str, missing))[:5]}")
         if any(seq_strand[s] not in ("+", "-") for s in set(seq_values)):
             raise ValueError("seq_strand values must be '+' or '-'")
-        centres = [seq_length + 1 - c if seq_strand[s] == "-" else c for s, c in zip(seq_values, centres)]
+        centres = [seq_length - 1 - c if seq_strand[s] == "-" else c for s, c in zip(seq_values, centres)]
     ids = sorted(set(motif_names))
     motif_index = {m: i for i, m in enumerate(ids)}
     # Motifs keep the numbers scan_sequences() gave them, if there are any.

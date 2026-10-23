@@ -31,6 +31,12 @@ the R package:
   converting, fetching, curating and drawing motifs, scanning, comparison,
   enrichment, discovery, backgrounds, match matrices, proximity,
   co-occurrence and positional enrichment.
+- Positions count from 0 and leave the end out everywhere, as in BED files
+  and Python slices, so a hit covers `sequence[start:end]`. Range tables,
+  `Genome.subseq()`, `PackedSequences.subseq()`, windows, implant
+  positions and masked ranges all follow this, BED files and PyRanges pass
+  through unchanged, and window tables have an `end` column in place of
+  `stop`.
 - k-mers in place of k-lets, so `count_klets()` and `get_klets()` are now
   `count_kmers()` and `get_kmers()`, and `get_bkg()` has a `kmer` column.
 - Canadian spelling throughout, so `summarise_motifs()` is now

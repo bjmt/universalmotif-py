@@ -2,6 +2,7 @@
 
 use pyo3::prelude::*;
 use universalmotif::genome::Genome;
+use universalmotif::ranges::GRange;
 
 use crate::err;
 
@@ -47,6 +48,10 @@ impl PyGenome {
         ranges: Vec<(usize, u64, u64)>,
         nthreads: usize,
     ) -> PyResult<Vec<String>> {
+        let ranges: Vec<GRange> = ranges
+            .into_iter()
+            .map(|(i, s, e)| GRange::new(i, s as i64, e as i64))
+            .collect();
         py.detach(|| self.genome.fetch_many(&ranges, nthreads))
             .map_err(err)
     }

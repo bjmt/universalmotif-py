@@ -64,7 +64,8 @@ def test_readers():
             for g, w in zip(meta.partition_by("motif", maintain_order=True), case["sites_meta"]):
                 assert g["sequence"].to_list() == _strs(w["sequence"]), ctx
                 assert g["site"].to_list() == _strs(w["site"]), ctx
-                assert g["position"].to_list() == [int(x) for x in nums(w["position"])], ctx
+                # MEME and R count positions from 1.
+                assert g["position"].to_list() == [int(x) - 1 for x in nums(w["position"])], ctx
                 assert g["pvalue"].to_list() == pytest.approx(nums(w["pvalue"])), ctx
         if "combined" in case:
             comb = got["sites_meta_combined"]

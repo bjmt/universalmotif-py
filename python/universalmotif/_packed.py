@@ -53,22 +53,23 @@ class PackedSequences(Mapping[str, str]):
         return isinstance(name, str) and self._inner.index(name) is not None
 
     def subseq(self, name: str, start: int, end: int) -> str:
-        """Positions ``start`` to ``end`` of the sequence called ``name``,
-        counted from 1 and inclusive, decoding only those.
+        """Positions ``start`` up to but not including ``end`` of the
+        sequence called ``name``, counted from 0 as in a slice, decoding only
+        those.
 
         Examples
         --------
         >>> import universalmotif as um
         >>> packed = um.pack_sequences({"chr1": "ACGTNNACGT"})
-        >>> packed.subseq("chr1", 3, 8)
+        >>> packed.subseq("chr1", 2, 8)
         'GTNNAC'
         """
         i = self._inner.index(name)
         if i is None:
             raise KeyError(name)
-        if start < 1:
-            raise IndexError("start must be at least 1")
-        return self._inner.decode_range(i, start - 1, end)
+        if start < 0:
+            raise IndexError("start must be at least 0")
+        return self._inner.decode_range(i, start, end)
 
     @property
     def alphabet(self) -> str:

@@ -53,14 +53,15 @@ A few conventions hold across the commands.
   recompressed with `bgzip`, as described in [Scanning large
   genomes](guides/large-genomes.ipynb#leaving-the-genome-on-disk).
 - **Ranges**, such as peaks, are given with `-r` as BED files, including
-  narrowPeak and broadPeak files, whose 0-based positions are converted, or
-  as tab-separated tables with a header naming `chrom`, `start` and `end` or
-  `width` columns, already counted from 1. A strand column, or the sixth
+  narrowPeak and broadPeak files, or as tab-separated tables with a header
+  naming `chrom`, `start` and `end` or `width` columns. Positions count from
+  0 and leave the end out, as in BED files. A strand column, or the sixth
   column of a BED file, marks ranges on the minus strand, which are reverse
   complemented.
 - **Tables** are written as tab-separated text with a header row, with
-  missing values written as `NA` and lists joined by commas. Positions are
-  counted from 1 and include both ends.
+  missing values written as `NA` and lists joined by commas. Positions count
+  from 0 and leave the end out, so the first three columns of a table of
+  hits on a genome can be read as BED.
 - **Output** goes to standard output unless a file is given with `-o`, so
   commands can be chained with pipes. Files ending in `.gz` are written
   gzipped.

@@ -184,8 +184,8 @@ def test_extract_and_bkg(tmp_path, genome):
     fasta, bed, chroms, peaks = genome
     run("extract", "-g", fasta, "-r", bed, "-o", tmp_path / "x.fa")
     seqs = um.read_fasta(tmp_path / "x.fa")
-    assert list(seqs)[:2] == [f"chr1:{peaks[0][1] + 1}-{peaks[0][2]}",
-                              f"chr1:{peaks[1][1] + 1}-{peaks[1][2]}(-)"]
+    assert list(seqs)[:2] == [f"chr1:{peaks[0][1]}-{peaks[0][2]}",
+                              f"chr1:{peaks[1][1]}-{peaks[1][2]}(-)"]
     assert next(iter(seqs.values())) == chroms["chr1"][peaks[0][1]:peaks[0][2]]
     run("bkg", "-g", fasta, "-r", bed, "--seed", "1", "--candidates", "500",
         "--table", tmp_path / "b.tsv", "-o", tmp_path / "b.fa")
@@ -194,9 +194,9 @@ def test_extract_and_bkg(tmp_path, genome):
     for name, seq in bkg.items():
         c, span = name.rsplit(":", 1)
         s, e = map(int, span.split("-"))
-        assert chroms[c][s - 1:e] == seq
+        assert chroms[c][s:e] == seq
         # Windows keep clear of the peaks.
-        assert not any(pc == c and s <= pe and e > ps for pc, ps, pe in peaks)
+        assert not any(pc == c and s < pe and e > ps for pc, ps, pe in peaks)
     assert table(tmp_path / "b.tsv").height == len(peaks)
     run("bkg", "-s", TARGETS, "-u", CONTROLS, "--seed", "1", "-o", tmp_path / "u.fa")
     assert list(um.read_fasta(tmp_path / "u.fa")) == \
@@ -265,7 +265,7 @@ def test_ranges_files(tmp_path):
     bed = tmp_path / "r.txt"
     bed.write_text("track name=x\n#comment\nchr1\t0\t10\nchr2\t5\t8\n")
     df = read_ranges(str(bed))
-    assert df.select("chrom", "start", "end").rows() == [("chr1", 1, 10), ("chr2", 6, 8)]
+    assert df.select("chrom", "start", "end").rows() == [("chr1", 0, 10), ("chr2", 5, 8)]
     tsv = tmp_path / "r.tsv"
     tsv.write_text("chrom\tstart\tend\tstrand\nchr1\t1\t10\t-\n")
     assert read_ranges(str(tsv)).row(0) == ("chr1", 1, 10, "-")

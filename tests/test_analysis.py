@@ -50,8 +50,9 @@ def test_scan_sequences_reference():
         assert got.height == len(w["start"]), ctx
         for col in ("motif", "sequence", "strand", "match"):
             assert got[col].to_list() == w[col], f"{ctx}: {col}"
-        for col in ("start", "end"):
-            assert got[col].to_list() == [int(x) for x in w[col]], f"{ctx}: {col}"
+        # R counts positions from 1, with the end included.
+        assert got["start"].to_list() == [int(x) - 1 for x in w["start"]], ctx
+        assert got["end"].to_list() == [int(x) for x in w["end"]], ctx
         # The R package's indices are 1-based; these are 0-based.
         assert got["motif_i"].to_list() == [int(x) - 1 for x in w["motif_i"]], ctx
         assert got["sequence_i"].to_list() == [int(x) - 1 for x in w["sequence_i"]], ctx
@@ -73,7 +74,7 @@ def test_dedup_hits_matches_scan_option():
     starts = both.group_by("sequence").agg("start", "end")
     for row in starts.iter_rows(named=True):
         spans = sorted(zip(row["start"], row["end"]))
-        assert all(e < s for (_, e), (s, _) in zip(spans, spans[1:]))
+        assert all(e <= s for (_, e), (s, _) in zip(spans, spans[1:]))
     with pytest.raises(ValueError, match="missing"):
         um.dedup_hits(hits.drop("start"))
 

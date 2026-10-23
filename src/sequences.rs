@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyDict;
 use universalmotif::Motif;
-use universalmotif::complexity::{self, ComplexityOptions, Method};
+use universalmotif::complexity::{self, ComplexityMethod, ComplexityOptions};
 use universalmotif::finder::{FinderOptions, motif_finder};
 use universalmotif::kmer::{self, BkgOptions, WindowOptions};
 use universalmotif::sample::{self, ImplantMode, ImplantOptions};
@@ -47,7 +47,7 @@ fn _complexity(
     alph: Option<String>,
     max_word: usize,
 ) -> PyResult<Vec<f64>> {
-    let m = Method::parse(method).map_err(err)?;
+    let m = method.parse::<ComplexityMethod>().map_err(err)?;
     Ok(seqs
         .iter()
         .map(|s| complexity::complexity(s, m, alph.as_deref(), max_word))
@@ -69,7 +69,7 @@ fn _sequence_complexity(
     nthreads: usize,
 ) -> PyResult<PyTable> {
     let opts = ComplexityOptions {
-        method: Method::parse(method).map_err(err)?,
+        method: method.parse::<ComplexityMethod>().map_err(err)?,
         window,
         overlap,
         alphabet,
@@ -85,13 +85,13 @@ fn _sequence_complexity(
             strs(rows.iter().map(|r| names[r.sequence].as_str())),
         ),
         ("start", i64s(rows.iter().map(|r| r.start as i64))),
-        ("stop", i64s(rows.iter().map(|r| r.stop as i64))),
+        ("end", i64s(rows.iter().map(|r| r.end as i64))),
         ("complexity", f64s(rows.iter().map(|r| r.complexity))),
     ])
 }
 
 /// k-mer counts as a table: `sequence` for per-sequence counts (reverse
-/// complements take their sequence's name) and `start`/`stop` for windows.
+/// complements take their sequence's name) and `start`/`end` for windows.
 #[pyfunction]
 #[pyo3(signature = (seqs, names, k, pseudocount, alphabet, rc, merge, window, nthreads))]
 #[allow(clippy::too_many_arguments)]
@@ -135,10 +135,7 @@ fn _get_bkg(
             "start",
             i64s(rows.iter().map(|r| r.start.unwrap_or(0) as i64)),
         ));
-        cols.push((
-            "stop",
-            i64s(rows.iter().map(|r| r.stop.unwrap_or(0) as i64)),
-        ));
+        cols.push(("end", i64s(rows.iter().map(|r| r.end.unwrap_or(0) as i64))));
     }
     cols.push(("kmer", strs(rows.iter().map(|r| r.kmer.as_str()))));
     cols.push(("count", i64s(rows.iter().map(|r| r.count as i64))));
@@ -159,7 +156,7 @@ fn _shuffle_sequences(
 ) -> PyResult<Vec<String>> {
     let opts = ShuffleOptions {
         k,
-        method: ShuffleMethod::parse(method).map_err(err)?,
+        method: method.parse::<ShuffleMethod>().map_err(err)?,
         seed,
         window: self::window(window),
         nthreads,

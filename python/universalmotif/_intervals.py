@@ -20,7 +20,7 @@ def genomic_hits(hits: pl.DataFrame, ranges=None) -> pl.DataFrame:
     [`extract_ranges()`][universalmotif.extract_ranges], this puts the hits
     back on the genome: each gets a ``chrom`` column, and ``start``, ``end``
     and ``strand`` become positions on the chromosome's forward strand,
-    counted from 1 and inclusive. Hits in ranges that were reverse
+    counted from 0 with the end left out. Hits in ranges that were reverse
     complemented have their strand flipped. The other columns are kept, so
     ``sequence`` still names the range each hit came from.
 
@@ -41,12 +41,12 @@ def genomic_hits(hits: pl.DataFrame, ranges=None) -> pl.DataFrame:
     --------
     >>> import universalmotif as um
     >>> genome = {"chr1": "CCCCCTGACTCACCCCCCCCCC"}
-    >>> peaks = um.extract_ranges(genome, [("chr1", 3, 15), ("chr1", 3, 15, "-")])
+    >>> peaks = um.extract_ranges(genome, [("chr1", 2, 15), ("chr1", 2, 15, "-")])
     >>> hits = um.scan_sequences(um.example_motifs()[1], peaks, pvalue=1e-3, rc=False)
     >>> hits.select("sequence", "start", "end", "strand", "match").rows()
-    [('chr1:3-15', 3, 11, '+', 'CTGACTCAC'), ('chr1:3-15(-)', 3, 11, '+', 'GTGAGTCAG')]
+    [('chr1:2-15', 2, 11, '+', 'CTGACTCAC'), ('chr1:2-15(-)', 2, 11, '+', 'GTGAGTCAG')]
     >>> um.genomic_hits(hits).select("chrom", "start", "end", "strand").rows()
-    [('chr1', 5, 13, '+'), ('chr1', 5, 13, '-')]
+    [('chr1', 4, 13, '+'), ('chr1', 4, 13, '-')]
     """
     for col in ("sequence", "start", "end", "strand"):
         if col not in hits.columns:
@@ -77,12 +77,12 @@ def genomic_hits(hits: pl.DataFrame, ranges=None) -> pl.DataFrame:
                                               hits["end"].to_list(), hits["strand"].to_list()):
         chrom.append(c)
         if rstrand == "-":
-            start.append(re_ - e + 1)
-            end.append(re_ - s + 1)
+            start.append(re_ - e)
+            end.append(re_ - s)
             strand.append({"+": "-", "-": "+"}.get(st, st))
         else:
-            start.append(rs + s - 1)
-            end.append(rs + e - 1)
+            start.append(rs + s)
+            end.append(rs + e)
             strand.append(st)
     out = hits.with_columns(
         pl.Series("start", start, dtype=pl.Int64),
@@ -112,9 +112,9 @@ def to_pyranges(df: pl.DataFrame):
     The chromosome column, which can be any of ``chrom``, ``seqnames``,
     ``sequence``, ``chr`` or ``chromosome``, becomes ``Chromosome``, and
     ``start``, ``end`` and ``strand`` become ``Start``, ``End`` and
-    ``Strand``, with positions moved from 1-based and inclusive to PyRanges'
-    0-based, end-exclusive ones. Other columns are kept. PyRanges objects
-    can be given back to any function that takes ranges.
+    ``Strand``. Positions are 0-based and half-open in both, so they are
+    kept as they are. Other columns are kept too. PyRanges objects can be
+    given back to any function that takes ranges.
 
     Needs the ``pyranges`` extra.
 
@@ -140,7 +140,7 @@ def to_pyranges(df: pl.DataFrame):
     clash = [c for c in ("Chromosome", "Start", "End", "Strand") if c in df.columns]
     if clash:
         raise ValueError(f"the table already has columns named {clash}")
-    df = df.rename(renames).with_columns(pl.col("Start") - 1)
+    df = df.rename(renames)
     first = [c for c in ("Chromosome", "Start", "End", "Strand") if c in df.columns]
     df = df.select(first + [c for c in df.columns if c not in first])
     return pr.PyRanges(df.to_pandas())
@@ -153,9 +153,9 @@ def to_polars_bio(df: pl.DataFrame) -> pl.DataFrame:
     ``end`` columns, and keeps their coordinate system as metadata. This
     renames the chromosome column to ``chrom`` if it has another name, such
     as the ``sequence`` of hits, moves it first, and marks the positions as
-    1-based and inclusive, as they are throughout this package, so that
-    polars-bio's range operations treat them correctly. polars-bio frames
-    can be given back to any function that takes ranges.
+    0-based, as they are throughout this package, so that polars-bio's
+    range operations treat them correctly. polars-bio frames can be given
+    back to any function that takes ranges.
 
     Needs the ``polars-bio`` extra.
 
@@ -183,7 +183,7 @@ def to_polars_bio(df: pl.DataFrame) -> pl.DataFrame:
         df = df.rename({chrom: "chrom"})
     first = ["chrom", "start", "end"]
     df = df.select(first + [c for c in df.columns if c not in first])
-    df.config_meta.set(coordinate_system_zero_based=False)
+    df.config_meta.set(coordinate_system_zero_based=True)
     return df
 
 
