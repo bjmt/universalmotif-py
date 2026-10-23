@@ -19,6 +19,12 @@ classifiers = [
 ]
 dependencies = ["numpy>=1.24", "polars>=1.0"]
 
+[project.urls]
+Documentation = "https://bjmt.github.io/universalmotif-py/"
+Repository = "https://github.com/bjmt/universalmotif-py"
+Changelog = "https://bjmt.github.io/universalmotif-py/changelog/"
+Issues = "https://github.com/bjmt/universalmotif-py/issues"
+
 [project.scripts]
 universalmotif = "universalmotif._cli:main"
 umotif = "universalmotif._cli:main"
@@ -64,6 +70,14 @@ docs = [
 python-source = "python"
 module-name = "universalmotif._core"
 features = ["pyo3/extension-module"]
+# The docs, guides and CI files are not needed to build or use the package.
+exclude = [
+    { path = "docs/**/*", format = "sdist" },
+    { path = "hooks/**/*", format = "sdist" },
+    { path = "scripts/**/*", format = "sdist" },
+    { path = ".github/**/*", format = "sdist" },
+    { path = "mkdocs.yml", format = "sdist" },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "python/universalmotif"]

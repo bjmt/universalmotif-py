@@ -1,0 +1,136 @@
+name: Release
+
+# Builds wheels for Linux, macOS and Windows and a source distribution, checks
+# that each installs and runs, and uploads them. Version tags upload to PyPI.
+# Runs started by hand upload to TestPyPI by default, or to PyPI, or nowhere,
+# as chosen when starting them (`gh workflow run Release -f target=testpypi`).
+#
+# Uploads use trusted publishing: PyPI and TestPyPI each list this repository,
+# this workflow file and the environment named below as allowed to publish
+# universalmotif, so no token is stored here.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to upload the distributions
+        type: choice
+        options: [testpypi, pypi, none]
+        default: testpypi
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  wheels:
+    name: Wheel (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, runner: ubuntu-latest, target: x86_64 }
+          - { name: linux-aarch64, runner: ubuntu-24.04-arm, target: aarch64 }
+          - { name: macos-universal2, runner: macos-latest, target: universal2-apple-darwin }
+          - { name: windows-x86_64, runner: windows-latest, target: x64 }
+    steps:
+      # The package builds against the crate checked out next to it.
+      - uses: actions/checkout@v4
+        with:
+          path: universalmotif-py
+      - uses: actions/checkout@v4
+        with:
+          repository: bjmt/universalmotif-rs
+          path: universalmotif-rs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # One abi3 wheel per platform serves every Python from 3.10 on.
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: universalmotif-py
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --release --out dist
+      - name: Check that the wheel installs and runs
+        shell: bash
+        run: |
+          python -m venv check
+          if [ -d check/Scripts ]; then bin=check/Scripts; else bin=check/bin; fi
+          "$bin/python" -m pip install --quiet universalmotif-py/dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/$bin/python" -c "import universalmotif as um; print(um.__version__, len(um.example_motifs()))"
+          "$GITHUB_WORKSPACE/$bin/umotif" summary "$("$GITHUB_WORKSPACE/$bin/python" -c "import universalmotif as um; print(um.example_file('meme'))")"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.name }}
+          path: universalmotif-py/dist
+
+  sdist:
+    name: Source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: universalmotif-py
+      - uses: actions/checkout@v4
+        with:
+          repository: bjmt/universalmotif-rs
+          path: universalmotif-rs
+      # The crate is copied into the source distribution, so it builds
+      # without the checkout next to it.
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: universalmotif-py
+          command: sdist
+          args: --out dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check that the source distribution builds on its own
+        run: |
+          sdist=$(ls "$GITHUB_WORKSPACE"/universalmotif-py/dist/*.tar.gz)
+          mv universalmotif-rs "$RUNNER_TEMP/hidden-crate"
+          python -m venv "$RUNNER_TEMP/check"
+          cd "$RUNNER_TEMP"
+          check/bin/python -m pip install --quiet "$sdist"
+          check/bin/umotif --version
+          mv "$RUNNER_TEMP/hidden-crate" "$GITHUB_WORKSPACE/universalmotif-rs"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: universalmotif-py/dist
+
+  publish:
+    name: Upload to ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'pypi' }}
+    needs: [wheels, sdist]
+    if: github.event_name == 'push' || inputs.target != 'none'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'pypi' }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Check that a tag matches the package version
+        if: github.event_name == 'push'
+        run: |
+          version=$(ls dist/*.tar.gz | sed -E 's|.*/universalmotif-(.*)\.tar\.gz|\1|')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "the tag $GITHUB_REF_NAME does not match the package version $version"
+            exit 1
+          fi
+      - run: ls -l dist
+      - name: Upload to TestPyPI
+        if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+      - name: Upload to PyPI
+        if: github.event_name == 'push' || inputs.target == 'pypi'
+        uses: pypa/gh-action-pypi-publish@release/v1
