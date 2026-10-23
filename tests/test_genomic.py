@@ -271,6 +271,8 @@ def test_range_table_errors():
 
 def test_range_table_from_pandas_and_old_pyranges():
     pd = pytest.importorskip("pandas")
+    # Converting these frames to polars needs pyarrow.
+    pytest.importorskip("pyarrow")
     from universalmotif._genomic import _range_table
 
     # A pandas index is dropped, and categorical chromosomes are fine.
@@ -448,6 +450,8 @@ def test_proximity_ks():
 
 def test_proximity_hits_from_pandas():
     pd = pytest.importorskip("pandas")
+    # Converting these frames to polars needs pyarrow.
+    pytest.importorskip("pyarrow")
     hits = _hit_table([("a", "c1", 490, 500, "+", 1.0), ("a", "c1", 10, 20, "+", 1.0)])
     got = _prox(hits.to_pandas(), [("c1", 500, 501)])
     assert isinstance(hits.to_pandas(), pd.DataFrame)
