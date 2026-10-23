@@ -37,6 +37,8 @@ these together on the outputs of a published model.
 
 ::: universalmotif.from_one_hot
 
+::: universalmotif.one_hot_batches
+
 ::: universalmotif.to_filters
 
 ::: universalmotif.from_filters

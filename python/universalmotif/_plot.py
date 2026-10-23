@@ -86,7 +86,7 @@ def view_logo(
     sort_positions: bool = False,
     sort_positions_decreasing: bool = True,
     fit_to_height: float | None = None,
-    flip_neg: bool = False,
+    flip_neg: bool = True,
     ax: Axes | None = None,
 ) -> Axes:
     """Draw a logo from any numeric matrix.
@@ -94,8 +94,9 @@ def view_logo(
     ``x`` is a (rows, positions) array with ``letters`` naming the rows, a
     mapping from row names to values, or a motif, which is drawn as its
     matrix is. Row names may be several characters long, columns can have
-    any height, and negative values are stacked below zero, upside down with
-    ``flip_neg``. Letters are coloured by ``colour_scheme``, a mapping from
+    any height, and negative values are stacked below zero, upside down so
+    that they read outward from zero unless ``flip_neg`` is ``False``.
+    Letters are coloured by ``colour_scheme``, a mapping from
     single characters to colours, or all filled with ``fill``.
 
     Letters shorter than ``min_height`` are left out, ``x_spacer`` and
@@ -296,7 +297,7 @@ def view_motifs(
     sort_positions_decreasing: bool = True,
     fit_to_height: Any = _DEFAULT,
     rc_text: str = " [RC]",
-    flip_neg: bool = False,
+    flip_neg: bool = True,
     text_size: float = 12,
     figsize: tuple[float, float] | None = None,
     return_raw: bool = False,

@@ -705,6 +705,94 @@ def site_spacings(
     return {d: _restore(sequences, names, v) for d, v in out.items()}
 
 
+class _OneHotBatches:
+    """Batches of one-hot sequences read from a genome as they are needed."""
+
+    def __init__(self, genome, table, batch_size, alphabet, dtype, nthreads):
+        self._genome, self._table = genome, table
+        self._batch_size, self._alphabet, self._dtype, self._nthreads = batch_size, alphabet, dtype, nthreads
+
+    def __len__(self) -> int:
+        return (self._table.height + self._batch_size - 1) // self._batch_size
+
+    def __iter__(self):
+        from ._genome import extract_ranges
+
+        for i in range(0, self._table.height, self._batch_size):
+            part = self._table.slice(i, self._batch_size)
+            seqs = list(extract_ranges(self._genome, part, nthreads=self._nthreads).values())
+            yield one_hot(seqs, alphabet=self._alphabet, dtype=self._dtype)
+
+    def __repr__(self) -> str:
+        return f"<{len(self)} batches of up to {self._batch_size} sequences>"
+
+
+def one_hot_batches(
+    genome: Any,
+    ranges: Any,
+    batch_size: int = 256,
+    width: int | None = None,
+    alphabet: str = "ACGT",
+    dtype: Any = np.float32,
+    nthreads: int = 1,
+):
+    """Genomic ranges as one-hot batches for a model, read a batch at a time.
+
+    ``genome`` and ``ranges`` are as for
+    [`extract_ranges()`][universalmotif.extract_ranges]: a
+    [`Genome`][universalmotif.Genome] read from disk,
+    [`PackedSequences`][universalmotif.PackedSequences] or a mapping from
+    chromosome names to sequences, and a DataFrame or tuples of ranges
+    counted from 0 with the end left out. Ranges on the ``-`` strand are
+    reverse complemented. Models take sequences of one length, so the ranges
+    must all have the same width, or with ``width`` each is replaced by a
+    window of that width around its middle, the lower one for even widths.
+    Every range is checked before any is read, and must fit within its
+    chromosome.
+
+    Returns an iterable of arrays of shape (sequences, letters, width), up
+    to ``batch_size`` sequences each and in the order of the ranges, with a
+    length so that progress can be shown. Only one batch is held in memory
+    at a time, so large sets of regions can be fed to a model, for example
+    as ``model(torch.from_numpy(x))`` for each batch ``x``.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> genome = {"chr1": "AACCGGTTACGTACGTAAAA"}
+    >>> batches = um.one_hot_batches(genome, [("chr1", 0, 9), ("chr1", 4, 20, "-")],
+    ...                              width=4, batch_size=1)
+    >>> len(batches)
+    2
+    >>> [um.from_one_hot(x) for x in batches]
+    [['CCGG'], ['GTAC']]
+    """
+    from ._genomic import _range_table
+    from ._packed import PackedSequences
+
+    if int(batch_size) < 1:
+        raise ValueError("batch_size must be 1 or more")
+    table = _range_table(ranges, "ranges")
+    if width is not None:
+        width = int(width)
+        if width < 1:
+            raise ValueError("width must be 1 or more")
+        first = (table["start"] + table["end"]) // 2 - width // 2
+        table = table.with_columns(start=first, end=first + width)
+    elif table.height and (table["end"] - table["start"]).n_unique() > 1:
+        raise ValueError("the ranges have different widths; give width to take windows of one width")
+    from ._genome import Genome
+
+    lengths = genome.lengths if isinstance(genome, (Genome, PackedSequences)) else None
+    for c, s, e in table.select("chrom", "start", "end").iter_rows():
+        if c not in genome:
+            raise ValueError(f"the chromosome {c!r} is not in the genome")
+        n = lengths[c] if lengths is not None else len(genome[c])
+        if s < 0 or e > n:
+            raise ValueError(f"the range {c}:{s}-{e} does not fit in {c} (length {n})")
+    return _OneHotBatches(genome, table, int(batch_size), alphabet, dtype, nthreads)
+
+
 __all__ = [
     "ContributionScores",
     "from_filters",
@@ -713,6 +801,7 @@ __all__ = [
     "mutagenesis",
     "mutagenesis_effects",
     "one_hot",
+    "one_hot_batches",
     "read_contributions",
     "read_modisco",
     "site_spacings",

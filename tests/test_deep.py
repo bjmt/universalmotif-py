@@ -258,3 +258,27 @@ def test_insert_sites_and_spacings():
     assert stacked.shape == (3, 2, 4, 12)
     with pytest.raises(ValueError, match="spacings"):
         um.site_spacings("AAAA", "G", "T", spacings=[-1])
+
+
+def test_one_hot_batches(tmp_path):
+    seq = "AACCGGTTACGTACGTAAAACCCCGGGGTTTT"
+    ranges = pl.DataFrame({"chrom": ["chr1"] * 5, "start": [0, 4, 8, 12, 20],
+                           "end": [8, 12, 16, 20, 28], "strand": ["+", "-", "+", "+", "+"]})
+    batches = um.one_hot_batches({"chr1": seq}, ranges, batch_size=2)
+    assert len(batches) == 3
+    arrays = list(batches)
+    assert [a.shape for a in arrays] == [(2, 4, 8), (2, 4, 8), (1, 4, 8)]
+    expected = list(um.extract_ranges({"chr1": seq}, ranges).values())
+    assert [s for a in arrays for s in um.from_one_hot(a)] == expected
+    # Windows around the middles, from a genome on disk.
+    path = tmp_path / "g.fa"
+    path.write_text(">chr1\n" + seq + "\n")
+    genome = um.Genome(path)
+    centred = um.one_hot_batches(genome, [("chr1", 0, 9), ("chr1", 10, 30)], width=6)
+    assert um.from_one_hot(next(iter(centred))) == [seq[1:7], seq[17:23]]
+    with pytest.raises(ValueError, match="different widths"):
+        um.one_hot_batches({"chr1": seq}, [("chr1", 0, 4), ("chr1", 0, 5)])
+    with pytest.raises(ValueError, match="does not fit"):
+        um.one_hot_batches({"chr1": seq}, [("chr1", 0, 4)], width=12)
+    with pytest.raises(ValueError, match="not in the genome"):
+        um.one_hot_batches({"chr1": seq}, [("chr2", 0, 4)])
