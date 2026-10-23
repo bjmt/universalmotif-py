@@ -182,7 +182,7 @@ def test_plot_motif_peaks():
     fig = um.plot_motif_peaks(peaks)
     assert fig.axes[0].get_title().startswith("creb  (p = ")
     with pytest.raises(ValueError):
-        um.plot_motif_peaks(peaks.drop("centers"))
+        um.plot_motif_peaks(peaks.drop("centres"))
     with pytest.raises(ValueError):
         um.plot_motif_peaks(peaks, motifs=["nothing"])
     empty = pl.DataFrame(schema=peaks.schema)

@@ -8,7 +8,7 @@ R/Bioconductor package, built on the Rust version,
 matrices and polars DataFrames for tables.
 
 The package is at an early stage. Creating motifs, converting between motif
-types, reverse complementing, trimming and summarising are available, as are
+types, reverse complementing, trimming and summarizing are available, as are
 reading and writing MEME, JASPAR, HOMER, TRANSFAC, CIS-BP, UniPROBE, plain
 matrix and FASTA files, exact P-values, scanning sequences for
 hits, comparing, merging and clustering motifs, k-let backgrounds,
@@ -37,12 +37,15 @@ and `read_modisco()` reads TF-MoDISco results as CWMs or PPMs, with
 files can be opened with `Genome` and read a piece at a time, so peaks can
 be extracted with `extract_ranges()` and backgrounds drawn with
 `match_bkg()` without loading the whole genome, and `signal_stats()`
-summarises bigWig signal over ranges, which `match_bkg()` can also match
+summarizes bigWig signal over ranges, which `match_bkg()` can also match
 on, with `pip install universalmotif[bigwig]`. Ranges can be given as
 PyRanges objects or polars-bio frames anywhere they are taken, and
 `to_pyranges()` and `to_polars_bio()` hand tables back, while
 `genomic_hits()` moves hits found in extracted peaks back to their places
-on the genome.
+on the genome. All of this is also available from the command line, as
+`universalmotif` or `umotif`, with subcommands such as `umotif scan`,
+`umotif enrich` and `umotif fetch` for use in shell scripts and workflow
+managers.
 
 ## Example
 
@@ -57,7 +60,7 @@ print(pwm)
 print(pwm.matrix)
 
 sites = um.create_motif(["AAGT", "ACGT", "ACCT", "TCGT"], type="PCM")
-print(um.summarise_motifs([motif, sites]))
+print(um.summarize_motifs([motif, sites]))
 
 um.write_meme([motif, sites], "motifs.meme")
 motifs = um.read_meme("motifs.meme")
@@ -123,7 +126,7 @@ uv run --no-sync maturin develop --release
 uv run --no-sync mkdocs serve
 ```
 
-## License
+## Licence
 
 MIT. The letter shapes used in logos are outlines of the Roboto font,
 released under the Apache License 2.0, and were exported from the R

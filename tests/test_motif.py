@@ -168,14 +168,14 @@ def test_column_helpers():
     assert round(um.position_icscore([0.25, 0.75]), 3) == 0.185
 
 
-def test_summarise_motifs(tata):
+def test_summarize_motifs(tata):
     pcm = um.create_motif(["AAGT", "ACGT"], type="PCM", name="sites", pval=0.01)
-    df = um.summarise_motifs([tata, pcm])
+    df = um.summarize_motifs([tata, pcm])
     assert isinstance(df, pl.DataFrame)
     assert df.columns == ["name", "consensus", "alphabet", "strand", "icscore", "nsites", "pval"]
     assert df["name"].to_list() == ["tata", "sites"]
     assert df["pval"].to_list() == [None, 0.01]
-    full = um.summarise_motifs(tata, na_rm=False)
+    full = um.summarize_motifs(tata, na_rm=False)
     assert full.height == 1 and "altname" in full.columns
     assert full.schema["nsites"] == pl.Float64
 

@@ -11,7 +11,7 @@ import polars as pl
 
 from . import _core
 from ._analysis import _make_unique
-from ._api import _check_motif, summarise_motifs
+from ._api import _check_motif, summarize_motifs
 from ._core import Motif
 
 
@@ -234,7 +234,7 @@ def merge_similar(
     if return_clusters:
         if not ms:
             return pl.DataFrame(schema={"name": pl.String, "motif_i": pl.Int64, "cluster": pl.Int64})
-        return summarise_motifs(ms).with_columns(
+        return summarize_motifs(ms).with_columns(
             pl.Series("motif_i", list(range(len(ms))), dtype=pl.Int64),
             pl.Series("cluster", clusters, dtype=pl.Int64),
         )

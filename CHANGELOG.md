@@ -27,3 +27,12 @@ the R package:
   at a time from FASTA, bgzip and 2bit files, bigWig signal for matching
   backgrounds, hits in genomic coordinates, and ranges exchanged with
   PyRanges and polars-bio.
+- A command line, `universalmotif` or `umotif`, with subcommands for
+  converting, fetching, curating and drawing motifs, scanning, comparison,
+  enrichment, discovery, backgrounds, match matrices, proximity,
+  co-occurrence and positional enrichment.
+- Canadian spelling throughout, so `summarise_motifs()` is now
+  `summarize_motifs()`, and the `best_center` and `centers` columns of
+  `motif_peaks()` are `best_centre` and `centres`.
+- `motif_peaks()` keeps the motif numbers of `scan_sequences()` in
+  `motif_i`, as `motif_proximity()` does.

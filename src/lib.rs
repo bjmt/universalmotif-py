@@ -630,7 +630,7 @@ fn _consensus_to_ppm_aa(letter: &str) -> PyResult<Vec<f64>> {
 
 /// Summary columns for a list of motifs, as a dict of lists.
 #[pyfunction]
-fn _summarise<'py>(
+fn _summarize<'py>(
     py: Python<'py>,
     motifs: Vec<PyRef<'py, PyMotif>>,
 ) -> PyResult<Bound<'py, PyDict>> {
@@ -672,7 +672,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_get_consensus_aa, m)?)?;
     m.add_function(wrap_pyfunction!(_consensus_to_ppm, m)?)?;
     m.add_function(wrap_pyfunction!(_consensus_to_ppm_aa, m)?)?;
-    m.add_function(wrap_pyfunction!(_summarise, m)?)?;
+    m.add_function(wrap_pyfunction!(_summarize, m)?)?;
     io::register(m)?;
     analysis::register(m)?;
     sequences::register(m)?;

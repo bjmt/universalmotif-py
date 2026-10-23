@@ -174,13 +174,13 @@ def test_peaks_reference():
         assert got["motif_i"].to_list() == [i - 1 for i in nums(t["motif.i"])], ctx
         for col in ("nhits", "hits_in", "hits_out"):
             assert got[col].to_list() == nums(t[col.replace("_", ".")]), (ctx, col)
-        for col in ("best_window", "best_center", "expected_in", "enrichment", "log2_enrichment",
+        for col in ("best_window", "best_centre", "expected_in", "enrichment", "log2_enrichment",
                     "pvalue", "qvalue"):
-            _close(got[col].to_list(), t[col.replace("_", ".")], f"{ctx} {col}")
-        assert got["centers"].to_list() == [[int(v) for v in nums(c)] for c in t["centers"]], ctx
+            _close(got[col].to_list(), t[col.replace("_", ".").replace("centre", "center")], f"{ctx} {col}")
+        assert got["centres"].to_list() == [[int(v) for v in nums(c)] for c in t["centers"]], ctx
     # Hits straight from scan_sequences work too.
     scanned = um.scan_sequences(_motifs()[:1], _ref("peak_sequences"), pvalue=1e-3)
-    assert um.motif_peaks(scanned, 300, qvalue=1)["best_center"].to_list() == [150.0]
+    assert um.motif_peaks(scanned, 300, qvalue=1)["best_centre"].to_list() == [150.0]
 
 
 def test_cutree():

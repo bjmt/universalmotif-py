@@ -68,7 +68,7 @@ def create_motif(
 
         - ``None`` or an integer: a random motif of that width, 10 by
           default. Each column is drawn from a Dirichlet distribution
-          parameterised by the background.
+          parameterized by the background.
         - A string: a consensus sequence. IUPAC ambiguity codes are allowed
           for DNA and amino acids.
         - A sequence of equal-length strings: aligned sites, which are
@@ -320,7 +320,7 @@ def round_motif(motifs, pct_tolerance: float | str = 0.05):
 
     Probabilities below ``pct_tolerance``, given as a fraction or as a
     string such as ``"5%"``, are set to zero and each column is
-    renormalised. The motif is
+    renormalized. The motif is
     returned in its original type.
 
     Examples
@@ -350,8 +350,8 @@ def normalize(motifs):
     >>> motif = um.create_motif(["TGACGTCA"] * 10)
     >>> motif.pseudocount, motif.matrix[:, 0].tolist()
     (0.0, [0.0, 0.0, 0.0, 1.0])
-    >>> normalised = um.normalize(motif)
-    >>> normalised.pseudocount, normalised.matrix[:, 0].round(3).tolist()
+    >>> normalized = um.normalize(motif)
+    >>> normalized.pseudocount, normalized.matrix[:, 0].round(3).tolist()
     (1.0, [0.023, 0.023, 0.023, 0.932])
     """
     return _apply(motifs, _core._normalize)
@@ -485,15 +485,15 @@ _SUMMARY_SCHEMA = {
 }
 
 
-def summarise_motifs(motifs, na_rm: bool = True) -> pl.DataFrame:
-    """Summarise motifs as a polars DataFrame, one row per motif.
+def summarize_motifs(motifs, na_rm: bool = True) -> pl.DataFrame:
+    """Summarize motifs as a polars DataFrame, one row per motif.
 
     With ``na_rm=True``, columns that are empty for every motif are dropped.
 
     Examples
     --------
     >>> import universalmotif as um
-    >>> summary = um.summarise_motifs(um.example_motifs())
+    >>> summary = um.summarize_motifs(um.example_motifs())
     >>> summary.shape
     (12, 8)
     >>> summary.columns
@@ -506,7 +506,7 @@ def summarise_motifs(motifs, na_rm: bool = True) -> pl.DataFrame:
     if isinstance(motifs, Motif):
         motifs = [motifs]
     motifs = [_check_motif(m) for m in motifs]
-    df = pl.DataFrame(_core._summarise(motifs), schema=_SUMMARY_SCHEMA)
+    df = pl.DataFrame(_core._summarize(motifs), schema=_SUMMARY_SCHEMA)
     if na_rm and df.height > 0:
         df = df.select(c for c in df.columns if df[c].null_count() < df.height)
     return df

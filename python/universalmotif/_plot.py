@@ -430,8 +430,8 @@ def plot_motif_peaks(
     'Figure'
     >>> plt.close(fig)
     """
-    if "centers" not in peaks.columns:
-        raise ValueError("peaks has no centers column; was it made by motif_peaks()?")
+    if "centres" not in peaks.columns:
+        raise ValueError("peaks has no centres column; was it made by motif_peaks()?")
     if peaks.height == 0:
         raise ValueError("peaks has no rows to plot")
     if motifs is not None:
@@ -448,11 +448,11 @@ def plot_motif_peaks(
     seq_length = int(peaks["seq_length"][0]) if "seq_length" in peaks.columns else None
     for k, row in enumerate(peaks.iter_rows(named=True)):
         ax = axes[k // ncol, k % ncol]
-        if row["best_window"] is not None and row["best_center"] is not None:
+        if row["best_window"] is not None and row["best_centre"] is not None:
             half = row["best_window"] / 2
-            ax.axvspan(row["best_center"] - half, row["best_center"] + half, color=fill_window,
+            ax.axvspan(row["best_centre"] - half, row["best_centre"] + half, color=fill_window,
                        alpha=0.5, linewidth=0)
-        centres = np.asarray(row["centers"], dtype=float)
+        centres = np.asarray(row["centres"], dtype=float)
         if centres.size:
             ax.hist(centres, bins=bins, color="black")
         if seq_length:

@@ -165,7 +165,7 @@ def signal_stats(
     stat: str = "mean",
     uncovered: float | None = 0.0,
 ) -> pl.DataFrame:
-    """Summarise bigWig signal, such as ATAC or ChIP coverage, over genomic
+    """Summarize bigWig signal, such as ATAC or ChIP coverage, over genomic
     ranges.
 
     ``bigwig`` is the path of one bigWig file, giving a column called

@@ -24,7 +24,8 @@ In order:
 6. Genomic interval libraries (done: ranges taken from PyRanges, pandas and
    polars-bio, `to_pyranges()`, `to_polars_bio()` and `genomic_hits()`).
 
-A command line is left out, since yamtk already covers that ground.
+A command line, `universalmotif` or `umotif`, was added afterwards, with
+subcommands for the main functions.
 
 Every extension stays optional, so the core dependencies remain numpy and
 polars. Anything that needs another package becomes an extra, imported only

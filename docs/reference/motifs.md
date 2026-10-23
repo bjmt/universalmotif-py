@@ -8,7 +8,7 @@ The [`Motif`][universalmotif.Motif] class, and the functions for creating, conve
 
 ::: universalmotif.convert_type
 
-::: universalmotif.summarise_motifs
+::: universalmotif.summarize_motifs
 
 ::: universalmotif.filter_motifs
 

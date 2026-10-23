@@ -150,13 +150,13 @@ fn _coocc(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motif, sequence, center, score, seq_length, mode, min_window, max_window, window_step, position_step, nthreads))]
+#[pyo3(signature = (motif, sequence, centre, score, seq_length, mode, min_window, max_window, window_step, position_step, nthreads))]
 #[allow(clippy::too_many_arguments)]
 fn _peaks<'py>(
     py: Python<'py>,
     motif: Vec<usize>,
     sequence: Vec<usize>,
-    center: Vec<f64>,
+    centre: Vec<f64>,
     score: Vec<f64>,
     seq_length: usize,
     mode: &str,
@@ -170,7 +170,7 @@ fn _peaks<'py>(
         .map(|i| PeakHit {
             motif: motif[i],
             sequence: sequence[i],
-            center: center[i],
+            centre: centre[i],
             score: score[i],
         })
         .collect();
@@ -193,8 +193,8 @@ fn _peaks<'py>(
         rows.iter().map(|r| r.best_window).collect::<Vec<_>>(),
     )?;
     d.set_item(
-        "best_center",
-        rows.iter().map(|r| r.best_center).collect::<Vec<_>>(),
+        "best_centre",
+        rows.iter().map(|r| r.best_centre).collect::<Vec<_>>(),
     )?;
     d.set_item(
         "hits_in",
@@ -219,8 +219,8 @@ fn _peaks<'py>(
     d.set_item("pvalue", rows.iter().map(|r| r.pvalue).collect::<Vec<_>>())?;
     d.set_item("qvalue", rows.iter().map(|r| r.qvalue).collect::<Vec<_>>())?;
     d.set_item(
-        "centers",
-        rows.iter().map(|r| r.centers.clone()).collect::<Vec<_>>(),
+        "centres",
+        rows.iter().map(|r| r.centres.clone()).collect::<Vec<_>>(),
     )?;
     Ok(d)
 }

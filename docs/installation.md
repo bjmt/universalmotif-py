@@ -25,7 +25,8 @@ this will be needed.
     ```
 
 The build takes a minute or two, as the Rust code is compiled with
-optimisations.
+optimizations. It also installs the `universalmotif` and `umotif`
+commands described in [Command line](command-line.md).
 
 ## Optional dependencies
 

@@ -54,7 +54,7 @@ from ._api import (
     normalize,
     position_icscore,
     round_motif,
-    summarise_motifs,
+    summarize_motifs,
     trim_cwm,
     trim_motifs,
 )
@@ -192,7 +192,7 @@ __all__ = [
     "shuffle_string",
     "signal_stats",
     "slide_fun",
-    "summarise_motifs",
+    "summarize_motifs",
     "switch_alph",
     "to_biopython",
     "to_filters",

@@ -239,7 +239,7 @@ _PEAKS_SCHEMA = {
     "seq_length": pl.Int64,
     "nhits": pl.Int64,
     "best_window": pl.Int64,
-    "best_center": pl.Float64,
+    "best_centre": pl.Float64,
     "hits_in": pl.Int64,
     "hits_out": pl.Int64,
     "expected_in": pl.Float64,
@@ -247,7 +247,7 @@ _PEAKS_SCHEMA = {
     "log2_enrichment": pl.Float64,
     "pvalue": pl.Float64,
     "qvalue": pl.Float64,
-    "centers": pl.List(pl.Int64),
+    "centres": pl.List(pl.Int64),
 }
 
 
@@ -294,11 +294,13 @@ def motif_peaks(
     polars.DataFrame
         A DataFrame of the motifs with q-values up to ``qvalue``, in order of
         P-value, with the columns ``motif``, ``motif_i``, ``mode``,
-        ``seq_length``, ``nhits``, ``best_window``, ``best_center``,
+        ``seq_length``, ``nhits``, ``best_window``, ``best_centre``,
         ``hits_in``, ``hits_out``, ``expected_in``, ``enrichment``,
-        ``log2_enrichment``, ``pvalue``, ``qvalue`` and ``centers``.
-        ``motif_i`` is the 0-based rank of the name among those in ``hits``,
-        and ``centers`` holds the rounded hit centres used.
+        ``log2_enrichment``, ``pvalue``, ``qvalue`` and ``centres``.
+        ``motif_i`` is the motif's ``motif_i`` from
+        [`scan_sequences()`][universalmotif.scan_sequences] if ``hits`` has
+        one, and otherwise the 0-based rank of its name among those in
+        ``hits``, and ``centres`` holds the rounded hit centres used.
 
     Examples
     --------
@@ -309,7 +311,7 @@ def motif_peaks(
     >>> wbox = um.example_motifs()[5]
     >>> hits = um.scan_sequences(wbox, um.example_sequences("targets"), nthreads=1)
     >>> peaks = um.motif_peaks(hits, seq_length=1000, nthreads=1)
-    >>> peaks.select("motif", "nhits", "best_window", "best_center", "hits_in").row(0)
+    >>> peaks.select("motif", "nhits", "best_window", "best_centre", "hits_in").row(0)
     ('W-box', 30, 490, 500.0, 27)
     >>> f"{peaks['pvalue'][0]:.1e}"
     '1.3e-04'
@@ -329,22 +331,24 @@ def motif_peaks(
         raise ValueError("hits must have a 'sequence' or 'sequence_i' column")
     motif_names = [str(m) for m in hits["motif"].to_list()]
     seq_values = hits[seq_col].to_list()
-    centers = ((hits["start"].cast(pl.Float64) + hits[end_col].cast(pl.Float64)) / 2).to_list()
+    centres = ((hits["start"].cast(pl.Float64) + hits[end_col].cast(pl.Float64)) / 2).to_list()
     if seq_strand is not None:
         missing = {s for s in seq_values if s not in seq_strand}
         if missing:
             raise ValueError(f"seq_strand is missing sequences: {sorted(map(str, missing))[:5]}")
         if any(seq_strand[s] not in ("+", "-") for s in set(seq_values)):
             raise ValueError("seq_strand values must be '+' or '-'")
-        centers = [seq_length + 1 - c if seq_strand[s] == "-" else c for s, c in zip(seq_values, centers)]
+        centres = [seq_length + 1 - c if seq_strand[s] == "-" else c for s, c in zip(seq_values, centres)]
     ids = sorted(set(motif_names))
     motif_index = {m: i for i, m in enumerate(ids)}
+    # Motifs keep the numbers scan_sequences() gave them, if there are any.
+    given = dict(zip(motif_names, hits["motif_i"].to_list())) if "motif_i" in hits.columns else None
     seq_index: dict[object, int] = {}
     sequence = [seq_index.setdefault(s, len(seq_index)) for s in seq_values]
     cols = _core._peaks(
         [motif_index[m] for m in motif_names],
         sequence,
-        centers,
+        centres,
         hits["score"].cast(pl.Float64).to_list(),
         seq_length,
         mode,
@@ -355,8 +359,8 @@ def motif_peaks(
         nthreads,
     )
     n = len(cols["motif"])
-    cols["motif_i"] = cols["motif"]
-    cols["motif"] = [ids[i] for i in cols["motif_i"]]
+    cols["motif"] = [ids[i] for i in cols["motif"]]
+    cols["motif_i"] = [given[m] for m in cols["motif"]] if given else [motif_index[m] for m in cols["motif"]]
     cols["mode"] = [mode] * n
     cols["seq_length"] = [seq_length] * n
     df = pl.DataFrame({k: cols[k] for k in _PEAKS_SCHEMA}, schema=_PEAKS_SCHEMA)

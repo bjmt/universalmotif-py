@@ -19,6 +19,10 @@ classifiers = [
 ]
 dependencies = ["numpy>=1.24", "polars>=1.0"]
 
+[project.scripts]
+universalmotif = "universalmotif._cli:main"
+umotif = "universalmotif._cli:main"
+
 [project.optional-dependencies]
 anndata = ["anndata>=0.10", "scipy>=1.11"]
 bigwig = ["pybigtools>=0.3"]

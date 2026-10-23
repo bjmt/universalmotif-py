@@ -23,7 +23,7 @@ PathLike = str | os.PathLike[str]
 
 def _read_text(file: PathLike, skip: int) -> str:
     raw = Path(file).read_bytes()
-    # Gzipped files are recognised from their first bytes.
+    # Gzipped files are recognized from their first bytes.
     text = (gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw).decode()
     if skip:
         if skip < 0:
@@ -485,7 +485,7 @@ def read_fasta(
     is the whole header line after ``>``, or with ``trim_names`` only its
     first word, as most tools use. The file is read line by line, so a
     genome needs little more memory than its sequences, and the first
-    ``skip`` lines are ignored. Gzipped files, bgzip included, are recognised
+    ``skip`` lines are ignored. Gzipped files, bgzip included, are recognized
     from their first bytes and decompressed as they are read. When names
     repeat, the last sequence with each name is kept, with a warning.
 

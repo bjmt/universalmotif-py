@@ -108,7 +108,7 @@ def test_column_metrics_and_averages():
             with pytest.raises(ValueError):
                 call()
         elif case["method"] == "WPCC":
-            # The R package does not normalise the WPCC weights (see
+            # The R package does not normalize the WPCC weights (see
             # DIVERGENCES.md in the Rust crate), so check against a weighted
             # correlation computed here.
             w = np.add(nums(case["bkg1"]), nums(case["bkg2"]))
