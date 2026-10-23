@@ -83,7 +83,7 @@ found = um.motif_finder(targets, controls, seed=1)
   gapped motifs, with whole genomes scanned from a FASTA file in a few
   hundred MB.
 - **Comparison:** similarity with P-values, scored either on the overlap or
-  on the whole query as TOMTOM does, merging of similar motifs, and trees.
+  on the whole query, merging of similar motifs, and trees.
 - **Statistics:** enrichment, co-occurrence, positional enrichment,
   proximity to genomic anchors, composition-matched backgrounds and *de
   novo* motif discovery.
@@ -119,13 +119,12 @@ umotif enrich jaspar.meme -s peaks.fa -b bkg.fa -p 4 -o enriched.tsv
 ## Differences from the R package
 
 Function names follow the R package, with underscores in place of dots, so
-`min.ic` becomes `min_ic`, and with Canadian spelling throughout, so that
-`summarise_motifs()` is `summarize_motifs()`. Where the R package has
-both a full and a `_lite` version of a function, this package provides the
-lite one under the plain name. Readers always return a list of motifs, and
-MEME site tables come back as polars DataFrames. Functions that use random
-numbers take a `seed`, but seeds do not reproduce the R package's results,
-since the two use different random number generators.
+`min.ic` becomes `min_ic`. Where the R package has both a full and a `_lite`
+version of a function, this package provides the lite one under the plain
+name. Readers always return a list of motifs, and MEME site tables come
+back as polars DataFrames. Functions that use random numbers take a `seed`,
+but seeds do not reproduce the R package's results, since the two use
+different random number generators.
 
 A number of bugs found in the R package while porting it are fixed here
 rather than reproduced, and a few features were left out on purpose.
