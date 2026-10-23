@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 (unreleased)
+
+- Logos keep their top y-axis tick when the axis ends at a value that
+  rounds up, as for information content logos of six-letter alphabets.
+
 ## 0.1.0 (2026-10-23)
 
 The first version of the Python port of universalmotif, covering most of

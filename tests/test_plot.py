@@ -188,3 +188,13 @@ def test_plot_motif_peaks():
     empty = pl.DataFrame(schema=peaks.schema)
     with pytest.raises(ValueError):
         um.plot_motif_peaks(empty)
+
+
+def test_top_logo_tick_stays_on_the_axis():
+    pytest.importorskip("matplotlib")
+    import matplotlib.pyplot as plt
+
+    # log2(6) = 2.58 bits would round up to a tick above the axis.
+    fig = um.view_motifs(um.create_motif(6, alphabet="QWERTY", seed=1))
+    assert list(fig.axes[0].get_yticks()) == [0.0, 1.0, 2.0]
+    plt.close(fig)

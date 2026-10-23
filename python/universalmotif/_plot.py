@@ -221,7 +221,8 @@ def _y_axis(mats: list[np.ndarray], use_type: str):
         return [0, 0.5, 1], (0.0, 1.0)
     if use_type == "ICM":
         top = math.log2(nrow)
-        return sorted(set(np.round([0, top / 2, top]).tolist())), (0.0, top)
+        # The top tick is rounded down, so that it stays on the axis.
+        return sorted({0.0, float(np.round(top / 2)), float(math.floor(top))}), (0.0, top)
     if use_type == "PCM":
         top = max(float(m.sum(axis=0).max()) for m in mats)
         return sorted({0.0, float(np.round(top / 2)), top}), (0.0, top)
@@ -230,6 +231,7 @@ def _y_axis(mats: list[np.ndarray], use_type: str):
     breaks = np.array([lo, lo / 2, 0, hi / 2, hi])
     if use_type == "PWM":
         breaks = np.round(breaks)
+        breaks[4] = math.floor(hi) if breaks[4] > hi else breaks[4]
     breaks[0] -= max(0.1 * abs(breaks[0]), 0.1)
     return list(dict.fromkeys(breaks.tolist())), (float(breaks[0]), hi)
 
