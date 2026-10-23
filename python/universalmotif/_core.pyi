@@ -307,6 +307,7 @@ def _compare_matrix(
     bkg: list[float] | None,
     need_pvalues: bool,
     nthreads: int,
+    complete: bool = ...,
 ) -> dict[str, Any]: ...
 def _compare_table(
     motifs: list[Motif],
@@ -317,6 +318,7 @@ def _compare_table(
     bkg: list[float] | None,
     nthreads: int,
     names: list[str],
+    complete: bool = ...,
 ) -> ArrowTable: ...
 def _merge_motifs(
     motifs: list[Motif],

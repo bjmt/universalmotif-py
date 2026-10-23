@@ -22,6 +22,7 @@ dependencies = ["numpy>=1.24", "polars>=1.0"]
 [project.optional-dependencies]
 anndata = ["anndata>=0.10", "scipy>=1.11"]
 biopython = ["biopython>=1.81"]
+h5py = ["h5py>=3.0"]
 pandas = ["pandas>=2.0", "pyarrow>=14"]
 plot = ["matplotlib>=3.8"]
 scipy = ["scipy>=1.11"]
@@ -30,6 +31,7 @@ scipy = ["scipy>=1.11"]
 dev = [
     "anndata>=0.10",
     "biopython>=1.81",
+    "h5py>=3.0",
     "maturin>=1.9,<2",
     "matplotlib>=3.8",
     "pandas>=2.0",

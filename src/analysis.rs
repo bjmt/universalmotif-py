@@ -366,18 +366,20 @@ fn compare_options(
     null: &str,
     bkg: Option<Vec<f64>>,
     nthreads: usize,
+    complete: bool,
 ) -> PyResult<CompareOptions> {
     Ok(CompareOptions {
         min_overlap,
         rc,
         null: null_model(null)?,
         bkg: bkg4(bkg)?,
+        complete,
         nthreads,
     })
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, min_overlap, rc, null, bkg, need_pvalues, nthreads))]
+#[pyo3(signature = (motifs, min_overlap, rc, null, bkg, need_pvalues, nthreads, complete=false))]
 #[allow(clippy::too_many_arguments)]
 fn _compare_matrix<'py>(
     py: Python<'py>,
@@ -388,9 +390,10 @@ fn _compare_matrix<'py>(
     bkg: Option<Vec<f64>>,
     need_pvalues: bool,
     nthreads: usize,
+    complete: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let motifs = unwrap(&motifs);
-    let opts = compare_options(min_overlap, rc, null, bkg, nthreads)?;
+    let opts = compare_options(min_overlap, rc, null, bkg, nthreads, complete)?;
     let m = py
         .detach(|| compare::compare_matrix(&motifs, &opts, need_pvalues))
         .map_err(err)?;
@@ -402,7 +405,7 @@ fn _compare_matrix<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, queries, min_overlap, rc, null, bkg, nthreads, names))]
+#[pyo3(signature = (motifs, queries, min_overlap, rc, null, bkg, nthreads, names, complete=false))]
 #[allow(clippy::too_many_arguments)]
 fn _compare_table(
     py: Python<'_>,
@@ -414,9 +417,10 @@ fn _compare_table(
     bkg: Option<Vec<f64>>,
     nthreads: usize,
     names: Vec<String>,
+    complete: bool,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
-    let opts = compare_options(min_overlap, rc, null, bkg, nthreads)?;
+    let opts = compare_options(min_overlap, rc, null, bkg, nthreads, complete)?;
     let rows = py
         .detach(|| compare::compare_motifs(&motifs, &queries, &opts))
         .map_err(err)?;

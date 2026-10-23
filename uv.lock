@@ -4840,6 +4840,9 @@ anndata = [
 biopython = [
     { name = "biopython" },
 ]
+h5py = [
+    { name = "h5py" },
+]
 pandas = [
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "pandas", version = "3.0.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -4862,6 +4865,7 @@ dev = [
     { name = "anndata", version = "0.12.19", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "anndata", version = "0.13.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "biopython" },
+    { name = "h5py" },
     { name = "matplotlib", version = "3.10.9", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "matplotlib", version = "3.11.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "maturin" },
@@ -4891,6 +4895,7 @@ docs = [
 requires-dist = [
     { name = "anndata", marker = "extra == 'anndata'", specifier = ">=0.10" },
     { name = "biopython", marker = "extra == 'biopython'", specifier = ">=1.81" },
+    { name = "h5py", marker = "extra == 'h5py'", specifier = ">=3.0" },
     { name = "matplotlib", marker = "extra == 'plot'", specifier = ">=3.8" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.0" },
@@ -4899,12 +4904,13 @@ requires-dist = [
     { name = "scipy", marker = "extra == 'anndata'", specifier = ">=1.11" },
     { name = "scipy", marker = "extra == 'scipy'", specifier = ">=1.11" },
 ]
-provides-extras = ["anndata", "biopython", "pandas", "plot", "scipy"]
+provides-extras = ["anndata", "biopython", "h5py", "pandas", "plot", "scipy"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "anndata", specifier = ">=0.10" },
     { name = "biopython", specifier = ">=1.81" },
+    { name = "h5py", specifier = ">=3.0" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "maturin", specifier = ">=1.9,<2" },
     { name = "pandas", specifier = ">=2.0" },

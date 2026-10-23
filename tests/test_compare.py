@@ -150,3 +150,22 @@ def test_compare_errors():
         um.compare_motifs([um.create_motif("ACDEF"), um.create_motif("ACGT")])
     with pytest.warns(UserWarning, match="qvalue"):
         um.compare_motifs(motifs[:3], qvalue=0.5)
+
+
+def test_complete_scores():
+    make = lambda s: um.create_motif(s, nsites=20, pseudocount=1)  # noqa: E731
+    motifs = [make("TTGACGTCAGCCATG"), make("TTGACGTCAGCCATG"), make("TGACGTCA")]
+    motifs += [make(s) for s in ("CACGTGAA", "GATAAGCT", "CCAATCAG", "AAACCCTA", "TATAAAAG")]
+    names = [f"m{i}" for i in range(len(motifs))]
+    motifs = [m.replace(name=n) for m, n in zip(motifs, names)]
+
+    def pvalues(complete):
+        rows = um.compare_motifs(motifs, compare_to=0, qvalue=1, complete=complete)
+        return dict(zip(rows["target"], rows["pvalue"]))
+
+    partial, complete = pvalues(False), pvalues(True)
+    # Scoring the whole query sets the full copy much further apart from a
+    # short motif matching only part of it.
+    assert complete["m2"] / complete["m1"] > 5 * partial["m2"] / partial["m1"]
+    matrix = um.compare_motifs(motifs, matrix_out="pvalue", complete=True)
+    assert matrix.shape == (8, 8) and not np.allclose(matrix, matrix.T)

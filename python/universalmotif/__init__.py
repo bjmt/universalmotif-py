@@ -9,6 +9,7 @@ from importlib.metadata import PackageNotFoundError, version
 from ._analysis import dedup_hits, motif_pvalue, scan_sequences
 from ._biopython import from_biopython, to_biopython
 from ._display import _repr_html_ as _motif_html
+from ._deep import from_filters, from_one_hot, one_hot, read_modisco, to_filters
 from ._display import logo_svg, to_logomaker
 from ._matches import MotifMatches, add_motif_matches, match_motifs
 from . import databases
@@ -125,6 +126,8 @@ __all__ = [
     "example_sequences",
     "filter_motifs",
     "from_biopython",
+    "from_filters",
+    "from_one_hot",
     "get_bkg",
     "get_consensus",
     "get_consensus_aa",
@@ -152,6 +155,7 @@ __all__ = [
     "motif_score",
     "motif_tree",
     "normalize",
+    "one_hot",
     "pack_sequences",
     "pcm_to_ppm",
     "plot_match_bkg",
@@ -170,6 +174,7 @@ __all__ = [
     "read_jaspar",
     "read_matrix",
     "read_meme",
+    "read_modisco",
     "read_transfac",
     "read_uniprobe",
     "round_motif",
@@ -184,6 +189,7 @@ __all__ = [
     "summarise_motifs",
     "switch_alph",
     "to_biopython",
+    "to_filters",
     "to_logomaker",
     "trim_cwm",
     "trim_motifs",

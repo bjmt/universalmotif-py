@@ -1,7 +1,7 @@
 # Possible extensions
 
 Ideas for connecting the package to the rest of the Python ecosystem. The
-first three are done; the others are planned in the order below.
+first four are done; the others are planned in the order below.
 
 ## Plan
 
@@ -15,7 +15,9 @@ In order:
 3. A sparse motif-by-peak matrix for single-cell ATAC analyses (done:
    `match_motifs()` and `add_motif_matches()`).
 4. Deep-learning interoperability, and a check of `compare_motifs()`
-   against TOMTOM.
+   against TOMTOM (done: `to_filters()`, `from_filters()`, `one_hot()`,
+   `from_one_hot()`, `read_modisco()`, and `scripts/compare_tomtom.py`, with
+   the results in the README).
 5. Indexed genomes and bigWig covariates.
 6. Genomic interval libraries.
 

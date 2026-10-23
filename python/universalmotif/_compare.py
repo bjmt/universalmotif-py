@@ -40,6 +40,7 @@ def compare_motifs(
     bkg: Sequence[float] | Mapping[str, float] | None = None,
     matrix_out: str = "score",
     nthreads: int = 1,
+    complete: bool = False,
 ):
     """Compare motifs.
 
@@ -54,6 +55,18 @@ def compare_motifs(
     ``"empirical"`` null uses the columns of all the motifs given, while the
     ``"parametric"`` null, for DNA and RNA only, uses a Dirichlet grid around
     ``bkg``. Q-values are Benjamini-Hochberg adjusted within each query.
+
+    By default only the overlap counts, so a short target that matches part
+    of a long query can score as well as one that covers all of it. With
+    ``complete``, whole queries are scored instead, as TOMTOM does by
+    default: each query column's correlations are measured against the
+    median of its correlations with the null columns, so that a typical
+    column scores zero and query columns hanging over the ends of the target
+    count as typical, and the P-value of the best alignment is that of the
+    best of all the alignments tried. This favours alignments covering more
+    of the query, and comparisons then depend on which motif is the query,
+    so P-value matrices need not be symmetric. Either way, ``score`` is the
+    mean column correlation over the overlap.
 
     Returns
     -------
@@ -96,7 +109,8 @@ def compare_motifs(
     if compare_to is None:
         if qvalue != 0.1:
             warnings.warn("qvalue is ignored without compare_to", stacklevel=2)
-        d = _core._compare_matrix(ms, min_overlap, rc, null, b, matrix_out != "score", nthreads)
+        d = _core._compare_matrix(ms, min_overlap, rc, null, b, matrix_out != "score", nthreads,
+                                  complete)
         return np.array(d[matrix_out], dtype=float)
 
     targets = [compare_to] if isinstance(compare_to, (int, str)) else list(compare_to)
@@ -110,7 +124,9 @@ def compare_motifs(
             if not 0 <= int(t) < len(ms):
                 raise ValueError(f"compare_to index {t} is out of range")
             queries.append(int(t))
-    df = pl.DataFrame(_core._compare_table(ms, queries, min_overlap, rc, null, b, nthreads, names))
+    df = pl.DataFrame(
+        _core._compare_table(ms, queries, min_overlap, rc, null, b, nthreads, names, complete)
+    )
     df = df.filter((pl.col("qvalue") <= qvalue) & (pl.col("overlap") > 0))
     return df.sort(["qvalue", "pvalue", "target_i"], maintain_order=True)
 

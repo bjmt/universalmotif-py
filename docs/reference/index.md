@@ -24,6 +24,8 @@ The functions are grouped by what they do:
 - [Plotting](plotting.md): logos, trees and plots of results.
 - [Databases and Biopython](databases.md): motifs from JASPAR, HOCOMOCO
   and CIS-BP, and conversion to and from Biopython.
+- [Deep learning](deep.md): convolution filters, one-hot sequences and
+  TF-MoDISco results.
 - [Example data](data.md): synthetic motifs, sequences and files for trying things out.
 
 Most functions that do a lot of work take an `nthreads` argument, which is

@@ -34,6 +34,7 @@ optimisations.
   [`match_motifs()`](reference/scanning.md#motif-match-matrices).
 - `anndata`: AnnData and SciPy, for storing motif matches with single-cell
   ATAC data.
+- `h5py`: h5py, for reading TF-MoDISco results with `read_modisco()`.
 - `biopython`: Biopython, for converting motifs to and from `Bio.motifs`
   with `to_biopython()` and `from_biopython()`. The database functions need
   no extra, since they download with the standard library.
