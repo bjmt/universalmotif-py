@@ -10,6 +10,8 @@
   from numpy files as TF-MoDISco takes them.
 - `signal_values()` reads the value of a bigWig track at every position
   of a range.
+- `view_motifs()` takes `ax` to draw a single motif into a panel of an
+  existing figure.
 - A new guide, motifs and deep learning, works through the TF-MoDISco
   patterns and contribution scores of a published chromBPNet model.
 - Logos keep their top y-axis tick when the axis ends at a value that

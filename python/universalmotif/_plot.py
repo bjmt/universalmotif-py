@@ -301,6 +301,7 @@ def view_motifs(
     figsize: tuple[float, float] | None = None,
     return_raw: bool = False,
     nthreads: int = 1,
+    ax: Axes | None = None,
 ):
     """Draw motifs as sequence logos.
 
@@ -339,11 +340,15 @@ def view_motifs(
     return_raw
         Return the aligned matrices as a dict from names to (letters,
         positions) arrays instead of drawing them.
+    ax
+        Draw a single motif on these axes, such as a panel of a larger
+        figure, instead of in a new figure. ``figsize`` is then ignored.
 
     Returns
     -------
-    matplotlib.figure.Figure | dict[str, numpy.ndarray]
-        A matplotlib figure, or with ``return_raw`` a dict of matrices.
+    matplotlib.figure.Figure | matplotlib.axes.Axes | dict[str, numpy.ndarray]
+        A matplotlib figure, the axes drawn on when ``ax`` is given, or with
+        ``return_raw`` a dict of matrices.
 
     Examples
     --------
@@ -360,6 +365,14 @@ def view_motifs(
     >>> raw = um.view_motifs(motifs, use_type="PPM", return_raw=True)
     >>> {name: m.shape for name, m in raw.items()}
     {'TATA-box [RC]': (4, 11), 'AP-1': (4, 11), 'CRE': (4, 11)}
+
+    A single motif can go into a panel of another figure:
+
+    >>> fig, (left, right) = plt.subplots(1, 2, figsize=(8, 2.5))
+    >>> ax = um.view_motifs(motifs[1], ax=left)
+    >>> ax is left
+    True
+    >>> plt.close(fig)
     """
     if names_pos not in ("top", "right"):
         raise ValueError("names_pos must be 'top' or 'right'")
@@ -378,6 +391,8 @@ def view_motifs(
     )
     if return_raw:
         return dict(zip(names, mats))
+    if ax is not None and len(mats) > 1:
+        raise ValueError("ax can only be given for a single motif, since several are drawn as separate panels")
     if use_type == "PWM" and any(not np.isfinite(m).all() for m in mats):
         raise ValueError(
             "found non-finite values in a motif, as a PWM made without a pseudocount has; "
@@ -397,7 +412,11 @@ def view_motifs(
         figsize = (max(3.0, 0.45 * width + 1.5 + (1.5 if names_pos == "right" and n > 1 else 0)),
                    1.0 + 1.6 * n)
     shared = n > 1 and show_positions_once
-    fig, axes = plt.subplots(n, 1, figsize=figsize, squeeze=False, sharex=shared)
+    target = ax
+    if target is None:
+        fig, axes = plt.subplots(n, 1, figsize=figsize, squeeze=False, sharex=shared)
+    else:
+        fig, axes = target.figure, np.array([[target]], dtype=object)
     for k, (name, m, off, w) in enumerate(zip(names, mats, offsets, widths)):
         ax = axes[k, 0]
         glyphs = _panel_glyphs(m, rows, use_type, min_height, x_spacer, y_spacer, sort_positions,
@@ -417,6 +436,8 @@ def view_motifs(
                 ax.set_title(name, fontsize=text_size)
             else:
                 ax.text(1.02, 0.5, name, transform=ax.transAxes, va="center", ha="left", fontsize=text_size)
+    if target is not None:
+        return target
     fig.tight_layout()
     return fig
 

@@ -286,3 +286,14 @@ def test_view_attributions():
     with pytest.raises(ValueError, match="missing or infinite"):
         um.view_attributions(np.full(n, np.nan), seq)
     plt.close("all")
+
+
+def test_view_motifs_into_existing_axes():
+    motifs = um.example_motifs()[:2]
+    fig, (left, right) = plt.subplots(1, 2)
+    ax = um.view_motifs(motifs[0], ax=left)
+    assert ax is left and len(fig.axes) == 2
+    assert left.get_ylabel() == "bits" and left.get_title() == motifs[0].name
+    assert len(left.collections) > 0 and not right.collections
+    with pytest.raises(ValueError, match="single motif"):
+        um.view_motifs(motifs, ax=right)
