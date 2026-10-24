@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "universalmotif"
-version = "0.1.0"
+version = "0.2.0"
 description = "Sequence motif manipulation and analysis, a Python port of universalmotif"
 readme = "README.md"
 license = "MIT"
