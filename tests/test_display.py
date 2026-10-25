@@ -31,6 +31,29 @@ def test_logo_svg():
     assert len({p.get("fill") for p in _paths(um.logo_svg(custom))}) == 3
 
 
+def _stack(svg):
+    """Fill colours of a one-column logo's letters, bottom to top."""
+    tops = []
+    for p in _paths(svg):
+        ys = [float(pt.split(",")[1]) for pt in p.get("d")[1:-1].split("L")]
+        tops.append((-min(ys), p.get("fill")))
+    return [fill for _, fill in sorted(tops)]
+
+
+def test_logo_svg_sorts_and_flips():
+    # T is the tallest letter: a sorted stack puts it on top, while the
+    # unsorted one keeps the alphabet order with A on top.
+    ppm = um.create_motif(np.array([[0.1, 0.25, 0.1, 0.55]]).T, alphabet="DNA", type="PPM")
+    green, blue, yellow, red = "#109648", "#255C99", "#F7B32B", "#D62839"
+    assert _stack(um.logo_svg(ppm)) == [blue, red]
+    assert _stack(um.logo_svg(ppm, sort_positions=False)) == [red, blue]
+    assert _stack(um.logo_svg(ppm, use_type="PPM")) == [red, yellow, blue, green]
+    assert _stack(um.logo_svg(ppm, use_type="PPM", sort_positions=True))[-2:] == [blue, red]
+    # Negative letters are drawn upside down unless flip_neg is off.
+    cwm = um.create_motif(np.array([[0.5, -0.4, 0, 0]]).T, alphabet="DNA", type="CWM")
+    assert um.logo_svg(cwm) != um.logo_svg(cwm, flip_neg=False)
+
+
 def test_logo_svg_gaps_and_cwms():
     gapped = um.add_gap(um.create_motif("TGACGTCA", nsites=20, pseudocount=1), gaploc=4,
                         mingap=1, maxgap=5)

@@ -52,6 +52,9 @@ def test_column_conversions():
             if case["fn"] == "ppm_to_icm":
                 # R's NaN for zero probabilities in relative entropy is 0 here.
                 want[np.isnan(want) & (np.array(nums(case["args"]["pos"])) == 0)] = 0.0
+            if case["fn"] == "icm_to_ppm" and not any(nums(case["args"]["pos"])):
+                # R gives NaN for a column of zeros; the port a uniform one.
+                want = np.full(len(want), 1 / len(want))
             np.testing.assert_allclose(got, want, rtol=1e-12, atol=1e-15,
                                        err_msg=f"{case['fn']} {case['args']}")
             n += 1

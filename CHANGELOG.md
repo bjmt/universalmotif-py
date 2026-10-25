@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Motifs displayed in Jupyter, and `logo_svg()`, stack the letters of
+  each position by height and turn negative letters upside down by
+  default, as `view_motifs()` does; `sort_positions` and `flip_neg` turn
+  this off.
+- `normalize()` gives a PCM without a pseudocount a pseudocount of 1.
+- Fixes from the Rust crate: `get_matches()` no longer returns words
+  scoring just below the score, `score_match()` always agrees with
+  scanning, converting with a new pseudocount updates the consensus,
+  uniform columns convert to and from IC, merging and `shuffle_motifs()`
+  keep one-letter columns as probabilities, `get_bkg(rc=True)` counts
+  letters found only on the reverse strands, complexity and FASTA output
+  work by letter, TRANSFAC single-site counts are kept, and comparing
+  thousands of motifs with P-values is several times faster.
+
 ## 0.2.0 (2026-10-24)
 
 - `view_attributions()` draws attribution or contribution scores along a

@@ -342,7 +342,8 @@ def round_motif(motifs, pct_tolerance: float | str = 0.05):
 def normalize(motifs):
     """Re-apply each motif's pseudocount by converting to counts and back.
 
-    A pseudocount of zero is replaced by 1. PCMs are returned unchanged.
+    A pseudocount of zero is replaced by 1. PCMs keep their counts and only
+    take the new pseudocount, which applies when they are converted.
 
     Examples
     --------

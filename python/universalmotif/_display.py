@@ -48,6 +48,8 @@ def logo_svg(
     position_width: float = 16,
     colours: Mapping[str, str] | None = None,
     relative_entropy: bool = False,
+    sort_positions: bool | None = None,
+    flip_neg: bool = True,
 ) -> str:
     """A sequence logo of a motif as an SVG image, without matplotlib.
 
@@ -56,8 +58,11 @@ def logo_svg(
     contribution weights for a CWM. The logo is ``height`` pixels high and
     ``position_width`` pixels wide per position, with no axes, which suits
     reports and web pages. ``colours`` maps letters to colours, by default
-    those of [`view_motifs()`][universalmotif.view_motifs]. The gaps of a
-    gapped motif are drawn as dotted spaces labelled with their sizes.
+    those of [`view_motifs()`][universalmotif.view_motifs]. As there,
+    ``sort_positions`` stacks the letters of each position by height, by
+    default for every type but PCM and PPM, and ``flip_neg`` turns negative
+    letters upside down. The gaps of a gapped motif are drawn as dotted
+    spaces labelled with their sizes.
 
     Examples
     --------
@@ -75,7 +80,10 @@ def logo_svg(
             "with normalize(), first"
         )
     rows = motif.letters
-    glyphs = motif_glyphs(matrix, rows, use_type)
+    if sort_positions is None:
+        sort_positions = use_type not in ("PCM", "PPM")
+    glyphs = motif_glyphs(matrix, rows, use_type, sort_positions=sort_positions,
+                          flip_neg=flip_neg)
     _, (lo, hi) = _y_axis([matrix], use_type)
     if hi <= lo:
         hi = lo + 1
