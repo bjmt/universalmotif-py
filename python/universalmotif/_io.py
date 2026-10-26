@@ -54,7 +54,10 @@ def _write_text(file: PathLike, text: str, overwrite: bool, append: bool) -> Non
     # readers treat as a continuation of the file.
     opener = gzip.open if path.suffix == ".gz" else open
     with opener(path, "at" if append else "wt") as f:
-        f.write(text)
+        # Written a slice at a time, so the text is never encoded whole.
+        step = 1 << 20
+        for i in range(0, len(text), step):
+            f.write(text[i:i + step])
 
 
 def read_jaspar(file: PathLike, skip: int = 0) -> list[Motif]:
