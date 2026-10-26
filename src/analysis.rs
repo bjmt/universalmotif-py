@@ -23,7 +23,7 @@ use std::sync::Arc;
 use arrow_array::ArrayRef;
 use arrow_array::builder::StringViewBuilder;
 
-use crate::arrow::{f64_vec, f64s, i64_vec, i64s, names_at, strs, table};
+use crate::arrow::{f64_vec, f64s, i64_vec, i64s, names_at, strs, table, u32_vec, u32s};
 use crate::packed::PyPacked;
 use crate::{PyMotif, err, parse_bkg};
 
@@ -161,9 +161,9 @@ fn hit_table(
     );
     table(vec![
         ("motif", motif),
-        ("motif_i", i64_vec(t.motif)),
+        ("motif_i", u32_vec(t.motif)),
         ("sequence", sequence),
-        ("sequence_i", i64_vec(t.sequence)),
+        ("sequence_i", u32_vec(t.sequence)),
         ("start", i64_vec(t.start)),
         ("end", i64_vec(t.end)),
         ("strand", strand),
@@ -435,12 +435,12 @@ fn _compare_table(
             "subject",
             strs(rows.iter().map(|c| names[c.query].as_str())),
         ),
-        ("subject_i", i64s(rows.iter().map(|c| c.query as i64))),
+        ("subject_i", u32s(rows.iter().map(|c| c.query as u32))),
         (
             "target",
             strs(rows.iter().map(|c| names[c.target].as_str())),
         ),
-        ("target_i", i64s(rows.iter().map(|c| c.target as i64))),
+        ("target_i", u32s(rows.iter().map(|c| c.target as u32))),
         ("offset", i64s(rows.iter().map(|c| c.offset))),
         ("strand", strs(rows.iter().map(|c| c.strand.as_str()))),
         ("overlap", i64s(rows.iter().map(|c| c.overlap as i64))),

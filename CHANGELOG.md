@@ -6,6 +6,11 @@
   each position by height and turn negative letters upside down by
   default, as `view_motifs()` does; `sort_positions` and `flip_neg` turn
   this off.
+- Motif and sequence index columns (`motif_i`, `sequence_i`, `subject_i`,
+  `target_i` and `universe_i`) are `UInt32` in every table rather than
+  `Int64`, which saves memory on large scans; tables still join on them.
+- Large scans use about a quarter less memory at their peak, and hits in
+  sequences longer than 4 Gb keep their positions.
 - `normalize()` gives a PCM without a pseudocount a pseudocount of 1.
 - Fixes from the Rust crate: `get_matches()` no longer returns words
   scoring just below the score, `score_match()` always agrees with

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use arrow_array::builder::StringViewBuilder;
-use arrow_array::{ArrayRef, Float64Array, Int64Array, RecordBatch, StringViewArray};
+use arrow_array::{ArrayRef, Float64Array, Int64Array, RecordBatch, StringViewArray, UInt32Array};
 use arrow_schema::{Field, Schema};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -26,6 +26,10 @@ pub(crate) fn table(columns: Vec<(&str, ArrayRef)>) -> PyResult<PyTable> {
 
 pub(crate) fn i64s(v: impl IntoIterator<Item = i64>) -> ArrayRef {
     Arc::new(Int64Array::from_iter_values(v))
+}
+
+pub(crate) fn u32s(v: impl IntoIterator<Item = u32>) -> ArrayRef {
+    Arc::new(UInt32Array::from_iter_values(v))
 }
 
 pub(crate) fn opt_i64s(v: impl IntoIterator<Item = Option<i64>>) -> ArrayRef {
@@ -52,12 +56,17 @@ pub(crate) fn i64_vec(v: Vec<i64>) -> ArrayRef {
 }
 
 /// An owned vector as an Arrow column, without copying.
+pub(crate) fn u32_vec(v: Vec<u32>) -> ArrayRef {
+    Arc::new(UInt32Array::from(v))
+}
+
+/// An owned vector as an Arrow column, without copying.
 pub(crate) fn f64_vec(v: Vec<f64>) -> ArrayRef {
     Arc::new(Float64Array::from(v))
 }
 
 /// `names[i]` for each index, storing each distinct name's letters once.
-pub(crate) fn names_at(indices: &[i64], names: &[String]) -> ArrayRef {
+pub(crate) fn names_at(indices: &[u32], names: &[String]) -> ArrayRef {
     let mut b = StringViewBuilder::with_capacity(indices.len()).with_deduplicate_strings();
     for &i in indices {
         b.append_value(&names[i as usize]);

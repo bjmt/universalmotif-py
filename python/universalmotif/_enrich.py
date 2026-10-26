@@ -19,7 +19,7 @@ def _motif_list(motifs: Motif | Iterable[Motif]) -> list[Motif]:
 
 _ENRICH_SCHEMA = {
     "motif": pl.String,
-    "motif_i": pl.Int64,
+    "motif_i": pl.UInt32,
     "consensus": pl.String,
     "target_seq_n": pl.Int64,
     "target_seq_hits": pl.Int64,
@@ -234,7 +234,7 @@ def motif_coocc(
 
 _PEAKS_SCHEMA = {
     "motif": pl.String,
-    "motif_i": pl.Int64,
+    "motif_i": pl.UInt32,
     "mode": pl.String,
     "seq_length": pl.Int64,
     "nhits": pl.Int64,

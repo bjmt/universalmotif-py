@@ -478,8 +478,8 @@ def sample_sites(motif: Motif, n: int = 100, seed: int | None = None) -> list[st
 
 
 _IMPLANT_SCHEMA = {
-    "sequence_i": pl.Int64,
-    "motif_i": pl.Int64,
+    "sequence_i": pl.UInt32,
+    "motif_i": pl.UInt32,
     "start": pl.Int64,
     "width": pl.Int64,
     "strand": pl.String,

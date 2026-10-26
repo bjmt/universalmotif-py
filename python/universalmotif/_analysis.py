@@ -157,9 +157,9 @@ def _sequence_pairs(sequences) -> tuple[list[str], list[str]]:
 
 _HIT_SCHEMA = {
     "motif": pl.String,
-    "motif_i": pl.Int64,
+    "motif_i": pl.UInt32,
     "sequence": pl.String,
-    "sequence_i": pl.Int64,
+    "sequence_i": pl.UInt32,
     "start": pl.Int64,
     "end": pl.Int64,
     "strand": pl.String,
@@ -316,7 +316,7 @@ def scan_sequences(
                 _core._scan_sequences(ms, [seq], pvalue, rc, overlaps, nthreads, use_gaps,
                                       correct_gaps, motif_names, [name])
             ).cast(_HIT_SCHEMA)
-            parts.append(part.with_columns(pl.lit(i, dtype=pl.Int64).alias("sequence_i")))
+            parts.append(part.with_columns(pl.lit(i, dtype=pl.UInt32).alias("sequence_i")))
             del seq
         if not parts:
             return pl.DataFrame(schema=_HIT_SCHEMA)

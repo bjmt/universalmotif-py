@@ -235,9 +235,9 @@ def merge_similar(
     )
     if return_clusters:
         if not ms:
-            return pl.DataFrame(schema={"name": pl.String, "motif_i": pl.Int64, "cluster": pl.Int64})
+            return pl.DataFrame(schema={"name": pl.String, "motif_i": pl.UInt32, "cluster": pl.Int64})
         return summarize_motifs(ms).with_columns(
-            pl.Series("motif_i", list(range(len(ms))), dtype=pl.Int64),
+            pl.Series("motif_i", list(range(len(ms))), dtype=pl.UInt32),
             pl.Series("cluster", clusters, dtype=pl.Int64),
         )
     return merged

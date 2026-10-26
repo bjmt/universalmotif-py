@@ -120,7 +120,7 @@ def _cols(df: pl.DataFrame, index: dict[str, int]):
 
 _PROXIMITY_SCHEMA = {
     "motif": pl.String,
-    "motif_i": pl.Int64,
+    "motif_i": pl.UInt32,
     "method": pl.String,
     "count": pl.String,
     "orientation": pl.String,
@@ -597,7 +597,7 @@ def match_bkg(
             data[f"universe_{nm}"] = [cov_u[nm][u] for u in picked]
         if names is not None:
             data["universe_name"] = [names[u] for u in picked]
-        return pl.DataFrame(data)
+        return pl.DataFrame(data).with_columns(pl.col("target_i", "universe_i").cast(pl.UInt32))
     if names is None:
         return [uni[u] for u in picked]
     return dict(zip(_make_unique([names[u] for u in picked]), (uni[u] for u in picked)))
