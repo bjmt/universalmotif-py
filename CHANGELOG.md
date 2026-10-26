@@ -13,6 +13,19 @@
   - `plot_score_distribution()` draws a motif's exact null score
     distribution with the score and P-value of each cutoff, and the scores
     of real hits.
+- Plots for sequence models:
+  - `plot_modisco()` draws TF-MoDISco results as a report, one row per
+    pattern with its seqlet count, CWM, letter frequencies and best
+    database matches.
+  - `plot_seqlets()` draws the seqlets of a pattern as rows of
+    contributions beside their letters, under the pattern's logos.
+  - `view_attribution_tracks()` stacks several attribution tracks of one
+    sequence on a shared axis, with hits marked across all of them.
+  - `plot_spacing()` and `plot_marginalization()` draw a model's response
+    to sites written in with `site_spacings()` and `insert_sites()`.
+- `read_seqlets()` reads TF-MoDISco seqlets as a table like a scan's,
+  optionally placed on the genome and with their contribution scores, so
+  they can be drawn with `plot_hits()` or `view_attributions()`.
 - `draw_logo()` draws a motif's logo in a box on any matplotlib plot, in
   data coordinates or fractions of the axes, for logos beside heatmap
   rows, points or labels.

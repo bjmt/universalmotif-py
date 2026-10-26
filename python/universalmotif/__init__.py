@@ -20,6 +20,7 @@ from ._deep import (
     one_hot_batches,
     read_contributions,
     read_modisco,
+    read_seqlets,
     site_spacings,
     to_filters,
 )
@@ -96,6 +97,9 @@ from ._genomic import match_bkg, motif_proximity
 from ._intervals import genomic_hits, to_polars_bio, to_pyranges
 from ._plot_comparison import plot_comparison
 from ._plot_hits import plot_hits
+from ._plot_modisco import plot_modisco
+from ._plot_seqlets import plot_seqlets
+from ._plot_response import plot_marginalization, plot_spacing
 from ._plot_results import plot_coocc, plot_enrichment
 from ._plot_scores import plot_score_distribution
 from ._plot import (
@@ -103,6 +107,7 @@ from ._plot import (
     plot_match_bkg,
     plot_motif_peaks,
     plot_motif_proximity,
+    view_attribution_tracks,
     view_attributions,
     view_logo,
     view_motifs,
@@ -199,10 +204,14 @@ __all__ = [
     "plot_coocc",
     "plot_enrichment",
     "plot_hits",
+    "plot_marginalization",
     "plot_match_bkg",
+    "plot_modisco",
     "plot_motif_peaks",
     "plot_motif_proximity",
     "plot_score_distribution",
+    "plot_seqlets",
+    "plot_spacing",
     "position_icscore",
     "ppm_to_icm",
     "ppm_to_pcm",
@@ -218,6 +227,7 @@ __all__ = [
     "read_matrix",
     "read_meme",
     "read_modisco",
+    "read_seqlets",
     "read_transfac",
     "read_uniprobe",
     "round_motif",
@@ -242,6 +252,7 @@ __all__ = [
     "trim_cwm",
     "trim_motifs",
     "ungap",
+    "view_attribution_tracks",
     "view_attributions",
     "view_logo",
     "view_motifs",

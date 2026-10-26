@@ -293,6 +293,241 @@ def _modisco_motif(pattern, name: str, dataset: str, kind: str,
     )
 
 
+_SEQLET_SCORES = {"projected": "contrib_scores", "hypothetical": "hypothetical_contribs"}
+_SEQLET_DATASETS = ("example_idx", "start", "end", "is_revcomp", "sequence", "contrib_scores")
+
+
+def read_seqlets(
+    path: str | os.PathLike[str],
+    patterns: str | Sequence[str] | None = None,
+    regions: Any = None,
+    window: int | None = None,
+    scores: str | None = None,
+):
+    """Read the seqlets of a TF-MoDISco results file, the sites each
+    pattern was built from, as a table of hits.
+
+    The table has one row per seqlet and the columns of a
+    [`scan_sequences()`][universalmotif.scan_sequences] result, so that it
+    can be drawn with [`plot_hits()`][universalmotif.plot_hits] or tested
+    for a peak in position with [`motif_peaks()`][universalmotif.motif_peaks].
+    ``motif`` names the
+    pattern as [`read_modisco()`][universalmotif.read_modisco] does and
+    ``motif_i`` is its place in that list, ``sequence_i`` is the input
+    sequence the seqlet was found in, counted from 0, and ``start`` and
+    ``end`` are positions counted from 0 with the end left out. ``strand``
+    is ``-`` for seqlets that match their pattern on the reverse strand,
+    ``score`` is the total contribution of the seqlet's letters, and
+    ``match`` holds its letters read along its strand, as in scan results,
+    so that the seqlets of a pattern all read the same way. Rows come in
+    the order of the patterns, then of the sequences, then of the starts,
+    and ``patterns`` reads only the patterns with these names.
+
+    Positions are as modisco gives them, counted from the start of the
+    window it looked at in each input, and sequences are named ``seq1``,
+    ``seq2`` and so on. Given the ``regions`` the inputs came from, as a BED
+    file or a range table in the same order as the inputs, positions are
+    moved to the genome instead, a ``chrom`` column is added and sequences
+    are named ``chrom:start-end`` after their regions. modisco is often run
+    on the central part of each input, such as 500 of 1,000 letters, and
+    ``window`` gives its width so that the seqlets are placed within it;
+    by default it spans the whole region. Regions on the ``-`` strand are
+    taken to have been reverse complemented before going into the model.
+
+    ``scores`` adds a ``scores`` column with the contribution scores of
+    each seqlet as an array of shape (4, width), letters in the order ACGT,
+    either the hypothetical scores of every letter (``"hypothetical"``) or
+    those times the sequence (``"projected"``). They are turned to run
+    along the genome, or along the input sequence without regions, so that
+    a row's scores can go straight to
+    [`view_attributions()`][universalmotif.view_attributions] with the
+    sequence at the seqlet's position. When every seqlet has the same width
+    the column holds fixed-size arrays, and ``df["scores"].to_numpy()``
+    gives them all as one array of shape (seqlets, 4, width); otherwise it
+    holds nested lists, and ``np.asarray(row["scores"])`` gives the array
+    of one row either way.
+
+    Needs the ``h5py`` extra.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import universalmotif as um
+    >>> seqlets = um.read_seqlets("modisco_results.h5")  # doctest: +SKIP
+    >>> seqlets = um.read_seqlets("modisco_results.h5", regions="peaks.bed", window=500,
+    ...                           scores="hypothetical")  # doctest: +SKIP
+    >>> row = seqlets.row(0, named=True)  # doctest: +SKIP
+    >>> np.asarray(row["scores"]).shape  # doctest: +SKIP
+    (4, 30)
+    """
+    import polars as pl
+
+    try:
+        import h5py
+    except ImportError as e:
+        raise ImportError(
+            "reading TF-MoDISco results needs h5py; install it with `pip install "
+            "universalmotif[h5py]`"
+        ) from e
+    if scores is not None and scores not in _SEQLET_SCORES:
+        raise ValueError('scores must be None, "projected" or "hypothetical"')
+    if window is not None:
+        if regions is None:
+            raise ValueError("window places seqlets within the regions; give regions too")
+        window = int(window)
+        if window < 1:
+            raise ValueError("window must be 1 or more")
+    table = None if regions is None else _seqlet_regions(regions)
+    wanted = None if patterns is None else [patterns] if isinstance(patterns, str) else list(patterns)
+
+    with h5py.File(path, "r") as f:
+        found = [(group, name) for group in ("pos_patterns", "neg_patterns") if group in f
+                 for name in sorted(f[group], key=_pattern_order)]
+        labels = [f"{group}.{name}" for group, name in found]
+        if wanted is not None:
+            unknown = [p for p in wanted if p not in labels]
+            if unknown:
+                shown = ", ".join(labels[:5]) + (", ..." if len(labels) > 5 else "")
+                raise ValueError(f"no patterns named {', '.join(map(str, unknown))}; "
+                                 f"the file has {shown or 'none'}")
+        chosen = [i for i, label in enumerate(labels) if wanted is None or label in wanted]
+        groups = []
+        for i in chosen:
+            seqlets = f[found[i][0]][found[i][1]].get("seqlets")
+            need = _SEQLET_DATASETS + (("hypothetical_contribs",) if scores == "hypothetical" else ())
+            missing = [k for k in need if seqlets is None or k not in seqlets]
+            if missing:
+                raise ValueError(f"{labels[i]} has no seqlets in {os.fspath(path)}; "
+                                 f"it lacks {', '.join(missing)}")
+            groups.append(seqlets)
+        widths = [g["sequence"].shape[1] for g in groups]
+        counts = [g["example_idx"].shape[0] for g in groups]
+        total = sum(counts)
+        same = len(set(widths)) == 1
+        # Scores of one width are written straight into one array, which
+        # polars then takes without a copy.
+        values = np.empty((total, 4, widths[0]), dtype=np.float32) if scores is not None and same else None
+        ragged = []
+        cols: dict[str, list[np.ndarray]] = {k: [] for k in ("motif_i", "example", "start", "end", "rc",
+                                                             "score")}
+        letters = []
+        reversed_input = None if table is None else (table["strand"] == "-").to_numpy()
+        at = 0
+        for i, g, n in zip(chosen, groups, counts):
+            example = np.asarray(g["example_idx"][()], dtype=np.int64)
+            if table is not None and n and int(example.max()) >= table.height:
+                raise ValueError(f"seqlets come from input {int(example.max())}, counted from 0, but "
+                                 f"there are only {table.height} regions; give the regions modisco "
+                                 "was run on, in the same order")
+            start = np.asarray(g["start"][()], dtype=np.int64)
+            order = np.lexsort((start, example))
+            rc = np.asarray(g["is_revcomp"][()], dtype=bool)[order]
+            cols["motif_i"].append(np.full(n, i, dtype=np.uint32))
+            cols["example"].append(example[order])
+            cols["start"].append(start[order])
+            cols["end"].append(np.asarray(g["end"][()], dtype=np.int64)[order])
+            cols["rc"].append(rc)
+            contrib = np.asarray(g["contrib_scores"][()], dtype=np.float32)[order]
+            cols["score"].append(contrib.sum(axis=(1, 2), dtype=np.float64))
+            letters.append(_seqlet_letters(np.asarray(g["sequence"][()])[order]))
+            if scores is not None:
+                x = contrib if scores == "projected" else np.asarray(g[_SEQLET_SCORES[scores]][()],
+                                                                     dtype=np.float32)[order]
+                del contrib
+                flip = rc if reversed_input is None else rc ^ reversed_input[example[order]]
+                x[flip] = x[flip, ::-1, ::-1]
+                x = x.transpose(0, 2, 1)
+                if values is not None:
+                    values[at:at + n] = x
+                else:
+                    ragged.append(pl.Series("scores", np.ascontiguousarray(x)).cast(
+                        pl.List(pl.List(pl.Float32))))
+            at += n
+
+    def joined(key, dtype):
+        return np.concatenate(cols[key]) if cols[key] else np.zeros(0, dtype=dtype)
+
+    example = joined("example", np.int64)
+    start, end, rc = joined("start", np.int64), joined("end", np.int64), joined("rc", bool)
+    out = {
+        "motif": pl.Series([labels[i] for i in chosen], dtype=pl.String).gather(
+            np.repeat(np.arange(len(chosen)), counts)),
+        "motif_i": pl.Series(joined("motif_i", np.uint32), dtype=pl.UInt32),
+    }
+    if table is None:
+        out["sequence"] = "seq" + pl.Series(example + 1, dtype=pl.Int64).cast(pl.String)
+        out["sequence_i"] = pl.Series(example, dtype=pl.UInt32)
+        strand = rc
+    else:
+        reg = table[example]
+        rs, re_ = reg["start"].to_numpy(), reg["end"].to_numpy()
+        minus = (reg["strand"] == "-").to_numpy()
+        width = re_ - rs
+        win = width if window is None else np.full(total, window)
+        if (win > width).any():
+            raise ValueError(f"window is {window} wide but some regions are only {int(width.min())}")
+        if (end > win).any():
+            raise ValueError(f"seqlets run up to {int(end.max())}, past the window of {int(win.min())}; "
+                             "check window")
+        offset = width // 2 - win // 2
+        span = end - start
+        start = np.where(minus, re_ - offset - end, rs + offset + start)
+        end = start + span
+        out["sequence"] = reg.select(pl.format("{}:{}-{}", "chrom", "start", "end").alias("name"))["name"]
+        out["sequence_i"] = pl.Series(example, dtype=pl.UInt32)
+        out["chrom"] = reg["chrom"]
+        strand = rc ^ minus
+    out["start"] = pl.Series(start, dtype=pl.Int64)
+    out["end"] = pl.Series(end, dtype=pl.Int64)
+    out["strand"] = pl.Series(np.where(strand, "-", "+"), dtype=pl.String)
+    out["score"] = pl.Series(joined("score", np.float64), dtype=pl.Float64)
+    out["match"] = pl.concat(letters) if letters else pl.Series([], dtype=pl.String)
+    if scores is not None:
+        if values is not None:
+            out["scores"] = pl.Series(values)
+        else:
+            out["scores"] = (pl.concat(ragged) if ragged
+                             else pl.Series([], dtype=pl.List(pl.List(pl.Float32))))
+    return pl.DataFrame(out)
+
+
+def _seqlet_letters(onehot: np.ndarray) -> Any:
+    """The letters of one-hot seqlets of shape (seqlets, width, 4) as a
+    polars string column, with N where no letter is set."""
+    import polars as pl
+
+    n, w = onehot.shape[:2]
+    if w == 0:
+        return pl.Series([""] * n, dtype=pl.String)
+    idx = np.where(onehot.max(axis=2) > 0, onehot.argmax(axis=2), 4)
+    rows = np.ascontiguousarray(np.frombuffer(b"ACGTN", dtype=np.uint8)[idx]).view(f"S{w}").ravel()
+    return pl.Series(rows, dtype=pl.Binary).cast(pl.String)
+
+
+def _seqlet_regions(regions: Any):
+    """The regions modisco's inputs came from, as a range table, from a BED
+    file or anything a range table is made from."""
+    import polars as pl
+
+    from ._genomic import _range_table
+
+    if isinstance(regions, (str, os.PathLike)):
+        # Every column is read as text and picked by position, since the
+        # names polars gives headerless columns differ between versions.
+        bed = pl.read_csv(regions, separator="\t", has_header=False, infer_schema_length=0,
+                          comment_prefix="#")
+        if bed.width < 3:
+            raise ValueError(f"{os.fspath(regions)} needs at least the three columns of a BED file")
+        cols = {"chrom": pl.nth(0), "start": pl.nth(1), "end": pl.nth(2)}
+        if bed.width >= 6:
+            cols["strand"] = pl.nth(5)
+        regions = bed.select(**cols)
+    table = _range_table(regions, "regions")
+    if (table["end"] <= table["start"]).any():
+        raise ValueError("regions must have start < end")
+    return table
+
+
 @dataclass(frozen=True, eq=False)
 class ContributionScores:
     """Contribution scores of a set of sequences, from
@@ -824,6 +1059,7 @@ __all__ = [
     "one_hot_batches",
     "read_contributions",
     "read_modisco",
+    "read_seqlets",
     "site_spacings",
     "to_filters",
 ]

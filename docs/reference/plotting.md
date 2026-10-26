@@ -12,6 +12,16 @@ Sequence logos and plots of analysis results, drawn with matplotlib, which is in
 
 ::: universalmotif.view_variant
 
+::: universalmotif.view_attribution_tracks
+
+::: universalmotif.plot_modisco
+
+::: universalmotif.plot_seqlets
+
+::: universalmotif.plot_spacing
+
+::: universalmotif.plot_marginalization
+
 ::: universalmotif.plot_hits
 
 ::: universalmotif.plot_comparison

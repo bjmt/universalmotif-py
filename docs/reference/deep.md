@@ -25,6 +25,8 @@ these together on the outputs of a published model.
 
 ::: universalmotif.read_modisco
 
+::: universalmotif.read_seqlets
+
 ::: universalmotif.read_contributions
 
 ::: universalmotif.ContributionScores

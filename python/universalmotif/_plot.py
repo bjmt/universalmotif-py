@@ -1084,6 +1084,63 @@ def _nice_step(span: int, max_ticks: int = 12) -> int:
         power *= 10
 
 
+_HIT_COLOUR = "#4C72B0"
+
+
+def _hit_spans(hits: pl.DataFrame, start: int, a: int, b: int) -> list[tuple[float, float, Any]]:
+    """The hits within positions ``a`` to ``b`` as (left, right, motif) in the
+    x coordinates of a panel drawing those positions."""
+    for col in ("start", "end"):
+        if col not in hits.columns:
+            raise ValueError(f"hits must have a {col!r} column")
+    names = hits["motif"].to_list() if "motif" in hits.columns else [None] * hits.height
+    spans = []
+    for s, e, name in zip(hits["start"].to_list(), hits["end"].to_list(), names):
+        s, e = max(s + start, a), min(e + start, b)
+        if e > s:
+            spans.append((s - a + 0.5, e - a + 0.5, name))
+    return spans
+
+
+def _label_hits(ax: Axes, spans: list[tuple[float, float, Any]]) -> None:
+    for x0, x1, name in spans:
+        if name is not None:
+            ax.annotate(str(name), ((x0 + x1) / 2, 1.0), xycoords=("data", "axes fraction"),
+                        ha="center", va="bottom", fontsize=8, color="0.3", annotation_clip=False)
+
+
+def _hide_x(ax: Axes) -> None:
+    ax.set_xlabel("")
+    ax.tick_params(axis="x", labelbottom=False, length=0)
+
+
+def _share_logo_y(axes: Sequence[Axes]) -> None:
+    """Give logo panels drawn by view_attributions() one y-axis."""
+    from matplotlib.ticker import MaxNLocator
+
+    lo = min(ax.get_ylim()[0] for ax in axes)
+    hi = max(ax.get_ylim()[1] for ax in axes)
+    for ax in axes:
+        low = ax.spines["left"].get_bounds()[0]
+        ax.set_ylim(lo, hi)
+        ax.spines["left"].set_bounds(low, hi)
+        ax.set_yticks([t for t in MaxNLocator(nbins=4).tick_values(lo, hi)
+                       if low - 1e-12 <= t <= hi + 1e-12])
+
+
+def _band(fig: Figure, axes: Sequence[Axes], x: float, width: float, colour: str, alpha: float) -> None:
+    """Shade from ``x`` to ``x + width`` through a column of panels and the
+    gaps between them, behind see-through panels."""
+    from matplotlib.patches import Rectangle
+    from matplotlib.transforms import blended_transform_factory
+
+    bottom = axes[-1].get_position().y0
+    top = axes[0].get_position().y1
+    fig.add_artist(Rectangle((x, bottom), width, top - bottom, facecolor=colour, alpha=alpha,
+                             linewidth=0, zorder=-1,
+                             transform=blended_transform_factory(axes[0].transData, fig.transFigure)))
+
+
 def view_attributions(
     scores: Any,
     sequence: str | None = None,
@@ -1210,18 +1267,10 @@ def view_attributions(
         eps = 1e-9 * ((hi - lo) or 1.0)
         ax.set_yticks([t for t in ax.get_yticks() if lo - eps <= t <= hi + pad + eps])
     if hits is not None:
-        for col in ("start", "end"):
-            if col not in hits.columns:
-                raise ValueError(f"hits must have a {col!r} column")
-        names = hits["motif"].to_list() if "motif" in hits.columns else [None] * hits.height
-        for s, e, name in zip(hits["start"].to_list(), hits["end"].to_list(), names):
-            s, e = max(s + start, a), min(e + start, b)
-            if e <= s:
-                continue
-            ax.axvspan(s - a + 0.5, e - a + 0.5, color="#4C72B0", alpha=0.1, linewidth=0, zorder=0)
-            if name is not None:
-                ax.annotate(str(name), ((s + e) / 2 - a + 0.5, 1.0), xycoords=("data", "axes fraction"),
-                            ha="center", va="bottom", fontsize=8, color="0.3", annotation_clip=False)
+        spans = _hit_spans(hits, start, a, b)
+        for x0, x1, _ in spans:
+            ax.axvspan(x0, x1, color=_HIT_COLOUR, alpha=0.1, linewidth=0, zorder=0)
+        _label_hits(ax, spans)
     # As many ticks as fit across the panel, allowing for long positions.
     width_in = ax.get_position().width * ax.figure.get_figwidth()
     max_ticks = max(2, min(12, int(width_in / (0.08 * len(str(b)) + 0.25))))
@@ -1301,18 +1350,8 @@ def view_variant(
                               (axes[1], m_alt, alt_seq, f"Alternative ({alt})")):
         view_attributions(m, seq, kind="all", alphabet=alphabet, start=start, region=(a, b),
                           colour_scheme=colour_scheme, flip_neg=flip_neg, ylabel=label, ax=ax)
-        ax.set_xlabel("")
-        ax.tick_params(axis="x", labelbottom=False, length=0)
-    from matplotlib.ticker import MaxNLocator
-
-    lo = min(axes[0].get_ylim()[0], axes[1].get_ylim()[0])
-    hi = max(axes[0].get_ylim()[1], axes[1].get_ylim()[1])
-    for ax in axes[:2]:
-        low = ax.spines["left"].get_bounds()[0]
-        ax.set_ylim(lo, hi)
-        ax.spines["left"].set_bounds(low, hi)
-        ax.set_yticks([t for t in MaxNLocator(nbins=4).tick_values(lo, hi)
-                       if low - 1e-12 <= t <= hi + 1e-12])
+        _hide_x(ax)
+    _share_logo_y(axes[:2])
     diff = (m_alt.sum(axis=0) - m_ref.sum(axis=0))[a - start:b - start]
     axes[2].bar(np.arange(1, n + 1), diff, width=0.8,
                 color=np.where(diff >= 0, "#C0504D", "#4F81BD"))
@@ -1328,19 +1367,150 @@ def view_variant(
     axes[2].spines["left"].set_bounds(d_lo, d_hi)
     axes[2].set_yticks([t for t in axes[2].get_yticks() if d_lo - 1e-12 <= t <= d_hi + 1e-12])
     fig.tight_layout()
-    # One band through all three panels and the gaps between them, drawn
-    # behind see-through panels.
-    from matplotlib.patches import Rectangle
-    from matplotlib.transforms import blended_transform_factory
-
-    bottom = axes[2].get_position().y0
-    top = axes[0].get_position().y1
-    band = Rectangle((position - a + 0.5, bottom), 1, top - bottom, facecolor="#F2C14E", alpha=0.25,
-                     linewidth=0, zorder=-1,
-                     transform=blended_transform_factory(axes[0].transData, fig.transFigure))
-    fig.add_artist(band)
+    _band(fig, axes, position - a + 0.5, 1, "#F2C14E", 0.25)
     for ax in axes:
         ax.set_facecolor("none")
+    return fig
+
+
+def view_attribution_tracks(
+    tracks: Mapping[Any, Any] | Sequence[Any],
+    sequence: str | None = None,
+    kind: str | Sequence[str] | Mapping[Any, str] = "observed",
+    alphabet: str = "ACGT",
+    start: int = 0,
+    region: tuple[int, int] | None = None,
+    hits: pl.DataFrame | None = None,
+    sharey: bool = False,
+    heights: Sequence[float] | None = None,
+    colour_scheme: Mapping[str, str] | None = None,
+    flip_neg: bool = True,
+    figsize: tuple[float, float] | None = None,
+) -> Figure:
+    """Draw several tracks of attribution scores for the same sequence one
+    above the other, lined up along a shared position axis.
+
+    This suits comparing the scores a model's heads give the same input,
+    such as its counts and profile heads, those of several models or cell
+    types, or the scores of the observed letters above a heatmap of in
+    silico mutagenesis. ``tracks`` is a dict of scores labelled by its keys,
+    or a list of scores labelled by number, with each in any of the forms
+    [`view_attributions()`][universalmotif.view_attributions] takes and of
+    the same length. ``kind`` is one of its kinds for every track, a list
+    with one per track, or a dict giving the kinds of some tracks by their
+    keys, with the rest drawn as ``"observed"``.
+
+    Each track gets its own y-axis unless ``sharey`` is ``True``, which puts
+    the logos on one scale and the heatmaps on one colour scale, so that the
+    sizes of scores can be compared between tracks. ``heights`` sets the
+    relative heights of the tracks, by default a little taller for heatmaps
+    than for logos. ``start``, ``region``, ``colour_scheme`` and ``flip_neg``
+    work as for [`view_attributions()`][universalmotif.view_attributions],
+    and each of ``hits`` is shaded once through every track and labelled
+    above the top one.
+
+    Needs the ``plot`` extra.
+
+    Examples
+    --------
+    >>> import matplotlib.pyplot as plt
+    >>> import numpy as np
+    >>> import universalmotif as um
+    >>> seq = "ACGTTTGACCAAGT"
+    >>> counts = np.zeros(len(seq))
+    >>> counts[4:10] = [0.3, 0.6, 0.9, 0.8, 0.7, 0.4]
+    >>> profile = np.roll(counts, 1) * 0.5
+    >>> fig = um.view_attribution_tracks({"Counts": counts, "Profile": profile}, seq, sharey=True)
+    >>> [ax.get_ylabel() for ax in fig.axes]
+    ['Counts', 'Profile']
+    >>> ism = np.random.default_rng(1).normal(0, 0.2, (4, len(seq)))
+    >>> fig = um.view_attribution_tracks({"Observed": counts, "Mutagenesis": ism}, seq,
+    ...                                  kind={"Mutagenesis": "heatmap"})
+    >>> plt.close("all")
+    """
+    if isinstance(tracks, Mapping):
+        keys = list(tracks)
+        scores = list(tracks.values())
+        labels = [str(k) for k in keys]
+    elif isinstance(tracks, (list, tuple)):
+        keys = None
+        scores = list(tracks)
+        labels = [f"Track {i}" for i in range(1, len(scores) + 1)]
+    else:
+        raise TypeError("tracks must be a dict or a list of scores")
+    if not scores:
+        raise ValueError("there are no tracks to draw")
+    if isinstance(kind, str):
+        kinds = [kind] * len(scores)
+    elif isinstance(kind, Mapping):
+        if keys is None:
+            raise ValueError("kinds given by name need the tracks as a dict")
+        unknown = [str(k) for k in kind if k not in tracks]
+        if unknown:
+            raise ValueError(f"kind names tracks that are not given: {', '.join(unknown)}")
+        kinds = [kind.get(k, "observed") for k in keys]
+    else:
+        kinds = list(kind)
+        if len(kinds) != len(scores):
+            raise ValueError(f"kind must have one entry per track, {len(scores)} here")
+    for kd in kinds:
+        if kd not in ("observed", "all", "heatmap"):
+            raise ValueError('kind must be "observed", "all" or "heatmap"')
+    if len(set(alphabet)) != len(alphabet):
+        raise ValueError("the alphabet has repeated letters")
+    lengths = {_attribution_matrix(s, sequence, alphabet, kd).shape[1] for s, kd in zip(scores, kinds)}
+    if len(lengths) > 1:
+        raise ValueError(f"the tracks have different lengths: {', '.join(map(str, sorted(lengths)))}")
+    length = lengths.pop()
+    a, b = (start, start + length) if region is None else (int(region[0]), int(region[1]))
+    if not start <= a < b <= start + length:
+        raise ValueError(f"region must lie within {start} to {start + length}")
+    spans = [] if hits is None else _hit_spans(hits, start, a, b)
+    if heights is None:
+        heights = [1.2 if kd == "heatmap" else 1.0 for kd in kinds]
+    elif len(heights) != len(scores):
+        raise ValueError(f"heights must have one entry per track, {len(scores)} here")
+    plt = _pyplot()
+    n = b - a
+    if figsize is None:
+        figsize = (min(max(4.0, 0.12 * n + 1.5), 16.0), 1.6 * sum(heights) + 1.0)
+    fig, axes = plt.subplots(len(scores), 1, figsize=figsize, squeeze=False,
+                             gridspec_kw={"height_ratios": list(heights)})
+    axes = list(axes[:, 0])
+    for ax, s, kd, label in zip(axes, scores, kinds, labels):
+        view_attributions(s, sequence, kind=kd, alphabet=alphabet, start=start, region=(a, b),
+                          colour_scheme=colour_scheme, flip_neg=flip_neg, ylabel=label, ax=ax)
+        if kd == "heatmap":
+            # The track is named beside it like the others, which leaves the
+            # colour bar its numbers alone.
+            ax.set_ylabel(label)
+            ax.child_axes[0].set_ylabel("")
+    for ax in axes[:-1]:
+        _hide_x(ax)
+    if sharey:
+        logos = [ax for ax, kd in zip(axes, kinds) if kd != "heatmap"]
+        if len(logos) > 1:
+            _share_logo_y(logos)
+        images = [ax.images[0] for ax, kd in zip(axes, kinds) if kd == "heatmap"]
+        if images:
+            top = max(im.get_clim()[1] for im in images)
+            for im in images:
+                im.set_clim(-top, top)
+    _label_hits(axes[0], spans)
+    fig.align_ylabels(axes)
+    fig.tight_layout()
+    if spans:
+        from matplotlib.patches import Rectangle
+
+        for x0, x1, _ in spans:
+            _band(fig, axes, x0, x1 - x0, _HIT_COLOUR, 0.1)
+            # Heatmaps hide the band behind them, so hits are outlined on top.
+            for ax, kd in zip(axes, kinds):
+                if kd == "heatmap":
+                    ax.add_patch(Rectangle((x0, 0), x1 - x0, 1, fill=False, edgecolor=_HIT_COLOUR,
+                                           linewidth=1.2, zorder=4, transform=ax.get_xaxis_transform()))
+        for ax in axes:
+            ax.set_facecolor("none")
     return fig
 
 
@@ -1352,6 +1522,7 @@ __all__ = [
     "plot_match_bkg",
     "plot_motif_peaks",
     "plot_motif_proximity",
+    "view_attribution_tracks",
     "view_attributions",
     "view_logo",
     "view_motifs",

@@ -90,9 +90,42 @@ def test_one_hot():
         um.one_hot(["ACG", "AC"])
 
 
+def _modisco_inputs():
+    """The 50 input sequences of 100 letters the fake modisco file's seqlets
+    come from."""
+    rng = np.random.default_rng(3)
+    return ["".join(rng.choice(list("ACGT"), 100)) for _ in range(50)]
+
+
+def _rc(seq):
+    return seq.translate(str.maketrans("ACGT", "TGCA"))[::-1]
+
+
+def _add_seqlets(g, n, width, rng):
+    """Seqlets of a fake modisco pattern, cut from _modisco_inputs() and
+    stored in the pattern's orientation."""
+    inputs = _modisco_inputs()
+    example = rng.integers(0, len(inputs), n)
+    start = rng.integers(0, 100 - width + 1, n)
+    rc = rng.random(n) < 0.5
+    letters = [inputs[i][s:s + width] for i, s in zip(example, start)]
+    letters = [_rc(x) if r else x for x, r in zip(letters, rc)]
+    onehot = np.array([[[c == b for b in "ACGT"] for c in x] for x in letters], dtype=np.float32)
+    hyp = rng.normal(0, 1, (n, width, 4)).astype(np.float32)
+    s = g["seqlets"]
+    s.create_dataset("example_idx", data=example)
+    s.create_dataset("start", data=start)
+    s.create_dataset("end", data=start + width)
+    s.create_dataset("is_revcomp", data=rc)
+    s.create_dataset("sequence", data=onehot)
+    s.create_dataset("hypothetical_contribs", data=hyp)
+    s.create_dataset("contrib_scores", data=hyp * onehot)
+
+
 def _modisco_file(path):
     h5py = pytest.importorskip("h5py")
     rng = np.random.default_rng(1)
+    seqlet_rng = np.random.default_rng(2)
 
     def pattern(grp, name, n, core):
         g = grp.create_group(name)
@@ -108,6 +141,7 @@ def _modisco_file(path):
         g.create_dataset("hypothetical_contribs", data=contrib * 2)
         g.create_dataset("sequence", data=seq)
         g.create_group("seqlets").create_dataset("n_seqlets", data=np.array([n]))
+        _add_seqlets(g, n, 12, seqlet_rng)
         return g
 
     with h5py.File(path, "w") as f:
@@ -482,3 +516,130 @@ def test_filters_are_read_as_their_type():
     assert m.type == "PWM"
     np.testing.assert_allclose(m.matrix, f)
     np.testing.assert_allclose(um.from_filters(np.ones((4, 2)) * 2, type="PCM")[0].matrix, 2)
+
+
+def test_read_seqlets(tmp_path):
+
+    path = _modisco_file(tmp_path / "modisco.h5")
+    inputs = _modisco_inputs()
+    s = um.read_seqlets(path)
+    assert s.columns == ["motif", "motif_i", "sequence", "sequence_i", "start", "end", "strand",
+                         "score", "match"]
+    assert s.schema["motif_i"] == pl.UInt32 and s.schema["sequence_i"] == pl.UInt32
+    assert s.schema["start"] == pl.Int64 and s.schema["score"] == pl.Float64
+    # Patterns come as read_modisco() gives them, without their subpatterns.
+    names = [m.name for m in um.read_modisco(path)]
+    counts = s.group_by("motif", maintain_order=True).len()
+    assert counts["motif"].to_list() == names and counts["len"].to_list() == [120, 40, 15, 30]
+    assert s.group_by("motif", maintain_order=True).agg(pl.col("motif_i").first())["motif_i"].to_list() == [
+        0, 1, 2, 3]
+    assert s.equals(s.sort("motif_i", "sequence_i", "start", maintain_order=True))
+    assert (s["sequence"] == ("seq" + (s["sequence_i"] + 1).cast(pl.String))).all()
+    assert ((s["end"] - s["start"]) == 12).all()
+    # Letters read along each seqlet's strand, as in scan results.
+    for row in s.iter_rows(named=True):
+        site = inputs[row["sequence_i"]][row["start"]:row["end"]]
+        assert row["match"] == (site if row["strand"] == "+" else _rc(site))
+
+    projected = um.read_seqlets(path, scores="projected")
+    assert projected.drop("scores").equals(s)
+    x = projected["scores"].to_numpy()
+    assert x.shape == (205, 4, 12) and x.dtype == np.float32
+    np.testing.assert_allclose(x.sum(axis=(1, 2)), s["score"].to_numpy(), rtol=1e-5, atol=1e-5)
+    # Scores run along the input sequences whatever the strand.
+    for row, scores in zip(s.iter_rows(named=True), x):
+        site = inputs[row["sequence_i"]][row["start"]:row["end"]]
+        assert um.from_one_hot(np.abs(scores) > 0)[0] == site
+
+    hyp = um.read_seqlets(path, patterns="pos_patterns.pattern_2", scores="hypothetical")
+    assert set(hyp["motif"]) == {"pos_patterns.pattern_2"} and hyp.height == 40
+    h5py = pytest.importorskip("h5py")
+    with h5py.File(path, "r") as f:
+        g = f["pos_patterns/pattern_2/seqlets"]
+        order = np.lexsort((g["start"][()], g["example_idx"][()]))
+        stored, rc = g["hypothetical_contribs"][()][order], g["is_revcomp"][()][order]
+    for scores, st, r in zip(hyp["scores"].to_numpy(), stored, rc):
+        np.testing.assert_array_equal(scores, (st[::-1, ::-1] if r else st).T)
+    # A row's scores go straight to view_attributions-style arrays.
+    assert np.asarray(hyp.row(0, named=True)["scores"]).shape == (4, 12)
+    two = um.read_seqlets(path, patterns=["neg_patterns.pattern_0", "pos_patterns.pattern_0"])
+    assert two["motif"].unique(maintain_order=True).to_list() == ["pos_patterns.pattern_0",
+                                                                  "neg_patterns.pattern_0"]
+    assert two.filter(pl.col("motif") == "neg_patterns.pattern_0")["motif_i"].unique().to_list() == [3]
+
+
+def test_read_seqlets_regions(tmp_path):
+
+    path = _modisco_file(tmp_path / "modisco.h5")
+    s = um.read_seqlets(path, scores="projected")
+    regions = pl.DataFrame({"chrom": ["chr1"] * 50, "start": [1000 * i for i in range(50)],
+                            "end": [1000 * i + 200 for i in range(50)]})
+    g = um.read_seqlets(path, regions=regions, window=100, scores="projected")
+    assert g.columns[:6] == ["motif", "motif_i", "sequence", "sequence_i", "chrom", "start"]
+    assert (g["start"] == 1000 * s["sequence_i"].cast(pl.Int64) + 50 + s["start"]).all()
+    assert (g["end"] - g["start"] == 12).all() and (g["strand"] == s["strand"]).all()
+    assert g["sequence"][0] == f"chr1:{1000 * g['sequence_i'][0]}-{1000 * g['sequence_i'][0] + 200}"
+    np.testing.assert_array_equal(g["scores"].to_numpy(), s["scores"].to_numpy())
+    # Without a window the seqlets are placed from the start of each region,
+    # and a BED file gives the same table as a DataFrame.
+    bed = tmp_path / "regions.bed"
+    regions.write_csv(bed, separator="\t", include_header=False)
+    plain = um.read_seqlets(path, regions=bed)
+    assert (plain["start"] == 1000 * s["sequence_i"].cast(pl.Int64) + s["start"]).all()
+    assert plain.equals(um.read_seqlets(path, regions=regions))
+    assert um.read_seqlets(path, regions=bed, window=100).equals(g.drop("scores"))
+
+    # Regions on the - strand were reverse complemented for the model.
+    minus = regions.with_columns(strand=pl.lit("-"))
+    r = um.read_seqlets(path, regions=minus, window=100, scores="projected")
+    region_end = 1000 * s["sequence_i"].cast(pl.Int64) + 200
+    assert (r["start"] == region_end - 50 - s["end"]).all()
+    assert (r["strand"] != s["strand"]).all() and (r["match"] == s["match"]).all()
+    np.testing.assert_array_equal(r["scores"].to_numpy(), s["scores"].to_numpy()[:, ::-1, ::-1])
+
+
+def test_read_seqlets_checks(tmp_path, monkeypatch):
+
+    path = _modisco_file(tmp_path / "modisco.h5")
+    regions = [("chr1", 1000 * i, 1000 * i + 200) for i in range(50)]
+    with pytest.raises(ValueError, match="no patterns named pattern_0; the file has pos_patterns"):
+        um.read_seqlets(path, patterns="pattern_0")
+    with pytest.raises(ValueError, match="scores must be"):
+        um.read_seqlets(path, scores="contrib")
+    with pytest.raises(ValueError, match="only 10 regions"):
+        um.read_seqlets(path, regions=regions[:10])
+    with pytest.raises(ValueError, match="give regions too"):
+        um.read_seqlets(path, window=100)
+    with pytest.raises(ValueError, match="window is 300 wide"):
+        um.read_seqlets(path, regions=regions, window=300)
+    with pytest.raises(ValueError, match="past the window of 50"):
+        um.read_seqlets(path, regions=regions, window=50)
+    with pytest.raises(ValueError, match="window must be"):
+        um.read_seqlets(path, regions=regions, window=0)
+    import sys
+
+    monkeypatch.setitem(sys.modules, "h5py", None)
+    with pytest.raises(ImportError, match="universalmotif\\[h5py\\]"):
+        um.read_seqlets(path)
+
+
+def test_read_seqlets_widths_and_hits(tmp_path):
+
+    h5py = pytest.importorskip("h5py")
+    path = _modisco_file(tmp_path / "modisco.h5")
+    with h5py.File(path, "a") as f:
+        g = f["neg_patterns/pattern_0"]
+        del g["seqlets"]
+        g.create_group("seqlets").create_dataset("n_seqlets", data=np.array([8]))
+        _add_seqlets(g, 8, 9, np.random.default_rng(5))
+    s = um.read_seqlets(path, scores="hypothetical")
+    assert s.schema["scores"] == pl.List(pl.List(pl.Float32))
+    assert np.asarray(s.row(0, named=True)["scores"]).shape == (4, 12)
+    assert np.asarray(s.row(s.height - 1, named=True)["scores"]).shape == (4, 9)
+    # Seqlets are hits like any others.
+    peaks = um.motif_peaks(s.drop("scores"), seq_length=100, qvalue=1, nthreads=1)
+    assert set(peaks["motif"]) <= set(s["motif"])
+    with h5py.File(path, "a") as f:
+        del f["pos_patterns/pattern_10/seqlets/start"]
+    with pytest.raises(ValueError, match="pos_patterns.pattern_10 has no seqlets"):
+        um.read_seqlets(path, patterns=["pos_patterns.pattern_10"])

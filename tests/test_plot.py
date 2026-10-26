@@ -18,6 +18,7 @@ from universalmotif._plot import (  # noqa: E402
     _panel_glyphs,
     _prepare_motifs,
     _y_axis,
+    view_attribution_tracks,
 )
 
 from conftest import args, load_reference, motif_from_record, nums  # noqa: E402
@@ -1027,6 +1028,124 @@ def test_view_variant_all_letters():
     np.testing.assert_allclose([p.get_height() for p in fig.axes[2].containers[0]],
                                alt.sum(axis=0) - ref.sum(axis=0))
     assert len(fig.axes[0].collections[0].get_paths()) == 32
+
+
+def _tracks_input():
+    seq = "ACGTTTGACCAAGTCA"
+    counts = np.zeros(len(seq))
+    counts[4:10] = [0.3, 0.6, 0.9, 0.8, 0.7, 0.4]
+    profile = -0.3 * counts
+    ism = np.random.default_rng(5).normal(0, 0.2, (4, len(seq)))
+    return seq, counts, profile, ism
+
+
+def test_view_attribution_tracks_panels():
+    seq, counts, profile, ism = _tracks_input()
+    fig = view_attribution_tracks({"Counts": counts, "Profile": profile, "Mutagenesis": ism}, seq,
+                                  kind={"Mutagenesis": "heatmap"}, start=100)
+    axes = fig.axes
+    assert [ax.get_ylabel() for ax in axes] == ["Counts", "Profile", "Mutagenesis"]
+    # Each logo is the one view_attributions() draws on its own.
+    for ax, scores in ((axes[0], counts), (axes[1], profile)):
+        alone = um.view_attributions(scores, seq, start=100)
+        assert _glyph_extents(ax) == _glyph_extents(alone)
+        assert ax.get_ylim() == alone.get_ylim()
+    assert axes[0].get_ylim() != axes[1].get_ylim()
+    np.testing.assert_array_equal(axes[2].images[0].get_array(), ism)
+    # The heatmap is named beside it and its colour bar carries only numbers.
+    assert axes[2].child_axes[0].get_ylabel() == ""
+    # Positions are labelled once, below the bottom track, on a shared axis.
+    assert [ax.get_xlabel() for ax in axes] == ["", "", "Position"]
+    assert not any(t.get_text() for ax in axes[:2] for t in ax.get_xticklabels())
+    assert axes[2].get_xticklabels()[0].get_text() == "100"
+    assert len({ax.get_xlim() for ax in axes}) == 1
+    assert len({ax.get_position().x0 for ax in axes}) == 1
+    # A list of tracks is numbered, with a kind for each.
+    fig = view_attribution_tracks([ism, ism], seq, kind=["all", "heatmap"])
+    assert [ax.get_ylabel() for ax in fig.axes] == ["Track 1", "Track 2"]
+    assert fig.axes[0].collections and fig.axes[1].images
+    # A single track still gives a figure.
+    fig = view_attribution_tracks([counts], seq)
+    assert len(fig.axes) == 1 and fig.axes[0].get_xlabel() == "Position"
+
+
+def test_view_attribution_tracks_sharey():
+    seq, counts, profile, ism = _tracks_input()
+    tracks = {"Counts": counts, "Profile": profile, "A": ism, "B": ism / 4}
+    kinds = ["observed", "observed", "heatmap", "heatmap"]
+    fig = view_attribution_tracks(tracks, seq, kind=kinds)
+    top, middle, first, second = fig.axes
+    assert top.get_ylim() != middle.get_ylim()
+    assert first.images[0].get_clim() != second.images[0].get_clim()
+    fig = view_attribution_tracks(tracks, seq, kind=kinds, sharey=True)
+    top, middle, first, second = fig.axes
+    assert top.get_ylim() == middle.get_ylim()
+    assert top.get_ylim()[0] < -0.27 and top.get_ylim()[1] > 0.9
+    # Each axis line still stops at its own scores.
+    assert top.spines["left"].get_bounds()[0] == 0
+    assert middle.spines["left"].get_bounds()[0] == pytest.approx(-0.27)
+    top = np.abs(ism).max()
+    assert first.images[0].get_clim() == second.images[0].get_clim() == (-top, top)
+
+
+def test_view_attribution_tracks_heights_and_size():
+    seq, counts, profile, ism = _tracks_input()
+    fig = view_attribution_tracks({"Counts": counts, "Mutagenesis": ism}, seq, kind=["observed", "heatmap"])
+    top, bottom = (ax.get_position().height for ax in fig.axes)
+    assert bottom / top == pytest.approx(1.2)
+    fig = view_attribution_tracks({"Counts": counts, "Profile": profile}, seq, heights=[2, 1],
+                                  figsize=(6, 4))
+    top, bottom = (ax.get_position().height for ax in fig.axes)
+    assert top / bottom == pytest.approx(2)
+    assert tuple(fig.get_size_inches()) == (6, 4)
+
+
+def test_view_attribution_tracks_hits_and_region():
+    seq, counts, profile, ism = _tracks_input()
+    hits = pl.DataFrame({"start": [0, 5, 10], "end": [3, 7, 14], "motif": ["early", "mid", "late"]})
+    fig = view_attribution_tracks({"Counts": counts, "Profile": profile, "Mutagenesis": ism}, seq,
+                                  kind={"Mutagenesis": "heatmap"}, start=100, region=(104, 112), hits=hits)
+    axes = fig.axes
+    # Hits are labelled once, above the top track, and shaded once through
+    # every track, cut to the region.
+    assert [t.get_text() for t in axes[0].texts] == ["mid", "late"]
+    assert not axes[1].texts and not axes[2].texts
+    assert [_span(p) for p in fig.artists] == [(1.5, 3.5), (6.5, 8.5)]
+    assert fig.artists[0].get_y() == pytest.approx(axes[2].get_position().y0)
+    assert fig.artists[0].get_y() + fig.artists[0].get_height() == pytest.approx(axes[0].get_position().y1)
+    assert not axes[0].patches and not axes[1].patches
+    # The heatmap would hide the shading, so the hits are outlined on it.
+    assert [_span(p) for p in axes[2].patches] == [(1.5, 3.5), (6.5, 8.5)]
+    assert all(ax.get_xlim() == (0.5, 8.5) for ax in axes)
+    assert [t.get_text() for t in axes[2].get_xticklabels()] == ["104", "106", "108", "110"]
+    fig = view_attribution_tracks([counts, profile], seq, hits=hits.drop("motif"))
+    assert len(fig.artists) == 3 and not fig.axes[0].texts
+
+
+def test_view_attribution_tracks_errors():
+    seq, counts, profile, ism = _tracks_input()
+    tracks = {"Counts": counts, "Profile": profile}
+    cases = [
+        ({"tracks": {}}, "no tracks"),
+        ({"tracks": [counts, profile], "kind": {"Counts": "all"}}, "need the tracks as a dict"),
+        ({"tracks": tracks, "kind": {"Shape": "heatmap"}}, "not given: Shape"),
+        ({"tracks": tracks, "kind": ["observed"]}, "one entry per track, 2 here"),
+        ({"tracks": tracks, "kind": "bars"}, "kind must be"),
+        ({"tracks": {"A": ism, "B": ism[:, :-1]}, "kind": "all", "sequence": None}, "different lengths: 15, 16"),
+        ({"tracks": tracks, "region": (0, 20)}, "region must lie within 0 to 16"),
+        ({"tracks": tracks, "heights": [1]}, "heights must have one entry per track"),
+        ({"tracks": tracks, "hits": pl.DataFrame({"start": [1]})}, "'end' column"),
+        ({"tracks": {"Counts": counts}, "sequence": seq[:-1]}, "letters for"),
+        ({"tracks": {"Counts": counts}, "alphabet": "ACGA"}, "repeated letters"),
+    ]
+    for kwargs, message in cases:
+        kwargs.setdefault("sequence", seq)
+        with pytest.raises(ValueError, match=message):
+            view_attribution_tracks(**kwargs)
+    with pytest.raises(TypeError, match="dict or a list"):
+        view_attribution_tracks(counts, seq)
+    # Nothing is left half drawn.
+    assert not plt.get_fignums()
 
 
 # --- Letter layout ------------------------------------------------------------------
