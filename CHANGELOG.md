@@ -1,40 +1,48 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-10-26)
 
+Breaking changes:
+
+- Motif and sequence index columns (`motif_i`, `sequence_i`, `subject_i`,
+  `target_i` and `universe_i`) are `UInt32` in every table rather than
+  `Int64`, which saves memory on large scans; tables still join on them.
 - Motifs displayed in Jupyter, and `logo_svg()`, stack the letters of
   each position by height and turn negative letters upside down by
   default, as `view_motifs()` does; `sort_positions` and `flip_neg` turn
   this off.
-- Motif and sequence index columns (`motif_i`, `sequence_i`, `subject_i`,
-  `target_i` and `universe_i`) are `UInt32` in every table rather than
-  `Int64`, which saves memory on large scans; tables still join on them.
-- Scanning and enrichment no longer spend about a second per 400 motifs
-  checking which motifs can reach the P-value cutoff, and a `Genome` is
-  scanned a batch of chromosomes at a time, which makes genome scans about
-  twice as fast and lighter on memory.
-- `dedup_hits()`, `genomic_hits()`, `motif_peaks()`, `motif_coocc()` and
-  `motif_proximity()` work on whole columns rather than row by row in
-  Python, which makes them 1.3 to 5 times faster on large hit tables and
-  cuts their peak memory by a quarter to a half. `genomic_hits()` and
-  `motif_peaks()` now raise a clear error for hits with missing positions.
-- `calc_windows()`, `read_contributions()`/`from_one_hot()`, `one_hot()`,
-  `read_meme()` and `count_kmers()` on long sequences are 1.7 to 20 times
-  faster and several use far less memory.
-- `get_bkg()` per sequence or window is about 1.7 times faster and needs
-  about 40% less memory, and `sequence_complexity()` finds the letters of
-  many sequences faster.
-- Large scans use about a quarter less memory at their peak, and hits in
-  sequences longer than 4 Gb keep their positions.
 - `normalize()` gives a PCM without a pseudocount a pseudocount of 1.
-- Fixes from the Rust crate: `get_matches()` no longer returns words
-  scoring just below the score, `score_match()` always agrees with
-  scanning, converting with a new pseudocount updates the consensus,
-  uniform columns convert to and from IC, merging and `shuffle_motifs()`
-  keep one-letter columns as probabilities, `get_bkg(rc=True)` counts
-  letters found only on the reverse strands, complexity and FASTA output
-  work by letter, TRANSFAC single-site counts are kept, and comparing
-  thousands of motifs with P-values is several times faster.
+
+Fixes, from the Rust crate:
+
+- `score_match()` always agrees with scanning, and `get_matches()` no
+  longer returns words scoring just below the score.
+- Converting with a new pseudocount updates the consensus, uniform
+  columns convert to and from IC, and merging and `shuffle_motifs()` keep
+  one-letter columns as probabilities.
+- `get_bkg(rc=True)` counts letters found only on the reverse strands,
+  complexity and FASTA output work by letter, TRANSFAC single-site counts
+  are kept, and hits in sequences longer than 4 Gb keep their positions.
+- `genomic_hits()` and `motif_peaks()` raise a clear error for hits with
+  missing positions.
+
+Speed and memory, with results unchanged:
+
+- Scanning and enrichment no longer spend about a second per 400 motifs
+  checking which motifs can reach the P-value cutoff, DNA scans score both
+  strands at once, and a `Genome` is scanned a batch of chromosomes at a
+  time: scans of many motifs are 1.6 to 2.6 times faster, enrichment 2.1
+  to 2.6 times, and genome scans 2.3 times with less memory.
+- Comparisons with P-values are up to 6 times faster for amino acid
+  motifs.
+- `dedup_hits()`, `genomic_hits()`, `motif_peaks()`, `motif_coocc()` and
+  `motif_proximity()` work on whole columns rather than row by row: 1.3 to
+  5 times faster on large hit tables, with a quarter to a half less peak
+  memory.
+- `calc_windows()`, `read_contributions()`, `one_hot()`, `read_meme()`,
+  `get_bkg()`, `count_kmers()` and `sequence_complexity()` are 1.3 to 20
+  times faster, and several use far less memory.
+- Large scans and file writing need less memory at their peak.
 
 ## 0.2.0 (2026-10-24)
 
