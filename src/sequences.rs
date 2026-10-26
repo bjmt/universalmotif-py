@@ -14,7 +14,7 @@ use universalmotif::shuffle::{self, ShuffleMethod, ShuffleOptions};
 
 use pyo3_arrow::PyTable;
 
-use crate::arrow::{f64s, i64s, strs, table};
+use crate::arrow::{f64_vec, f64s, i64s, strs, table};
 use crate::{PyMotif, err};
 
 fn chars(s: &str) -> Vec<char> {
@@ -126,30 +126,42 @@ fn _get_bkg(
         window: self::window(window),
         nthreads,
     };
-    let rows = py
-        .detach(|| kmer::get_bkg(&seqs, &names, &opts))
+    let t = py
+        .detach(|| kmer::get_bkg_table(&seqs, &names, &opts))
         .map_err(err)?;
+    // Each column is freed once it has been copied.
+    let kmer::BkgTable {
+        kmers,
+        sequence,
+        start,
+        end,
+        kmer,
+        count,
+        probability,
+        ..
+    } = t;
     let mut cols = Vec::new();
     if !merge {
         let n = names.len().max(1);
         cols.push((
             "sequence",
-            strs(
-                rows.iter()
-                    .map(|r| names[r.sequence.unwrap_or(0) % n].as_str()),
-            ),
+            strs(sequence.iter().map(|&s| names[s as usize % n].as_str())),
         ));
     }
+    drop(sequence);
     if opts.window.is_some() {
-        cols.push((
-            "start",
-            i64s(rows.iter().map(|r| r.start.unwrap_or(0) as i64)),
-        ));
-        cols.push(("end", i64s(rows.iter().map(|r| r.end.unwrap_or(0) as i64))));
+        cols.push(("start", i64s(start.iter().map(|&s| s as i64))));
+        cols.push(("end", i64s(end.iter().map(|&e| e as i64))));
     }
-    cols.push(("kmer", strs(rows.iter().map(|r| r.kmer.as_str()))));
-    cols.push(("count", i64s(rows.iter().map(|r| r.count as i64))));
-    cols.push(("probability", f64s(rows.iter().map(|r| r.probability))));
+    drop((start, end));
+    cols.push((
+        "kmer",
+        strs(kmer.iter().map(|&k| kmers[k as usize].as_str())),
+    ));
+    drop(kmer);
+    cols.push(("count", i64s(count.iter().map(|&c| c as i64))));
+    drop(count);
+    cols.push(("probability", f64_vec(probability)));
     table(cols)
 }
 

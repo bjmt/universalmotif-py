@@ -21,6 +21,9 @@
 - `calc_windows()`, `read_contributions()`/`from_one_hot()`, `one_hot()`,
   `read_meme()` and `count_kmers()` on long sequences are 1.7 to 20 times
   faster and several use far less memory.
+- `get_bkg()` per sequence or window is about 1.7 times faster and needs
+  about 40% less memory, and `sequence_complexity()` finds the letters of
+  many sequences faster.
 - Large scans use about a quarter less memory at their peak, and hits in
   sequences longer than 4 Gb keep their positions.
 - `normalize()` gives a PCM without a pseudocount a pseudocount of 1.

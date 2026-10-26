@@ -29,9 +29,28 @@ def _seed(seed: int | None) -> int:
     return seed
 
 
+def _letter_set(seqs: Iterable[str], chunk: int = 4096) -> set[str]:
+    """The distinct letters of some strings. They are read a few thousand at a
+    time, and long stretches of ASCII text have their byte values counted,
+    which is quicker than building a set from them."""
+    letters: set[str] = set()
+    seqs = list(seqs)
+    for i in range(0, len(seqs), chunk):
+        text = "".join(seqs[i:i + chunk])
+        if len(text) > 1 << 16 and text.isascii():
+            counts = np.bincount(np.frombuffer(text.encode("ascii"), dtype=np.uint8), minlength=128)
+            letters.update(chr(b) for b in np.flatnonzero(counts))
+        else:
+            letters.update(text)
+    return letters
+
+
 def _letters(alphabet: str | Iterable[str]) -> str:
     """Sorted unique letters of a string or of a sequence of letters."""
-    letters = set(alphabet) if isinstance(alphabet, str) else set("".join(alphabet))
+    if isinstance(alphabet, str):
+        letters = _letter_set([alphabet]) if len(alphabet) > 1 << 16 else set(alphabet)
+    else:
+        letters = set("".join(alphabet))
     return "".join(sorted(letters))
 
 
@@ -223,9 +242,7 @@ def sequence_complexity(
 
 
 def _default_alphabet(seqs: list[str]) -> str:
-    letters: set[str] = set()
-    for s in seqs:
-        letters.update(s)
+    letters = _letter_set(seqs)
     if letters <= set("ACGTN"):
         return "ACGT"
     if letters <= set("ACGUN"):
