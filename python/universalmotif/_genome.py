@@ -138,9 +138,12 @@ def extract_ranges(
     df = _range_table(ranges, "ranges")
     _check_ranges(genome, df)
     seqs = _fetch_ranges(genome, df, nthreads)
-    names = [f"{c}:{s}-{e}" + ("(-)" if st == "-" else "")
-             for c, s, e, st in df.select("chrom", "start", "end", "strand").iter_rows()]
-    return dict(zip(_make_unique(names), seqs))
+    names = df.select(
+        pl.format("{}:{}-{}", "chrom", "start", "end")
+        + pl.when(pl.col("strand") == "-").then(pl.lit("(-)")).otherwise(pl.lit(""))
+    ).to_series()
+    names = names.to_list() if names.n_unique() == len(names) else _make_unique(names.to_list())
+    return dict(zip(names, seqs))
 
 
 def _check_ranges(genome: Mapping[str, str], df: pl.DataFrame) -> None:
@@ -148,12 +151,22 @@ def _check_ranges(genome: Mapping[str, str], df: pl.DataFrame) -> None:
     from ._packed import PackedSequences
 
     lengths = genome.lengths if isinstance(genome, (Genome, PackedSequences)) else None
-    for c, s, e in df.select("chrom", "start", "end").iter_rows():
-        if c not in genome:
+    # Each chromosome is looked up once; the first range that is missing its
+    # chromosome or does not fit in it is reported.
+    known = {}
+    for c in df["chrom"].unique(maintain_order=True).to_list():
+        if c in genome:
+            known[c] = lengths[c] if lengths is not None else len(genome[c])
+    n = df["chrom"].replace_strict(list(known), list(known.values()), default=None,
+                                   return_dtype=pl.Int64)
+    s, e = df["start"], df["end"]
+    bad = n.is_null() | ((s < 0) | (e > n) | (s > e)).fill_null(False)
+    if bad.any():
+        i = int(bad.arg_true()[0])
+        c, s, e = df["chrom"][i], df["start"][i], df["end"][i]
+        if c not in known:
             raise ValueError(f"the chromosome {c!r} is not in the genome")
-        n = lengths[c] if lengths is not None else len(genome[c])
-        if s < 0 or e > n or s > e:
-            raise ValueError(f"the range {c}:{s}-{e} does not fit in {c} (length {n})")
+        raise ValueError(f"the range {c}:{s}-{e} does not fit in {c} (length {known[c]})")
 
 
 def _fetch_ranges(genome: Mapping[str, str], df: pl.DataFrame, nthreads: int = 1) -> list[str]:

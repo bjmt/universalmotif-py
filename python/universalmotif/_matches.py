@@ -71,12 +71,12 @@ class MotifMatches:
         """
         coo = self.matrix.tocoo()
         order = np.lexsort((coo.col, coo.row))
-        seqs = np.asarray(self.sequences, dtype=object)
-        motifs = np.asarray(self.motifs, dtype=object)
+        seqs = pl.Series(list(self.sequences), dtype=pl.String)
+        motifs = pl.Series(list(self.motifs), dtype=pl.String)
         return pl.DataFrame(
             {
-                "sequence": seqs[coo.row[order]].tolist(),
-                "motif": motifs[coo.col[order]].tolist(),
+                "sequence": seqs.gather(coo.row[order]),
+                "motif": motifs.gather(coo.col[order]),
                 "value": coo.data[order].astype(float),
             },
             schema={"sequence": pl.String, "motif": pl.String, "value": pl.Float64},

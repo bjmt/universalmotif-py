@@ -18,6 +18,9 @@
   Python, which makes them 1.3 to 5 times faster on large hit tables and
   cuts their peak memory by a quarter to a half. `genomic_hits()` and
   `motif_peaks()` now raise a clear error for hits with missing positions.
+- `calc_windows()`, `read_contributions()`/`from_one_hot()`, `one_hot()`,
+  `read_meme()` and `count_kmers()` on long sequences are 1.7 to 20 times
+  faster and several use far less memory.
 - Large scans use about a quarter less memory at their peak, and hits in
   sequences longer than 4 Gb keep their positions.
 - `normalize()` gives a PCM without a pseudocount a pseudocount of 1.

@@ -176,8 +176,9 @@ def one_hot(
     codes = table[np.frombuffer("".join(seqs).encode("latin-1"), dtype=np.uint8)]
     codes = codes.reshape(len(seqs), lengths.pop())
     out = np.zeros((codes.shape[0], len(alphabet), codes.shape[1]), dtype=dtype)
-    n, pos = np.nonzero(codes >= 0)
-    out[n, codes[n, pos], pos] = 1
+    # One channel at a time, which needs no index arrays.
+    for i in range(len(alphabet)):
+        out[:, i, :] = codes == i
     return out
 
 
@@ -193,13 +194,21 @@ def from_one_hot(x: Any, alphabet: str = "ACGT", unknown: str = "N") -> list[str
     >>> um.from_one_hot(um.one_hot(["ACGTN", "TTTTT"]))
     ['ACGTN', 'TTTTT']
     """
-    arr = _to_numpy(x)
+    arr = _to_numpy(x, dtype=None)
+    # Numbers are compared as they are; anything else is read as floats.
+    if arr.dtype.kind not in "biuf":
+        arr = arr.astype(float)
     if arr.ndim == 2:
         arr = arr[None]
     if arr.ndim != 3 or arr.shape[1] != len(alphabet):
         raise ValueError(f"the array must have shape (sequences, {len(alphabet)}, length)")
-    letters = np.array(list(alphabet) + [unknown])
     idx = np.where(arr.max(axis=1) > 0, arr.argmax(axis=1), len(alphabet))
+    symbols = list(alphabet) + [unknown]
+    if all(len(s) == 1 and s.isascii() for s in symbols):
+        # Each row's letters as bytes, decoded at once.
+        rows = np.frombuffer("".join(symbols).encode("ascii"), dtype=np.uint8)[idx]
+        return [row.tobytes().decode("ascii") for row in rows]
+    letters = np.array(symbols)
     return ["".join(row) for row in letters[idx]]
 
 

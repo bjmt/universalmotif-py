@@ -31,7 +31,8 @@ def _seed(seed: int | None) -> int:
 
 def _letters(alphabet: str | Iterable[str]) -> str:
     """Sorted unique letters of a string or of a sequence of letters."""
-    return "".join(sorted(set("".join(alphabet))))
+    letters = set(alphabet) if isinstance(alphabet, str) else set("".join(alphabet))
+    return "".join(sorted(letters))
 
 
 def _restore(sequences, names: list[str], seqs: list[str]):
@@ -120,11 +121,8 @@ def calc_windows(n: int, window: int = 1, overlap: int = 0, return_incomp: bool 
         window, overlap = n, 0
     if overlap >= window:
         raise ValueError("overlap cannot be greater or equal to window")
-    wins = _core._windows(n, window, overlap, return_incomp)
-    return pl.DataFrame(
-        {"start": [w[0] for w in wins], "end": [w[1] for w in wins]},
-        schema={"start": pl.Int64, "end": pl.Int64},
-    )
+    start, end = _core._windows(n, window, overlap, return_incomp)
+    return pl.DataFrame({"start": start, "end": end}, schema={"start": pl.Int64, "end": pl.Int64})
 
 
 def window_string(string: str, window: int = 1, overlap: int = 0, return_incomp: bool = True) -> list[str]:
@@ -225,7 +223,9 @@ def sequence_complexity(
 
 
 def _default_alphabet(seqs: list[str]) -> str:
-    letters = set("".join(seqs))
+    letters: set[str] = set()
+    for s in seqs:
+        letters.update(s)
     if letters <= set("ACGTN"):
         return "ACGT"
     if letters <= set("ACGUN"):

@@ -1,6 +1,7 @@
 //! Bindings for k-mers, backgrounds, complexity, shuffling, random sequences,
 //! implanting and motif discovery.
 
+use numpy::{IntoPyArray, PyArray1};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyDict;
@@ -35,8 +36,17 @@ fn _count_kmers(seq: &str, k: usize, alphabet: &str) -> Vec<u64> {
 }
 
 #[pyfunction]
-fn _windows(len: usize, window: usize, overlap: usize, incomplete: bool) -> Vec<(usize, usize)> {
-    kmer::windows(len, window, overlap, incomplete)
+fn _windows<'py>(
+    py: Python<'py>,
+    len: usize,
+    window: usize,
+    overlap: usize,
+    incomplete: bool,
+) -> (Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>) {
+    let w = kmer::windows(len, window, overlap, incomplete);
+    let start: Vec<i64> = w.iter().map(|&(s, _)| s as i64).collect();
+    let end: Vec<i64> = w.iter().map(|&(_, e)| e as i64).collect();
+    (start.into_pyarray(py), end.into_pyarray(py))
 }
 
 #[pyfunction]
