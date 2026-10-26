@@ -1,5 +1,7 @@
 # universalmotif (Python)
 
+[![PyPI](https://img.shields.io/pypi/v/universalmotif)](https://pypi.org/project/universalmotif/) [![DOI](https://joss.theoj.org/papers/10.21105/joss.07012/status.svg)](https://doi.org/10.21105/joss.07012)
+
 A Python package for working with sequence motifs: creating them, converting
 between their representations, reading and writing them in the common file
 formats, and using them to scan, compare and test sequences. It is a port of
