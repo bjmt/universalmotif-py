@@ -10,9 +10,10 @@ import numpy as np
 import polars as pl
 
 from . import _core
-from ._analysis import _make_unique, _sequence_pairs, scan_sequences
+from ._analysis import _genome_hits, _make_unique, _sequence_pairs, _warn_unreachable, scan_sequences
 from ._genome import Genome, signal_stats
 from ._packed import PackedSequences
+from ._api import _check_motif
 from ._core import Motif
 from ._sequences import _seed
 
@@ -272,14 +273,14 @@ def motif_proximity(
             hits = hits.filter(pl.col("sequence").is_in(list(anchored)))
             lengths = sequences.lengths
         elif isinstance(sequences, Genome):
-            # Read and scanned one anchored chromosome at a time.
+            # The anchored chromosomes, read and scanned a batch at a time.
             chroms = [c for c in sequences if c in anchored]
             if not chroms:
                 raise ValueError("none of the anchor chromosomes are in sequences")
-            hits = pl.concat([
-                scan_sequences(motifs, {c: sequences[c]}, pvalue=scan_pvalue, rc=rc, nthreads=nthreads)
-                for c in chroms
-            ])
+            ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
+            _warn_unreachable(ms, scan_pvalue)
+            hits = _genome_hits(ms, sequences, chroms, scan_pvalue, rc, None, nthreads, True,
+                                False, _make_unique([m.name for m in ms]))
             lengths = sequences.lengths
         else:
             chroms = {k: v for k, v in sequences.items() if k in anchored}

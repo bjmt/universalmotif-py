@@ -170,6 +170,51 @@ _HIT_SCHEMA = {
 }
 
 
+# Letters of a Genome scanned per call, about 64 MB.
+_GENOME_BATCH = 1 << 26
+
+
+def _genome_hits(ms, genome, chroms, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps,
+                 motif_names) -> pl.DataFrame:
+    """Hits in the chromosomes ``chroms`` of a Genome, as scan_sequences()
+    gives them, with ``sequence_i`` counting through ``chroms``. They are
+    scanned in batches of about _GENOME_BATCH letters, so that only a batch
+    is held in memory while each motif's scoring tables are built once per
+    batch rather than once per chromosome."""
+    parts: list[pl.DataFrame] = []
+    batch: list[str] = []
+    names: list[str] = []
+    first = size = 0
+
+    def flush() -> None:
+        part = pl.DataFrame(
+            _core._scan_sequences(ms, batch, pvalue, rc, overlaps, nthreads, use_gaps,
+                                  correct_gaps, motif_names, names)
+        ).cast(_HIT_SCHEMA)
+        parts.append(part.with_columns(pl.col("sequence_i") + first))
+        batch.clear()
+        names.clear()
+
+    for i, name in enumerate(chroms):
+        seq = genome[name]
+        if i == 0:
+            _warn_alphabet_mismatch(ms, _sample_letters([seq]), stacklevel=4)
+        batch.append(seq)
+        names.append(name)
+        size += len(seq)
+        del seq
+        if size >= _GENOME_BATCH:
+            flush()
+            first, size = i + 1, 0
+    if batch:
+        flush()
+    if not parts:
+        return pl.DataFrame(schema=_HIT_SCHEMA)
+    if len(parts) == 1:
+        return parts[0]
+    return pl.concat(parts).sort("motif_i", "sequence_i", "start", maintain_order=True)
+
+
 def _warn_unreachable(ms: list[Motif], pvalue: float, stacklevel: int = 3) -> None:
     """Warn about motifs that cannot give a P-value as small as ``pvalue``,
     and so can have no hits, with the smallest P-value each can give."""
@@ -242,8 +287,8 @@ def scan_sequences(
         without decoding them, and a gzipped or plain FASTA file given as a
         path object such as a ``pathlib.Path`` is read and scanned a batch at
         a time, so a genome can be scanned in a few hundred MB. A
-        [`Genome`][universalmotif.Genome] is scanned one chromosome at a
-        time.
+        [`Genome`][universalmotif.Genome] is scanned a few chromosomes at a
+        time, about 64 Mb of them or one if it is longer.
     rc
         Also scan the reverse strand.
     no_overlaps
@@ -306,22 +351,8 @@ def scan_sequences(
     from ._genome import Genome
 
     if isinstance(sequences, Genome):
-        # One chromosome at a time, so only one is held in memory.
-        parts = []
-        for i, name in enumerate(sequences):
-            seq = sequences[name]
-            if i == 0:
-                _warn_alphabet_mismatch(ms, _sample_letters([seq]))
-            part = pl.DataFrame(
-                _core._scan_sequences(ms, [seq], pvalue, rc, overlaps, nthreads, use_gaps,
-                                      correct_gaps, motif_names, [name])
-            ).cast(_HIT_SCHEMA)
-            parts.append(part.with_columns(pl.lit(i, dtype=pl.UInt32).alias("sequence_i")))
-            del seq
-        if not parts:
-            return pl.DataFrame(schema=_HIT_SCHEMA)
-        hits = pl.concat(parts).sort("motif_i", "sequence_i", "start", maintain_order=True)
-        return hits
+        return _genome_hits(ms, sequences, list(sequences), pvalue, rc, overlaps, nthreads,
+                            use_gaps, correct_gaps, motif_names)
     if isinstance(sequences, PackedSequences):
         hits = _core._scan_packed(ms, sequences._inner, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names)
     elif isinstance(sequences, os.PathLike):

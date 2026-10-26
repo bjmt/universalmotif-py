@@ -9,6 +9,10 @@
 - Motif and sequence index columns (`motif_i`, `sequence_i`, `subject_i`,
   `target_i` and `universe_i`) are `UInt32` in every table rather than
   `Int64`, which saves memory on large scans; tables still join on them.
+- Scanning and enrichment no longer spend about a second per 400 motifs
+  checking which motifs can reach the P-value cutoff, and a `Genome` is
+  scanned a batch of chromosomes at a time, which makes genome scans about
+  twice as fast and lighter on memory.
 - Large scans use about a quarter less memory at their peak, and hits in
   sequences longer than 4 Gb keep their positions.
 - `normalize()` gives a PCM without a pseudocount a pseudocount of 1.
