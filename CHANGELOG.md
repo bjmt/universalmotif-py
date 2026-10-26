@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- New plots:
+  - `plot_hits()` draws motif hits as strand arrows along sequences or
+    genomic ranges, with overlapping hits stacked in lanes.
+  - `plot_comparison()` draws a clustered heatmap of motif similarities,
+    with dendrograms and logos beside the rows.
+  - `plot_enrichment()` draws `enrich_motifs()` results as a volcano plot
+    with the top motifs labelled, and `plot_coocc()` draws `motif_coocc()`
+    pairs as a clustered heatmap with significant pairs marked.
+  - `plot_score_distribution()` draws a motif's exact null score
+    distribution with the score and P-value of each cutoff, and the scores
+    of real hits.
+- `draw_logo()` draws a motif's logo in a box on any matplotlib plot, in
+  data coordinates or fractions of the axes, for logos beside heatmap
+  rows, points or labels.
+- `view_motifs()` has `align=False` to draw motifs as they are, aligns
+  motifs narrower than `min_overlap` over their whole width as comparisons
+  do, and aligns CWMs to the one whose probabilities carry the most
+  information rather than to the first.
+
 ## 0.3.0 (2026-10-26)
 
 Breaking changes:

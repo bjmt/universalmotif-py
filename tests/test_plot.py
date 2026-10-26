@@ -95,6 +95,11 @@ def test_aligned_matrices_reference():
     for case in _ref("raw"):
         a = args(case["args"])
         ms = [(dna if case["set"] == "dna" else rna)[int(i) - 1] for i in nums(case["idx"])]
+        # The R package leaves motifs narrower than min.overlap unaligned,
+        # where the port aligns them over their whole width, as comparisons
+        # do; test_narrow_motifs_align() covers those.
+        if min(m.width for m in ms) < a.get("min.overlap", 6):
+            continue
         got = um.view_motifs(ms, return_raw=True, **_raw_kwargs(a))
         assert list(got) == case["names"], a
         for (name, m), want in zip(got.items(), case["matrices"]):
@@ -103,6 +108,28 @@ def test_aligned_matrices_reference():
             # which the port takes as 0.
             want[np.isnan(want)] = 0.0
             np.testing.assert_allclose(m, want, rtol=1e-12, atol=1e-14, err_msg=f"{a} {name}")
+
+
+def test_narrow_motifs_align():
+    long_ = um.create_motif("TTTGATAAGGCCA", nsites=50, pseudocount=1, name="long")
+    short = um.create_motif("GATAA", nsites=50, pseudocount=1, name="short")
+    raw = um.view_motifs([long_, short], rc=False, return_raw=True)
+    # The 5-column motif is aligned under the GATAA of the 13-column one,
+    # although the default min_overlap is 6.
+    assert np.allclose(raw["short"][:, 3:8], raw["long"][:, 3:8], atol=0.3)
+    assert not raw["short"][:, :3].any() and not raw["short"][:, 8:].any()
+    flat = um.view_motifs([long_, short], rc=False, align=False, return_raw=True)
+    assert flat["short"][:, :5].any() and not flat["short"][:, 5:].any()
+
+
+def test_cwm_anchor_has_information_content():
+    w = np.array([[0.0, 0.02, 0.0, 0.0], [0.5, 0.0, 0.0, 0.0], [0.0, 0.0, 0.6, 0.0],
+                  [0.0, 0.0, 0.0, 0.4], [0.3, 0.0, 0.0, 0.0]]).T
+    big = um.create_motif(w, alphabet="DNA", type="CWM", name="big")
+    small = um.create_motif(w[:, 1:4], alphabet="DNA", type="CWM", name="small")
+    raw = um.view_motifs([small, big], use_type="CWM", rc=False, return_raw=True)
+    # The small CWM is aligned under the matching columns of the big one.
+    np.testing.assert_allclose(raw["small"][:, 1:4], raw["big"][:, 1:4])
 
 
 def test_single_motif_polygons_reference(flush_negative_letters):
@@ -1009,3 +1036,48 @@ def test_motif_glyphs_edge_cases():
     assert motif_glyphs(np.zeros((4, 3)), list("ACGT"), "CWM") == []
     with pytest.raises(ValueError, match="use_type must be one of"):
         motif_glyphs(np.ones((4, 3)), list("ACGT"), "BITS")
+
+
+def test_draw_logo_fills_its_box():
+    import matplotlib.pyplot as plt
+
+    m = um.example_motifs()[3]
+    fig, ax = plt.subplots()
+    letters = um.draw_logo(ax, m, x=2, y=1, width=3, height=0.5)
+    xy = np.concatenate([p.vertices for p in letters.get_paths()])
+    assert xy[:, 0].min() >= 2 - 1e-9 and xy[:, 0].max() <= 5 + 1e-9
+    assert xy[:, 1].min() >= 1 - 1e-9 and xy[:, 1].max() <= 1.5 + 1e-9
+    lo, hi = ax.get_ylim()
+    assert lo <= xy[:, 1].min() and hi >= xy[:, 1].max(), "the axes grow to show the logo"
+    # One unit per position by default.
+    letters = um.draw_logo(ax, m, x=0.5)
+    xy = np.concatenate([p.vertices for p in letters.get_paths()])
+    assert xy[:, 0].max() <= 0.5 + m.width + 1e-9
+    # In axes coordinates the data limits are left alone.
+    before = ax.dataLim.bounds
+    um.draw_logo(ax, m, x=0, y=0, width=0.2, height=0.1, transform=ax.transAxes)
+    assert ax.dataLim.bounds == before
+    plt.close(fig)
+
+
+def test_draw_logo_options_and_errors():
+    import matplotlib.pyplot as plt
+
+    m = um.create_motif("TTGACC", nsites=20, pseudocount=1)
+    fig, ax = plt.subplots()
+    fwd = um.draw_logo(ax, m, width=6, height=1)
+    rev = um.draw_logo(ax, m, width=6, height=1, rc=True)
+    # The reverse complement's letters are the forward ones, complemented.
+    assert len(fwd.get_paths()) == len(rev.get_paths())
+    # A PPM fills its box: positions of one letter reach the top.
+    ppm = um.draw_logo(ax, m, x=10, y=0, width=6, height=2, use_type="PPM")
+    top = max(p.vertices[:, 1].max() for p in ppm.get_paths())
+    assert 1.8 < top <= 2 + 1e-9
+    with pytest.raises(ValueError, match="use_type must be"):
+        um.draw_logo(ax, m, use_type="XYZ")
+    with pytest.raises(ValueError, match="needs a motif that is a CWM"):
+        um.draw_logo(ax, m, use_type="CWM")
+    bare = um.create_motif("TTGA", type="PCM", nsites=5, pseudocount=0)
+    with pytest.raises(ValueError, match="pseudocount"):
+        um.draw_logo(ax, bare, use_type="PWM")
+    plt.close(fig)

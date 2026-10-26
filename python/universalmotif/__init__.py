@@ -94,7 +94,12 @@ from ._enrich import enrich_motifs, motif_coocc, motif_peaks
 from ._genome import Genome, extract_ranges, signal_stats, signal_values
 from ._genomic import match_bkg, motif_proximity
 from ._intervals import genomic_hits, to_polars_bio, to_pyranges
+from ._plot_comparison import plot_comparison
+from ._plot_hits import plot_hits
+from ._plot_results import plot_coocc, plot_enrichment
+from ._plot_scores import plot_score_distribution
 from ._plot import (
+    draw_logo,
     plot_match_bkg,
     plot_motif_peaks,
     plot_motif_proximity,
@@ -145,6 +150,7 @@ __all__ = [
     "create_motif",
     "create_sequences",
     "dedup_hits",
+    "draw_logo",
     "enrich_motifs",
     "example_file",
     "example_motifs",
@@ -189,9 +195,14 @@ __all__ = [
     "one_hot_batches",
     "pack_sequences",
     "pcm_to_ppm",
+    "plot_comparison",
+    "plot_coocc",
+    "plot_enrichment",
+    "plot_hits",
     "plot_match_bkg",
     "plot_motif_peaks",
     "plot_motif_proximity",
+    "plot_score_distribution",
     "position_icscore",
     "ppm_to_icm",
     "ppm_to_pcm",

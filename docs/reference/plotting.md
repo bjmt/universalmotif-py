@@ -6,9 +6,21 @@ Sequence logos and plots of analysis results, drawn with matplotlib, which is in
 
 ::: universalmotif.view_logo
 
+::: universalmotif.draw_logo
+
 ::: universalmotif.view_attributions
 
 ::: universalmotif.view_variant
+
+::: universalmotif.plot_hits
+
+::: universalmotif.plot_comparison
+
+::: universalmotif.plot_enrichment
+
+::: universalmotif.plot_coocc
+
+::: universalmotif.plot_score_distribution
 
 ::: universalmotif.plot_motif_peaks
 

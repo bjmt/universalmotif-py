@@ -144,6 +144,117 @@ def _default_colours(alphabet: str, letters: Sequence[str] = ()) -> dict[str, st
     return {letter: matplotlib.colors.to_hex(palette[i % len(palette)]) for i, letter in enumerate(letters)}
 
 
+def _logo_collection():
+    """A collection of letters that reports where it is drawn whatever its
+    transform, so that tight layouts and bbox_inches="tight" make room for
+    logos outside the axes."""
+    from matplotlib.collections import PolyCollection
+    from matplotlib.transforms import Bbox
+
+    class LogoCollection(PolyCollection):
+        def get_window_extent(self, renderer=None):
+            paths = self.get_paths()
+            if not paths:
+                return Bbox.null()
+            xy = self.get_transform().transform(np.concatenate([p.vertices for p in paths]))
+            return Bbox.from_extents(*xy.min(axis=0), *xy.max(axis=0))
+
+    return LogoCollection
+
+
+def draw_logo(
+    ax: Axes,
+    motif: Motif,
+    x: float = 0.0,
+    y: float = 0.0,
+    width: float | None = None,
+    height: float = 1.0,
+    use_type: str | None = None,
+    relative_entropy: bool = False,
+    rc: bool = False,
+    colour_scheme: Mapping[str, str] | None = None,
+    sort_positions: bool | None = None,
+    flip_neg: bool = True,
+    transform: Any = None,
+):
+    """Draw a motif's logo in a box on an existing plot.
+
+    The logo fills the box from ``(x, y)`` to ``(x + width, y + height)``, in
+    data coordinates or in those of ``transform``, such as ``ax.transAxes``
+    for fractions of the axes. ``width`` defaults to one unit per position,
+    so that a logo drawn at ``x = 0.5`` lines up with positions 1, 2, 3 and
+    so on. The box spans the logo's full scale, from 0 to the most bits a
+    position can have for an ICM, 0 to 1 for a PPM, and the range of the
+    motif itself for other types, so logos of the same type drawn in boxes
+    of the same height are on the same scale. Letters are drawn as in
+    [`view_motifs()`][universalmotif.view_motifs]: as information content
+    by default, or as contributions for a CWM, sorted by height except for
+    PCMs and PPMs, with negative letters flipped. ``rc`` draws the reverse
+    complement of a DNA or RNA motif.
+
+    Like text, the logo is not clipped to the axes, so it can sit beside
+    them, for example in place of a row label. Returns the matplotlib
+    collection of letters, which can be styled or removed like any other
+    artist.
+
+    Examples
+    --------
+    >>> import matplotlib
+    >>> matplotlib.use("Agg")
+    >>> import matplotlib.pyplot as plt
+    >>> import universalmotif as um
+    >>> fig, ax = plt.subplots()
+    >>> _ = ax.scatter([1, 2, 3], [0.2, 0.6, 0.4])
+    >>> letters = um.draw_logo(ax, um.example_motifs()[3], x=1, y=0.7, width=2, height=0.25)
+    >>> len(letters.get_paths()) > 0
+    True
+    >>> plt.close(fig)
+    """
+    motif = _check_motif(motif)
+    if rc:
+        from ._api import motif_rc
+
+        motif = motif_rc(motif)
+    use_type = use_type or ("CWM" if motif.type == "CWM" else "ICM")
+    if use_type not in _YLABELS:
+        raise ValueError("use_type must be one of PCM, PPM, PWM, ICM and CWM")
+    if use_type == "CWM":
+        if motif.type != "CWM":
+            raise ValueError('use_type="CWM" needs a motif that is a CWM')
+        m = np.asarray(motif.matrix, dtype=float)
+    else:
+        m = np.array(_core._display_matrix(motif, use_type, relative_entropy), dtype=float).T
+    if not np.isfinite(m).all():
+        raise ValueError(
+            "the motif has non-finite values in this type; give it a pseudocount, for example "
+            "with normalize(), first"
+        )
+    if sort_positions is None:
+        sort_positions = use_type not in ("PCM", "PPM")
+    glyphs = motif_glyphs(m, list(motif.letters), use_type, sort_positions=sort_positions,
+                          flip_neg=flip_neg)
+    _, (lo, hi) = _y_axis([m], use_type)
+    if hi <= lo:
+        hi = lo + 1
+    n = m.shape[1]
+    width = float(n) if width is None else float(width)
+    xscale, yscale = width / n, height / (hi - lo)
+    colours = dict(colour_scheme) if colour_scheme is not None else _default_colours(
+        motif.alphabet, list(motif.letters))
+    # Positions run from 0.5 to n + 0.5 in the glyphs' own coordinates.
+    verts = [np.column_stack([x + (g.x - 0.5) * xscale, y + (g.y - lo) * yscale]) for g in glyphs]
+    faces = [colours.get(g.group, _MISSING_COLOUR) for g in glyphs]
+    # Like text, logos are not clipped to the axes, so that they can sit
+    # beside them as labels.
+    letters = _logo_collection()(verts, facecolors=faces, edgecolors="none", linewidths=0,
+                                 transform=transform if transform is not None else ax.transData,
+                                 clip_on=False)
+    ax.add_collection(letters, autolim=transform is None)
+    if transform is None:
+        ax.autoscale_view()
+    return letters
+
+
 def _rc_matrix(m: np.ndarray) -> np.ndarray:
     return m[::-1, ::-1]
 
@@ -155,7 +266,16 @@ class _Default:
 _DEFAULT = _Default()
 
 
-def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by, rc_text, nthreads):
+def _anchor_ic(m: Motif) -> float:
+    """The information content a motif is chosen as the anchor by. CWMs have
+    none of their own, so that of their probabilities is used."""
+    if m.type == "CWM":
+        return _core._convert_type(m, "PPM", None, False).icscore
+    return m.icscore
+
+
+def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by, rc_text, nthreads,
+                    align=True):
     """Display matrices of motifs aligned to a common frame, in display
     order: returns (names, matrices, offsets, widths, alphabet)."""
     if use_type not in _YLABELS:
@@ -173,7 +293,8 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
 
     ic_order = list(range(len(ms)))
     if len(ms) > 1:
-        ic_order = sorted(ic_order, key=lambda i: -ms[i].icscore)
+        ic = [_anchor_ic(m) for m in ms]
+        ic_order = sorted(ic_order, key=lambda i: -ic[i])
     ms = [ms[i] for i in ic_order]
     if use_type == "CWM":
         mats = [np.asarray(m.matrix, dtype=float) for m in ms]
@@ -184,7 +305,11 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
     if len(ms) == 1:
         return names, mats, [0], widths, alphabet
 
-    placements, width = _core._anchor_layout(ms, 0, min_overlap, rc, nthreads)
+    if align:
+        placements, width = _core._anchor_layout(ms, 0, min_overlap, rc, nthreads)
+    else:
+        # Drawn as they are, from the left of a frame as wide as the widest.
+        placements, width = [(0, False)] * len(ms), max(widths)
     padded, offsets = [], []
     for i, (m, (left, flip)) in enumerate(zip(mats, placements)):
         if flip:
@@ -283,6 +408,7 @@ def view_motifs(
     use_type: str = "ICM",
     rc: bool = True,
     min_overlap: int = 6,
+    align: bool = True,
     relative_entropy: bool = False,
     sort_by: str = "none",
     show_names: bool = True,
@@ -307,15 +433,20 @@ def view_motifs(
     """Draw motifs as sequence logos.
 
     Motifs of any alphabet can be drawn. Several motifs are aligned to the
-    one with the highest information content in the same way as
+    one with the highest information content (for CWMs, that of their
+    probabilities) in the same way as
     [`compare_motifs()`][universalmotif.compare_motifs] aligns them, trying
     reverse complements of DNA and RNA motifs with ``rc``. Motifs that align
     better as reverse complements are flipped and get ``rc_text`` added to
     their names, and all of them are padded into a common frame and drawn
-    one above the other.
+    one above the other. With ``align=False`` they are drawn as they are,
+    from the left of the frame.
 
     Parameters
     ----------
+    align, min_overlap
+        Align motifs to one another, where they overlap the anchor by at
+        least ``min_overlap`` columns (or the whole of the narrower motif).
     use_type
         Matrix type to draw, one of ``"ICM"``, ``"PPM"``, ``"PWM"``,
         ``"PCM"``, or ``"CWM"`` for motifs that are CWMs. ICMs are drawn in
@@ -388,7 +519,7 @@ def view_motifs(
         fit_to_height = None
     motifs = [motifs] if isinstance(motifs, Motif) else list(motifs)
     names, mats, offsets, widths, alphabet = _prepare_motifs(
-        motifs, use_type, rc, min_overlap, relative_entropy, sort_by, rc_text, nthreads
+        motifs, use_type, rc, min_overlap, relative_entropy, sort_by, rc_text, nthreads, align
     )
     if return_raw:
         return dict(zip(names, mats))
@@ -1217,6 +1348,7 @@ __all__ = [
     "AA_COLOURS",
     "DNA_COLOURS",
     "RNA_COLOURS",
+    "draw_logo",
     "plot_match_bkg",
     "plot_motif_peaks",
     "plot_motif_proximity",
