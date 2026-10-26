@@ -1,5 +1,6 @@
 //! Bindings for proximity to genomic anchors and background matching.
 
+use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyDict;
@@ -11,22 +12,35 @@ use universalmotif::ranges::{GRange, GStrand, Orientation};
 
 use crate::err;
 
-type RangeCols = (Vec<usize>, Vec<i64>, Vec<i64>, Vec<String>);
+/// Ranges as arrays of chromosome numbers, starts, ends and strand codes
+/// (0 for `+`, 1 for `-` and 2 for none).
+type RangeCols<'py> = (
+    PyReadonlyArray1<'py, i64>,
+    PyReadonlyArray1<'py, i64>,
+    PyReadonlyArray1<'py, i64>,
+    PyReadonlyArray1<'py, i8>,
+);
 
 fn granges(cols: RangeCols) -> PyResult<Vec<GRange>> {
     let (chrom, start, end, strand) = cols;
-    (0..chrom.len())
-        .map(|i| {
-            Ok(GRange {
-                chrom: chrom[i],
-                start: start[i],
-                end: end[i],
-                strand: (strand.get(i).map_or("*", |s| s.as_str()))
-                    .parse::<GStrand>()
-                    .map_err(err)?,
-            })
+    let (chrom, start, end, strand) = (
+        chrom.as_slice()?,
+        start.as_slice()?,
+        end.as_slice()?,
+        strand.as_slice()?,
+    );
+    Ok((0..chrom.len())
+        .map(|i| GRange {
+            chrom: chrom[i] as usize,
+            start: start[i],
+            end: end[i],
+            strand: match strand[i] {
+                0 => GStrand::Plus,
+                1 => GStrand::Minus,
+                _ => GStrand::Any,
+            },
         })
-        .collect()
+        .collect())
 }
 
 #[pyfunction]
@@ -34,11 +48,11 @@ fn granges(cols: RangeCols) -> PyResult<Vec<GRange>> {
 #[allow(clippy::too_many_arguments)]
 fn _proximity<'py>(
     py: Python<'py>,
-    hits: RangeCols,
-    motif: Vec<usize>,
-    score: Vec<f64>,
-    anchors: RangeCols,
-    universe: RangeCols,
+    hits: RangeCols<'py>,
+    motif: PyReadonlyArray1<'py, i64>,
+    score: PyReadonlyArray1<'py, f64>,
+    anchors: RangeCols<'py>,
+    universe: RangeCols<'py>,
     chrom_lengths: Vec<Option<i64>>,
     method: &str,
     count: &str,
@@ -51,11 +65,12 @@ fn _proximity<'py>(
     nthreads: usize,
 ) -> PyResult<Bound<'py, PyDict>> {
     let hit_ranges = granges(hits)?;
+    let (motif, score) = (motif.as_slice()?, score.as_slice()?);
     let hits: Vec<ProximityHit> = hit_ranges
         .into_iter()
         .enumerate()
         .map(|(i, range)| ProximityHit {
-            motif: motif[i],
+            motif: motif[i] as usize,
             range,
             score: score[i],
         })
@@ -171,7 +186,7 @@ fn _genome_windows(
     chrom_lengths: Vec<i64>,
     target_widths: Vec<i64>,
     n_candidates: usize,
-    exclude: RangeCols,
+    exclude: RangeCols<'_>,
     seed: u64,
 ) -> PyResult<Vec<(usize, i64, i64)>> {
     let exclude = granges(exclude)?;

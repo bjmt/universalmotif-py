@@ -52,46 +52,60 @@ def genomic_hits(hits: pl.DataFrame, ranges=None) -> pl.DataFrame:
         if col not in hits.columns:
             raise ValueError(f"hits must have a {col!r} column")
     if ranges is None:
-        names = hits["sequence"].cast(pl.String).to_list()
-        parsed = {}
-        for name in dict.fromkeys(names):
+        names = hits["sequence"].cast(pl.String)
+        unique = names.unique(maintain_order=True).to_list()
+        parsed = []
+        for name in unique:
             m = _REGION.match(name)
             if m is None:
                 raise ValueError(
                     f"the sequence name {name!r} is not chrom:start-end; give the ranges "
                     "with ranges"
                 )
-            parsed[name] = (m[1], int(m[2]), int(m[3]), "-" if m[4] else "+")
-        where = [parsed[n] for n in names]
+            parsed.append((m[1], int(m[2]), int(m[3]), "-" if m[4] else "+"))
+        # Each hit's range, found through the index of its name.
+        idx = names.replace_strict(
+            unique, list(range(len(unique))), return_dtype=pl.UInt32
+        ).cast(pl.UInt32)
+        rows = parsed
     else:
         if "sequence_i" not in hits.columns:
             raise ValueError("hits must have a 'sequence_i' column to match them to ranges")
         table = _range_table(ranges, "ranges")
         rows = list(zip(table["chrom"], table["start"], table["end"], table["strand"]))
-        idx = hits["sequence_i"].to_list()
-        if any(i is None or not 0 <= i < len(rows) for i in idx):
+        idx = hits["sequence_i"].cast(pl.Int64)
+        if idx.null_count() or (idx < 0).any() or (idx >= len(rows)).any():
             raise ValueError(f"hits refer to sequences beyond the {len(rows)} ranges given")
-        where = [rows[i] for i in idx]
-    chrom, start, end, strand = [], [], [], []
-    for (c, rs, re_, rstrand), s, e, st in zip(where, hits["start"].to_list(),
-                                              hits["end"].to_list(), hits["strand"].to_list()):
-        chrom.append(c)
-        if rstrand == "-":
-            start.append(re_ - e)
-            end.append(re_ - s)
-            strand.append({"+": "-", "-": "+"}.get(st, st))
-        else:
-            start.append(rs + s)
-            end.append(rs + e)
-            strand.append(st)
-    out = hits.with_columns(
-        pl.Series("start", start, dtype=pl.Int64),
-        pl.Series("end", end, dtype=pl.Int64),
-        pl.Series("strand", strand, dtype=pl.String),
+    start, end = hits["start"].cast(pl.Int64), hits["end"].cast(pl.Int64)
+    if start.null_count() or end.null_count():
+        raise ValueError("start and end cannot contain nulls")
+    columns = list(zip(*rows)) if rows else [[], [], [], []]
+    where = pl.DataFrame(
+        {
+            "c": pl.Series(columns[0], dtype=pl.String),
+            "rs": pl.Series(columns[1], dtype=pl.Int64),
+            "re": pl.Series(columns[2], dtype=pl.Int64),
+            "rstrand": pl.Series(columns[3], dtype=pl.String),
+        }
+    ).select(pl.all().gather(idx))
+    minus = where["rstrand"] == "-"
+    st = hits["strand"].cast(pl.String)
+    flipped = (
+        pl.select(
+            pl.when(st == "+").then(pl.lit("-")).when(st == "-").then(pl.lit("+")).otherwise(st)
+        ).to_series()
     )
+    out = hits.with_columns(
+        pl.Series("start", pl.select(
+            pl.when(minus).then(where["re"] - end).otherwise(where["rs"] + start)).to_series()),
+        pl.Series("end", pl.select(
+            pl.when(minus).then(where["re"] - start).otherwise(where["rs"] + end)).to_series()),
+        pl.Series("strand", pl.select(pl.when(minus).then(flipped).otherwise(st)).to_series()),
+    )
+    chrom = where["c"]
     if "chrom" in out.columns:
         out = out.drop("chrom")
-    out = out.with_columns(pl.Series("chrom", chrom, dtype=pl.String))
+    out = out.with_columns(chrom.alias("chrom"))
     cols = [c for c in out.columns if c != "chrom"]
     at = cols.index("start")
     return out.select(cols[:at] + ["chrom"] + cols[at:])

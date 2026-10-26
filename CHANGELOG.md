@@ -13,6 +13,11 @@
   checking which motifs can reach the P-value cutoff, and a `Genome` is
   scanned a batch of chromosomes at a time, which makes genome scans about
   twice as fast and lighter on memory.
+- `dedup_hits()`, `genomic_hits()`, `motif_peaks()`, `motif_coocc()` and
+  `motif_proximity()` work on whole columns rather than row by row in
+  Python, which makes them 1.3 to 5 times faster on large hit tables and
+  cuts their peak memory by a quarter to a half. `genomic_hits()` and
+  `motif_peaks()` now raise a clear error for hits with missing positions.
 - Large scans use about a quarter less memory at their peak, and hits in
   sequences longer than 4 Gb keep their positions.
 - `normalize()` gives a PCM without a pseudocount a pseudocount of 1.

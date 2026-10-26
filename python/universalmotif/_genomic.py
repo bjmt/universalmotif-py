@@ -114,9 +114,22 @@ def _range_table(x, what: str) -> pl.DataFrame:
     return df
 
 
+_STRAND_CODES = {"+": 0, "-": 1, "*": 2, "": 2, "+-": 2}
+
+
 def _cols(df: pl.DataFrame, index: dict[str, int]):
-    return ([index[c] for c in df["chrom"]], df["start"].to_list(), df["end"].to_list(),
-            df["strand"].to_list())
+    """A range table as arrays of chromosome numbers, starts, ends and strand
+    codes for the core."""
+    strand = df["strand"].replace_strict(_STRAND_CODES, default=-1, return_dtype=pl.Int8)
+    bad = df["strand"].filter(strand == -1)
+    if len(bad):
+        raise ValueError(f"unknown strand '{bad[0]}'; expected '+', '-' or '*'")
+    chrom = df["chrom"].replace_strict(list(index), list(index.values()), return_dtype=pl.Int64)
+    return (chrom.cast(pl.Int64).to_numpy(), df["start"].cast(pl.Int64).to_numpy(),
+            df["end"].cast(pl.Int64).to_numpy(), strand.cast(pl.Int8).to_numpy())
+
+
+_NO_RANGES = (np.zeros(0, np.int64), np.zeros(0, np.int64), np.zeros(0, np.int64), np.zeros(0, np.int8))
 
 
 _PROXIMITY_SCHEMA = {
@@ -307,22 +320,28 @@ def motif_proximity(
     else:
         uni = _range_table(universe, "universe")
         lengths = {}
-    names = list(dict.fromkeys([*uni["chrom"], *anc["chrom"], *h["chrom"]]))
+    names = pl.concat([uni["chrom"], anc["chrom"], h["chrom"]]).unique(maintain_order=True).to_list()
     index = {c: i for i, c in enumerate(names)}
     chrom_lengths = [lengths.get(c) for c in names]
-    motif_names = [str(m) for m in hits["motif"].to_list()]
-    # Motifs keep the numbers scan_sequences() gave them, or else are
-    # numbered in order of first appearance.
+    # Motif names as str() gives them.
+    motif_names = hits["motif"].cast(pl.String).fill_null("None")
+    # Motifs keep the numbers scan_sequences() gave them (those of the last
+    # hit of each), or else are numbered in order of first appearance.
     if "motif_i" in hits.columns:
-        given = dict(zip(motif_names, hits["motif_i"].to_list()))
-        ids = sorted(given, key=lambda m: given[m])
+        last = (pl.DataFrame({"m": motif_names, "i": hits["motif_i"]})
+                .group_by("m", maintain_order=True).agg(pl.col("i").last())
+                .sort("i", maintain_order=True))
+        ids = last["m"].to_list()
+        given = dict(zip(ids, last["i"].to_list()))
     else:
-        ids = list(dict.fromkeys(motif_names))
+        ids = motif_names.unique(maintain_order=True).to_list()
     motif_index = {m: i for i, m in enumerate(ids)}
+    hit_cols = _cols(h, index)
     cols = _core._proximity(
-        _cols(h, index),
-        [motif_index[m] for m in motif_names],
-        hits["score"].cast(pl.Float64).to_list(),
+        hit_cols,
+        motif_names.replace_strict(ids, list(range(len(ids))), return_dtype=pl.Int64)
+        .cast(pl.Int64).to_numpy(),
+        hits["score"].cast(pl.Float64).to_numpy(),
         _cols(anc, index),
         _cols(uni, index),
         chrom_lengths,
@@ -490,7 +509,7 @@ def match_bkg(
         index = {c: i for i, c in enumerate(chroms)}
         excl = _range_table(exclude, "exclude").filter(pl.col("chrom").is_in(chroms)) \
             if exclude is not None else None
-        exclude_cols = _cols(excl, index) if excl is not None else ([], [], [], [])
+        exclude_cols = _cols(excl, index) if excl is not None else _NO_RANGES
         if n_candidates is None:
             n_candidates = max(10000, 10 * len(seqs))
         if isinstance(genome, (Genome, PackedSequences)):

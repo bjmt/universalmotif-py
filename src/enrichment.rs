@@ -1,6 +1,7 @@
 //! Bindings for enrichment, co-occurrence, positional enrichment and tree
 //! cutting.
 
+use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyDict;
@@ -96,9 +97,9 @@ fn _enrich<'py>(
 #[allow(clippy::too_many_arguments)]
 fn _coocc(
     py: Python<'_>,
-    motif: Vec<usize>,
-    sequence: Vec<usize>,
-    start: Vec<i64>,
+    motif: PyReadonlyArray1<i64>,
+    sequence: PyReadonlyArray1<i64>,
+    start: PyReadonlyArray1<i64>,
     n_motifs: usize,
     n_sequences: usize,
     max_distance: Option<u64>,
@@ -108,10 +109,11 @@ fn _coocc(
     nthreads: usize,
     names: Vec<String>,
 ) -> PyResult<PyTable> {
+    let (motif, sequence, start) = (motif.as_slice()?, sequence.as_slice()?, start.as_slice()?);
     let hits: Vec<CooccHit> = (0..motif.len())
         .map(|i| CooccHit {
-            motif: motif[i],
-            sequence: sequence[i],
+            motif: motif[i] as usize,
+            sequence: sequence[i] as usize,
             start: start.get(i).copied().unwrap_or(0),
         })
         .collect();
@@ -154,10 +156,10 @@ fn _coocc(
 #[allow(clippy::too_many_arguments)]
 fn _peaks<'py>(
     py: Python<'py>,
-    motif: Vec<usize>,
-    sequence: Vec<usize>,
-    centre: Vec<f64>,
-    score: Vec<f64>,
+    motif: PyReadonlyArray1<i64>,
+    sequence: PyReadonlyArray1<i64>,
+    centre: PyReadonlyArray1<f64>,
+    score: PyReadonlyArray1<f64>,
     seq_length: usize,
     mode: &str,
     min_window: usize,
@@ -166,10 +168,12 @@ fn _peaks<'py>(
     position_step: usize,
     nthreads: usize,
 ) -> PyResult<Bound<'py, PyDict>> {
+    let (motif, sequence) = (motif.as_slice()?, sequence.as_slice()?);
+    let (centre, score) = (centre.as_slice()?, score.as_slice()?);
     let hits: Vec<PeakHit> = (0..motif.len())
         .map(|i| PeakHit {
-            motif: motif[i],
-            sequence: sequence[i],
+            motif: motif[i] as usize,
+            sequence: sequence[i] as usize,
             centre: centre[i],
             score: score[i],
         })

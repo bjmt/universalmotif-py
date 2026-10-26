@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 
+import numpy as np
 import polars as pl
 
 from . import _core
-from ._analysis import _make_unique, _sequence_pairs, _warn_unreachable, scan_sequences
+from ._analysis import (
+    _first_codes,
+    _make_unique,
+    _sequence_pairs,
+    _warn_unreachable,
+    scan_sequences,
+)
 from ._api import _check_motif
 from ._core import Motif
 from ._sequences import _seed
@@ -108,30 +115,39 @@ def enrich_motifs(
     return df.filter(pl.col("qvalue") <= qvalue).sort("pvalue", "motif_i", maintain_order=True)
 
 
+def _outside(values: pl.Series, lo: int, hi: int | None = None) -> bool:
+    """Whether any value is missing, below ``lo`` or, with ``hi``, at or above it."""
+    if values.null_count() or (values < lo).any():
+        return True
+    return hi is not None and bool((values >= hi).any())
+
+
 def _coocc_hits(hits: pl.DataFrame, names: list[str], n_sequences: int, need_start: bool):
     if "sequence_i" not in hits.columns:
         raise ValueError("hits must have a sequence_i column")
     if "motif_i" in hits.columns and hits["motif_i"].dtype.is_integer():
-        motif = hits["motif_i"].to_list()
+        motif = hits["motif_i"].cast(pl.Int64)
     else:
         col = "motif_i" if "motif_i" in hits.columns else "motif"
         if col not in hits.columns:
             raise ValueError("hits must have a motif_i or motif column")
-        index = {n: i for i, n in enumerate(names)}
-        motif = [index.get(str(m), -1) for m in hits[col].to_list()]
-    if any(m is None or m < 0 or m >= len(names) for m in motif):
+        # Names are matched as text, as str() gives them.
+        text = hits[col].cast(pl.String).fill_null("None")
+        motif = text.replace_strict(names, list(range(len(names))), default=-1,
+                                    return_dtype=pl.Int64).cast(pl.Int64)
+    if _outside(motif, 0, len(names)):
         raise ValueError("some hits could not be matched to the motifs; check names and indices")
-    sequence = hits["sequence_i"].to_list()
-    if any(s is None or s < 0 or s >= n_sequences for s in sequence):
+    sequence = hits["sequence_i"].cast(pl.Int64)
+    if _outside(sequence, 0, n_sequences):
         raise ValueError("hits refer to sequence indices outside 0..n_sequences-1")
-    start: list[int] = []
+    start = pl.Series([], dtype=pl.Int64)
     if need_start:
         if "start" not in hits.columns:
             raise ValueError("hits must have a start column when max_distance is given")
-        start = hits["start"].to_list()
-        if any(s is None or s < 0 for s in start):
+        start = hits["start"].cast(pl.Int64)
+        if _outside(start, 0):
             raise ValueError("hit starts must be non-negative integers")
-    return motif, sequence, start
+    return motif.to_numpy(), sequence.to_numpy(), start.to_numpy()
 
 
 _COOCC_SCHEMA = {
@@ -217,7 +233,7 @@ def motif_coocc(
         n_sequences = len(seqs)
         h = scan_sequences(ms, seqs, pvalue=pvalue, rc=rc, nthreads=nthreads,
                            no_overlaps=no_overlaps, no_overlaps_by=no_overlaps_by)
-        motif, sequence, start = h["motif_i"].to_list(), h["sequence_i"].to_list(), h["start"].to_list()
+        motif, sequence, start = (h[c].cast(pl.Int64).to_numpy() for c in ("motif_i", "sequence_i", "start"))
     else:
         if n_sequences is None or n_sequences < 1:
             raise ValueError("n_sequences must be a positive integer when hits are given")
@@ -331,31 +347,41 @@ def motif_peaks(
     seq_col = "sequence" if "sequence" in hits.columns else "sequence_i" if "sequence_i" in hits.columns else None
     if seq_col is None:
         raise ValueError("hits must have a 'sequence' or 'sequence_i' column")
-    motif_names = [str(m) for m in hits["motif"].to_list()]
-    seq_values = hits[seq_col].to_list()
-    centres = ((hits["start"].cast(pl.Float64) + hits[end_col].cast(pl.Float64) - 1) / 2).to_list()
-    outside = [c for c in centres if not 0 <= c < seq_length]
-    if outside:
+    # Motif names as str() gives them.
+    motif_names = hits["motif"].cast(pl.String).fill_null("None")
+    seq_values = hits[seq_col]
+    centres = (hits["start"].cast(pl.Float64) + hits[end_col].cast(pl.Float64) - 1) / 2
+    if centres.null_count():
+        raise ValueError("hits cannot have missing start or end positions")
+    outside = centres.filter(~((centres >= 0) & (centres < seq_length)))
+    if len(outside):
         raise ValueError(f"{len(outside)} hit(s) are centred outside sequences of length {seq_length}, "
                          f"such as at {outside[0]:g}; check seq_length")
+    # Sequences are numbered in order of first appearance.
+    sequence, seq_unique = _first_codes(seq_values)
     if seq_strand is not None:
-        missing = {s for s in seq_values if s not in seq_strand}
+        missing = {s for s in seq_unique if s not in seq_strand}
         if missing:
             raise ValueError(f"seq_strand is missing sequences: {sorted(map(str, missing))[:5]}")
-        if any(seq_strand[s] not in ("+", "-") for s in set(seq_values)):
+        if any(seq_strand[s] not in ("+", "-") for s in seq_unique):
             raise ValueError("seq_strand values must be '+' or '-'")
-        centres = [seq_length - 1 - c if seq_strand[s] == "-" else c for s, c in zip(seq_values, centres)]
-    ids = sorted(set(motif_names))
+        minus = np.array([seq_strand[s] == "-" for s in seq_unique], dtype=bool)[sequence]
+        centres = pl.Series(np.where(minus, seq_length - 1 - centres.to_numpy(), centres.to_numpy()))
+    ids = motif_names.unique().sort().to_list()
     motif_index = {m: i for i, m in enumerate(ids)}
-    # Motifs keep the numbers scan_sequences() gave them, if there are any.
-    given = dict(zip(motif_names, hits["motif_i"].to_list())) if "motif_i" in hits.columns else None
-    seq_index: dict[object, int] = {}
-    sequence = [seq_index.setdefault(s, len(seq_index)) for s in seq_values]
+    # Motifs keep the numbers scan_sequences() gave them, if there are any:
+    # those of the last hit of each.
+    given = None
+    if "motif_i" in hits.columns:
+        last = pl.DataFrame({"m": motif_names, "i": hits["motif_i"]}).group_by("m").agg(pl.col("i").last())
+        given = dict(zip(last["m"].to_list(), last["i"].to_list()))
     cols = _core._peaks(
-        [motif_index[m] for m in motif_names],
+        motif_names.replace_strict(ids, list(range(len(ids))), return_dtype=pl.Int64)
+        .cast(pl.Int64)
+        .to_numpy(),
         sequence,
-        centres,
-        hits["score"].cast(pl.Float64).to_list(),
+        centres.cast(pl.Float64).to_numpy(),
+        hits["score"].cast(pl.Float64).to_numpy(),
         seq_length,
         mode,
         min_window,

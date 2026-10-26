@@ -1,5 +1,6 @@
 //! Bindings for P-values, scanning and hit deduplication.
 
+use numpy::PyReadonlyArray1;
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::{PyDict, PyList};
@@ -311,19 +312,21 @@ fn _scan_fasta<'py>(
 #[pyo3(signature = (sequence, motif, strand, start, end, priority, ignore_strand, ignore_motif))]
 #[allow(clippy::too_many_arguments)]
 fn _dedup(
-    sequence: Vec<usize>,
-    motif: Vec<usize>,
-    strand: Vec<i32>,
-    start: Vec<i64>,
-    end: Vec<i64>,
-    priority: Vec<f64>,
+    sequence: PyReadonlyArray1<i64>,
+    motif: PyReadonlyArray1<i64>,
+    strand: PyReadonlyArray1<i32>,
+    start: PyReadonlyArray1<i64>,
+    end: PyReadonlyArray1<i64>,
+    priority: PyReadonlyArray1<f64>,
     ignore_strand: bool,
     ignore_motif: bool,
-) -> Vec<bool> {
+) -> PyResult<Vec<bool>> {
+    let (sequence, motif, strand) = (sequence.as_slice()?, motif.as_slice()?, strand.as_slice()?);
+    let (start, end, priority) = (start.as_slice()?, end.as_slice()?, priority.as_slice()?);
     let hits: Vec<Interval> = (0..sequence.len())
         .map(|i| Interval {
-            sequence: sequence[i],
-            motif: motif[i],
+            sequence: sequence[i] as usize,
+            motif: motif[i] as usize,
             strand: match strand[i] {
                 0 => Strand::Plus,
                 1 => Strand::Minus,
@@ -334,7 +337,7 @@ fn _dedup(
             priority: priority[i],
         })
         .collect();
-    dedup(&hits, ignore_strand, ignore_motif)
+    Ok(dedup(&hits, ignore_strand, ignore_motif))
 }
 
 fn null_model(null: &str) -> PyResult<NullModel> {

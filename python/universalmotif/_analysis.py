@@ -365,6 +365,19 @@ def scan_sequences(
     return pl.DataFrame(hits).cast(_HIT_SCHEMA)
 
 
+def _first_codes(values: pl.Series) -> tuple[np.ndarray, list]:
+    """Each value's number in order of first appearance, missing values
+    included, and the distinct values in that order."""
+    unique = values.unique(maintain_order=True)
+    positions = np.arange(len(unique), dtype=np.int64)
+    known = unique.is_not_null().to_numpy()
+    codes = values.replace_strict(unique.filter(unique.is_not_null()), positions[known],
+                                  return_dtype=pl.Int64)
+    if not known.all():
+        codes = codes.fill_null(int(positions[~known][0]))
+    return codes.cast(pl.Int64).to_numpy(), unique.to_list()
+
+
 def dedup_hits(
     hits: pl.DataFrame,
     by: str = "pvalue",
@@ -402,33 +415,31 @@ def dedup_hits(
             raise ValueError(f"hits is missing the column {col!r}")
     if hits.height == 0:
         return hits
-    start = hits["start"].cast(pl.Int64).to_list()
-    end = hits["end"].cast(pl.Int64).to_list()
-    if any(s is None or e is None for s, e in zip(start, end)):
+    start = hits["start"].cast(pl.Int64)
+    end = hits["end"].cast(pl.Int64)
+    if start.null_count() or end.null_count():
         raise ValueError("start and end cannot contain nulls")
-    if any(s > e for s, e in zip(start, end)):
+    if (start > end).any():
         raise ValueError("all rows must satisfy start <= end")
-    priority = hits[by].cast(pl.Float64).to_list()
-    if any(p is None or p != p for p in priority):
+    priority = hits[by].cast(pl.Float64)
+    if priority.null_count() or priority.is_nan().any():
         raise ValueError(f"the column {by!r} cannot contain missing values")
     lower_is_better = by.lower().startswith("pval")
     if reverse:
         lower_is_better = not lower_is_better
     if lower_is_better:
-        priority = [-p for p in priority]
+        priority = -priority
 
-    def codes(values):
-        index: dict[object, int] = {}
-        return [index.setdefault(v, len(index)) for v in values]
-
-    strand_codes = [{"+": 0, "-": 1, "*": 2}.get(s, -1) for s in hits[strand].to_list()]
+    strand_codes = hits[strand].replace_strict(
+        {"+": 0, "-": 1, "*": 2}, default=-1, return_dtype=pl.Int32
+    )
     keep = _core._dedup(
-        codes(hits[seq].to_list()),
-        codes(hits[motif].to_list()),
-        strand_codes,
-        start,
-        end,
-        priority,
+        _first_codes(hits[seq])[0],
+        _first_codes(hits[motif])[0],
+        strand_codes.to_numpy(),
+        start.to_numpy(),
+        end.to_numpy(),
+        priority.to_numpy(),
         ignore_strand,
         ignore_motif,
     )
