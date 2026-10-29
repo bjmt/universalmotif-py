@@ -58,6 +58,7 @@
     which is meaningful for centred hypothetical scores.
   - `plot_variant_effects()` sets labels in rows with leader lines, so
     bunched variants stay readable.
+  - `plot_seqlets()` marks its information content axis at 0, 1 and 2 bits.
 - `read_seqlets()` reads TF-MoDISco seqlets as a table like a scan's,
   optionally placed on the genome and with their contribution scores, so
   they can be drawn with `plot_hits()` or `view_attributions()`.

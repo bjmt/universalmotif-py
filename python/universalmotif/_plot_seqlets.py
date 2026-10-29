@@ -271,7 +271,12 @@ def _logo_panel(ax, matrix: np.ndarray, label: str, limits: tuple[float, float] 
     ax.spines["left"].set_bounds(lo, hi)
     ax.set_ylabel(label, fontsize=8)
     ax.tick_params(axis="y", labelsize=7)
-    ax.yaxis.set_major_locator(MaxNLocator(nbins=2))
+    if limits is not None:
+        # Fixed limits, such as the 2 bits of DNA, are marked at both ends.
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=3, integer=True))
+        ax.set_yticks([t for t in ax.get_yticks() if lo - 1e-9 <= t <= hi + 1e-9])
+    else:
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=2))
 
 
 __all__ = ["plot_seqlets"]

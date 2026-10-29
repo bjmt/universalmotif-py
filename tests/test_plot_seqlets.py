@@ -171,3 +171,10 @@ def test_seqlets_from_a_modisco_file(tmp_path):
     scores[:, row["start"]:row["end"]] = np.asarray(row["scores"])
     ax = um.view_attributions(scores, seq, kind="all", region=window, hits=seqlets[:1])
     assert ax.texts[0].get_text() == "pos_patterns.pattern_0"
+
+
+def test_bits_axis_runs_to_two():
+    fig = um.plot_seqlets(_seqlets(), "pos_patterns.pattern_0")
+    bits = next(ax for ax in fig.axes if ax.get_ylabel() == "Bits")
+    assert list(bits.get_yticks()) == [0, 1, 2]
+    assert bits.spines["left"].get_bounds() == (0.0, 2.0)
