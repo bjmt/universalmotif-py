@@ -26,6 +26,22 @@
 - `read_seqlets()` reads TF-MoDISco seqlets as a table like a scan's,
   optionally placed on the genome and with their contribution scores, so
   they can be drawn with `plot_hits()` or `view_attributions()`.
+- `scan_sequences()` takes `first_hit=True` to keep only the leftmost hit
+  of each motif in each sequence, skipping the rest of the sequence, and
+  `um scan` takes `--first-hit`.
+- `match_motifs(value="matches")`, and `motif_coocc()` without
+  `max_distance`, stop scanning a sequence for a motif after its first
+  hit.
+- `compare_motifs()` takes `method="EUCL"` to compare motifs by Euclidean
+  distance, reported as mean distances where lower is more alike, and
+  `overhang="background"` to compare overhanging columns with the
+  background; the `compare` command takes `--method` and `--overhang`.
+- `compare_motifs()` P-values round column correlations to 201 bins
+  instead of 51, which makes them more accurate, especially for short,
+  near-perfect alignments, at about three times the cost of the P-values.
+  P-values and q-values change, while scores and alignments do not.
+- Comparisons, `motif_tree()` and `merge_similar()` are otherwise about 10%
+  faster, with identical results.
 - `draw_logo()` draws a motif's logo in a box on any matplotlib plot, in
   data coordinates or fractions of the axes, for logos beside heatmap
   rows, points or labels.

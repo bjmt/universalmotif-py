@@ -231,8 +231,13 @@ def motif_coocc(
     if hits is None:
         _, seqs = _sequence_pairs(sequences)
         n_sequences = len(seqs)
-        h = scan_sequences(ms, seqs, pvalue=pvalue, rc=rc, nthreads=nthreads,
-                           no_overlaps=no_overlaps, no_overlaps_by=no_overlaps_by)
+        if max_distance is None and not self_pairs:
+            # Only presence is tested, which removing overlaps of one motif
+            # cannot change, so the first hit of each motif is enough.
+            h = scan_sequences(ms, seqs, pvalue=pvalue, rc=rc, nthreads=nthreads, first_hit=True)
+        else:
+            h = scan_sequences(ms, seqs, pvalue=pvalue, rc=rc, nthreads=nthreads,
+                               no_overlaps=no_overlaps, no_overlaps_by=no_overlaps_by)
         motif, sequence, start = (h[c].cast(pl.Int64).to_numpy() for c in ("motif_i", "sequence_i", "start"))
     else:
         if n_sequences is None or n_sequences < 1:

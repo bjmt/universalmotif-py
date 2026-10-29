@@ -115,3 +115,22 @@ def test_counts_and_scores_by_hand():
     rna = um.match_motifs(um.switch_alph(site), {k: v.replace("T", "U") for k, v in seqs.items()},
                           value="counts", pvalue=5e-4)
     assert (rna.matrix != counts.matrix).nnz == 0
+
+
+@pytest.mark.parametrize("no_overlaps", [False, True])
+def test_presence_with_long_and_gapped_sequences(no_overlaps):
+    # Presence stops scanning a sequence at a motif's first hit, so long
+    # sequences are scanned in pieces that each stop on their own.
+    motifs = [um.create_motif(6 + i % 9, bkg=[0.25] * 4, seed=100 + i) for i in range(10)]
+    motifs.append(um.add_gap(motifs[3], 4, 0, 4))
+    motifs.append(um.example_motifs()[3])
+    seqs = um.create_sequences(seqnum=300, seqlen=400, seed=7)
+    seqs += ["AC" * 70_000 + s for s in um.create_sequences(seqnum=2, seqlen=100_000, seed=8)]
+    hits = um.scan_sequences(motifs, seqs, pvalue=1e-3, no_overlaps=no_overlaps,
+                             no_overlaps_by_strand=True, nthreads=2)
+    want = _expected(hits, len(seqs), len(motifs), "matches")
+    for nthreads in (1, 2):
+        got = um.match_motifs(motifs, seqs, pvalue=1e-3, no_overlaps=no_overlaps, nthreads=nthreads)
+        np.testing.assert_array_equal(got.matrix.toarray(), want)
+    first = um.scan_sequences(motifs, seqs, pvalue=1e-3, first_hit=True, nthreads=2)
+    assert first.height == int(want.sum())

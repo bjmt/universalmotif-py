@@ -175,7 +175,7 @@ _GENOME_BATCH = 1 << 26
 
 
 def _genome_hits(ms, genome, chroms, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps,
-                 motif_names) -> pl.DataFrame:
+                 motif_names, first_hit=False) -> pl.DataFrame:
     """Hits in the chromosomes ``chroms`` of a Genome, as scan_sequences()
     gives them, with ``sequence_i`` counting through ``chroms``. They are
     scanned in batches of about _GENOME_BATCH letters, so that only a batch
@@ -189,7 +189,7 @@ def _genome_hits(ms, genome, chroms, pvalue, rc, overlaps, nthreads, use_gaps, c
     def flush() -> None:
         part = pl.DataFrame(
             _core._scan_sequences(ms, batch, pvalue, rc, overlaps, nthreads, use_gaps,
-                                  correct_gaps, motif_names, names)
+                                  correct_gaps, first_hit, motif_names, names)
         ).cast(_HIT_SCHEMA)
         parts.append(part.with_columns(pl.col("sequence_i") + first))
         batch.clear()
@@ -261,6 +261,7 @@ def scan_sequences(
     no_overlaps_by_motif: bool = False,
     use_gaps: bool = True,
     correct_gaps: bool = False,
+    first_hit: bool = False,
 ) -> pl.DataFrame:
     """Scan sequences for motif hits.
 
@@ -311,6 +312,18 @@ def scan_sequences(
         combinations of gap sizes tried: hits must reach ``pvalue`` divided
         by that number, and their P-values are multiplied by it and capped
         at 1.
+    first_hit
+        Keep only the first hit of each motif in each sequence, the one
+        listed first without this option: the hit with the lowest ``start``,
+        and of a ``+`` and a ``-`` strand hit at the same start, the ``+``
+        one. This is the leftmost hit rather than the best, and its score and
+        P-value are the same as in a full scan. Scanning a sequence stops for
+        a motif soon after its first hit, so the time saved grows with the
+        share of sequences that contain the motif, and is small for motifs
+        that few sequences contain. To know only which sequences contain
+        each motif, [`match_motifs()`][universalmotif.match_motifs] does
+        the same without building a table of hits. It cannot be combined
+        with ``no_overlaps``.
 
     Returns
     -------
@@ -337,8 +350,24 @@ def scan_sequences(
     ('target_004', 448, 457, '-', 'GTTTGACCG')
     >>> round(hits["pvalue"][0], 7)
     3.43e-05
+
+    The G-box is a palindrome, so its sites are hit on both strands, and
+    ``first_hit`` keeps the ``+`` strand hit of the first site in each
+    sequence:
+
+    >>> gbox = um.example_motifs()[3]
+    >>> um.scan_sequences(gbox, um.example_sequences()).height
+    27
+    >>> first = um.scan_sequences(gbox, um.example_sequences(), first_hit=True)
+    >>> first.height
+    21
+    >>> first.select("sequence", "start", "strand").row(0)
+    ('target_015', 187, '+')
     """
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
+    if first_hit and no_overlaps:
+        raise ValueError("first_hit keeps one hit per motif and sequence, so it cannot be combined "
+                         "with no_overlaps")
     overlaps = (no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif) if no_overlaps else None
     motif_names = _make_unique([m.name for m in ms])
     if isinstance(sequences, str) and len(sequences) < 4096 and os.path.isfile(sequences):
@@ -352,16 +381,19 @@ def scan_sequences(
 
     if isinstance(sequences, Genome):
         return _genome_hits(ms, sequences, list(sequences), pvalue, rc, overlaps, nthreads,
-                            use_gaps, correct_gaps, motif_names)
+                            use_gaps, correct_gaps, motif_names, first_hit)
     if isinstance(sequences, PackedSequences):
-        hits = _core._scan_packed(ms, sequences._inner, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names)
+        hits = _core._scan_packed(ms, sequences._inner, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps,
+                                  first_hit, motif_names)
     elif isinstance(sequences, os.PathLike):
         path = os.fspath(sequences)
-        hits = _core._scan_fasta(ms, path, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names)
+        hits = _core._scan_fasta(ms, path, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, first_hit,
+                                 motif_names)
     else:
         names, seqs = _sequence_pairs(sequences)
         _warn_alphabet_mismatch(ms, _sample_letters(seqs))
-        hits = _core._scan_sequences(ms, seqs, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, motif_names, names)
+        hits = _core._scan_sequences(ms, seqs, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, first_hit,
+                                     motif_names, names)
     return pl.DataFrame(hits).cast(_HIT_SCHEMA)
 
 

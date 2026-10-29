@@ -128,7 +128,9 @@ def match_motifs(
     motif, so that hundreds of thousands of peaks and hundreds of motifs
     take no more memory than the matrix itself. ``value`` is ``"matches"``
     for 1 where a motif has a hit, ``"counts"`` for the number of hits, or
-    ``"scores"`` for the best score of any hit. Palindromic sites are hit on
+    ``"scores"`` for the best score of any hit. For ``"matches"``, scanning
+    a sequence stops for a motif soon after its first hit, which saves time
+    when many sequences contain it. Palindromic sites are hit on
     both strands, so ``no_overlaps`` drops overlapping hits of each motif,
     on either strand, before they are counted, keeping the one with the
     lowest P-value.

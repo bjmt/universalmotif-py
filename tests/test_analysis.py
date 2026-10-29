@@ -234,3 +234,66 @@ def test_dedup_hits_checks():
     for bad in (None, float("nan")):
         with pytest.raises(ValueError, match="'pvalue' cannot contain missing values"):
             um.dedup_hits(pl.DataFrame({**base, "pvalue": [bad, 0.1]}))
+
+
+def _first_hit_inputs():
+    motifs = [um.create_motif(6 + i % 9, bkg=[0.25] * 4, seed=100 + i) for i in range(12)]
+    motifs.append(um.add_gap(motifs[3], 4, 0, 4))
+    motifs.append(um.add_gap(motifs[8], [3, 7], [1, 0], [3, 2]))
+    motifs.append(um.example_motifs()[3])
+    seqs = dict(zip([f"s{i}" for i in range(200)], um.create_sequences(seqnum=200, seqlen=400, seed=7)))
+    long = um.create_sequences(seqnum=2, seqlen=150_000, seed=8)
+    seqs["long0"] = long[0][:70_000] + "N" * 500 + long[0][70_500:]
+    seqs["long1"] = long[1].lower()
+    # A repeat few motifs hit, so that many first hits come after the first
+    # chunk of the sequence that is scanned.
+    seqs["long2"] = "AC" * 70_000 + long[0][:30_000]
+    return motifs, seqs
+
+
+def _first_rows(hits):
+    return hits.group_by("motif_i", "sequence_i", maintain_order=True).first().select(hits.columns)
+
+
+@pytest.mark.parametrize("rc", [True, False])
+def test_first_hit_is_the_first_row_of_a_full_scan(rc, tmp_path):
+    motifs, seqs = _first_hit_inputs()
+    full = um.scan_sequences(motifs, seqs, pvalue=1e-3, rc=rc, nthreads=2)
+    want = _first_rows(full)
+    assert want.height > 1000 and (want["start"] >= 1 << 16).any()
+    if rc:
+        both = full.filter(pl.col("sequence") == "long2", pl.col("motif_i") == 14)
+        assert {"+", "-"} <= set(both["strand"])
+    for nthreads in (1, 2):
+        got = um.scan_sequences(motifs, seqs, pvalue=1e-3, rc=rc, nthreads=nthreads, first_hit=True)
+        assert got.equals(want), nthreads
+    packed = um.scan_sequences(motifs, um.pack_sequences(seqs), pvalue=1e-3, rc=rc, first_hit=True)
+    assert packed.equals(want)
+    path = tmp_path / "seqs.fa"
+    um.write_fasta(seqs, path)
+    assert um.scan_sequences(motifs, path, pvalue=1e-3, rc=rc, nthreads=2, first_hit=True).equals(want)
+    genome = um.scan_sequences(motifs, um.Genome(path), pvalue=1e-3, rc=rc, nthreads=2, first_hit=True)
+    assert genome.equals(want)
+
+
+def test_first_hit_with_corrected_gaps_and_other_alphabets():
+    motifs, seqs = _first_hit_inputs()
+    kw = {"pvalue": 1e-3, "correct_gaps": True, "nthreads": 2}
+    full = um.scan_sequences(motifs, seqs, **kw)
+    assert um.scan_sequences(motifs, seqs, first_hit=True, **kw).equals(_first_rows(full))
+    aa = [um.create_motif(4 + i, "AA", bkg=[0.05] * 20, seed=200 + i) for i in range(5)]
+    aa.append(um.add_gap(aa[4], 3, 0, 3))
+    aa_seqs = um.create_sequences("AA", 200, 300, seed=9) + um.create_sequences("AA", 1, 150_000, seed=10)
+    full = um.scan_sequences(aa, aa_seqs, pvalue=1e-3, nthreads=2)
+    got = um.scan_sequences(aa, aa_seqs, pvalue=1e-3, nthreads=2, first_hit=True)
+    assert got.height > 100 and got.equals(_first_rows(full))
+    with pytest.raises(ValueError, match="no_overlaps"):
+        um.scan_sequences(motifs, seqs, first_hit=True, no_overlaps=True)
+
+
+def test_coocc_presence_from_first_hits():
+    motifs, seqs = _first_hit_inputs()
+    hits = um.scan_sequences(motifs, seqs, pvalue=1e-3, no_overlaps=True, nthreads=2)
+    want = um.motif_coocc(motifs, hits=hits, n_sequences=len(seqs))
+    got = um.motif_coocc(motifs, seqs, pvalue=1e-3, no_overlaps=True, nthreads=2)
+    assert got.equals(want)
