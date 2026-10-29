@@ -1,38 +1,66 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-10-29)
 
-- New plots:
-  - `plot_hits()` draws motif hits as strand arrows along sequences or
-    genomic ranges, with overlapping hits stacked in lanes.
-  - `plot_comparison()` draws a clustered heatmap of motif similarities,
-    with dendrograms and logos beside the rows.
-  - `plot_enrichment()` draws `enrich_motifs()` results as a volcano plot
-    with the top motifs labelled, and `plot_coocc()` draws `motif_coocc()`
-    pairs as a clustered heatmap with significant pairs marked.
-  - `plot_score_distribution()` draws a motif's exact null score
-    distribution with the score and P-value of each cutoff, and the scores
-    of real hits.
-- Plots for sequence models:
-  - `plot_modisco()` draws TF-MoDISco results as a report, one row per
-    pattern with its seqlet count, CWM, letter frequencies and best
-    database matches.
-  - `plot_seqlets()` draws the seqlets of a pattern as rows of
-    contributions beside their letters, under the pattern's logos.
-  - `view_attribution_tracks()` stacks several attribution tracks of one
-    sequence on a shared axis, with hits marked across all of them.
-  - `plot_spacing()` and `plot_marginalization()` draw a model's response
-    to sites written in with `site_spacings()` and `insert_sites()`.
-- More plots for sequence models:
-  - `view_attribution_tracks()` takes `kind="signal"` for plain tracks such
-    as ATAC coverage or a predicted profile.
-  - `hit_contributions()` reads the contribution scores of every hit, along
-    its strand and with flanks, `plot_hit_profile()` draws their mean around
-    a motif's instances, and `plot_hit_contributions()` draws each hit's
-    contribution against its motif score.
-  - `plot_variant_effects()` draws many variant effects along a locus over
-    the motif hits, and `variant_motif_effects()` gives the change each
-    variant makes to the scores of the motif sites it falls in.
+Changes in behaviour:
+
+- `compare_motifs()` P-values round column correlations to 201 bins
+  instead of 51, which makes them more accurate, especially for short,
+  near-perfect alignments, at about three times the cost of the P-values.
+  P-values and q-values change, and so can the clusters of
+  `merge_similar()`, while scores and alignments do not.
+- `view_logo()` colours a motif's letters by its alphabet by default.
+- `view_variant(kind="all")` draws the change in every letter as a logo,
+  which is meaningful for centred hypothetical scores.
+- `plot_motif_peaks()` and `plot_motif_proximity()` draw motifs in the
+  order given in `motifs`.
+- `view_motifs()` aligns motifs narrower than `min_overlap` over their
+  whole width, as comparisons do, and aligns CWMs to the one whose
+  probabilities carry the most information rather than to the first.
+
+New plots:
+
+- `plot_hits()` draws motif hits as strand arrows along sequences or
+  genomic ranges, with overlapping hits stacked in lanes.
+- `plot_comparison()` draws a clustered heatmap of motif similarities,
+  with dendrograms and logos beside the rows.
+- `plot_enrichment()` draws `enrich_motifs()` results as a volcano plot
+  with the top motifs labelled, and `plot_coocc()` draws `motif_coocc()`
+  pairs as a clustered heatmap with significant pairs marked.
+- `plot_score_distribution()` draws a motif's exact null score
+  distribution with the score and P-value of each cutoff, and the scores
+  of real hits.
+- `pair_spacings()` and `plot_pair_spacing()` count and draw the distances
+  between pairs of motif hits by their orientation, against those expected
+  by chance.
+- `draw_logo()` draws a motif's logo in a box on any matplotlib plot, in
+  data coordinates or fractions of the axes, for logos beside heatmap
+  rows, points or labels.
+- `view_motifs()` has `align=False` to draw motifs as they are.
+- The API reference shows example figures of every plotting function.
+
+Sequence models:
+
+- `read_seqlets()` reads TF-MoDISco seqlets as a table like a scan's,
+  optionally placed on the genome and with their contribution scores, so
+  they can be drawn with `plot_hits()` or `view_attributions()`.
+- `plot_modisco()` draws TF-MoDISco results as a report, one row per
+  pattern with its seqlet count, CWM, letter frequencies and best
+  database matches, and `plot_seqlets()` draws the seqlets of a pattern as
+  rows of contributions beside their letters.
+- `view_attribution_tracks()` stacks several attribution tracks of one
+  sequence on a shared axis, with hits marked across all of them, and
+  takes `kind="signal"` for plain tracks such as ATAC coverage or a
+  predicted profile.
+- `hit_contributions()` reads the contribution scores of every hit, along
+  its strand and with flanks, `plot_hit_profile()` draws their mean around
+  a motif's instances, and `plot_hit_contributions()` draws each hit's
+  contribution against its motif score.
+- `plot_variant_effects()` draws many variant effects along a locus over
+  the motif hits, and `variant_motif_effects()` gives the change each
+  variant makes to the scores of the motif sites it falls in.
+- `plot_spacing()` and `plot_marginalization()` draw a model's response
+  to sites written in with `site_spacings()` and `insert_sites()`.
 - `pair_mutagenesis()` makes the single and double substitutions of a
   sequence for in silico double mutagenesis, with one substitution per
   position by default, and `interaction_effects()` turns a model's
@@ -41,35 +69,9 @@
   positions, such as these or a Jacobian of attributions, as a heatmap or
   a triangle, with the sequence or a contribution logo and motif hits
   along its edges.
-- `pair_spacings()` and `plot_pair_spacing()` count and draw the distances
-  between pairs of motif hits by their orientation, against those expected
-  by chance.
-- Names of neighbouring hits above attribution plots no longer overlap.
-- The API reference shows example figures of every plotting function.
-- Plotting fixes:
-  - `MotifTree.plot()` keeps its legends inside tight bounding boxes and
-    stacks the size legend below the groups legend, circular and fan trees
-    take in their tip labels, and tip labels no longer sit on sized tips.
-  - `view_motifs(use_type="PWM")` uses round, well-spaced y ticks.
-  - `plot_motif_proximity()` shades upstream and downstream zones on their
-    own side only, and it and `plot_motif_peaks()` draw motifs in the order
-    given.
-  - `plot_hits()` size legends fit their rows and keep clear of the x tick
-    labels.
-  - `plot_enrichment()` gives leader lines to every label not right beside
-    its point.
-  - `plot_match_bkg()` takes `names` to label the two sets.
-  - `view_logo()` colours a motif's letters by its alphabet by default.
-  - `plot_modisco()` no longer hides database matches that share a
-    pattern's label.
-  - `view_variant(kind="all")` draws the change in every letter as a logo,
-    which is meaningful for centred hypothetical scores.
-  - `plot_variant_effects()` sets labels in rows with leader lines, so
-    bunched variants stay readable.
-  - `plot_seqlets()` marks its information content axis at 0, 1 and 2 bits.
-- `read_seqlets()` reads TF-MoDISco seqlets as a table like a scan's,
-  optionally placed on the genome and with their contribution scores, so
-  they can be drawn with `plot_hits()` or `view_attributions()`.
+
+Scanning and comparison:
+
 - `scan_sequences()` takes `first_hit=True` to keep only the leftmost hit
   of each motif in each sequence, skipping the rest of the sequence, and
   `um scan` takes `--first-hit`.
@@ -80,22 +82,31 @@
   distance, reported as mean distances where lower is more alike, and
   `overhang="background"` to compare overhanging columns with the
   background; the `compare` command takes `--method` and `--overhang`.
-- `compare_motifs()` P-values round column correlations to 201 bins
-  instead of 51, which makes them more accurate, especially for short,
-  near-perfect alignments, at about three times the cost of the P-values.
-  P-values and q-values change, while scores and alignments do not.
 - Comparisons, `motif_tree()` and `merge_similar()` are otherwise about 10%
   faster, with identical results.
 - `motif_proximity()` takes `chrom_lengths` to clip zones at chromosome
   ends when the universe is a range table, and keeps the lengths of
   `sequences` in that case instead of dropping them.
-- `draw_logo()` draws a motif's logo in a box on any matplotlib plot, in
-  data coordinates or fractions of the axes, for logos beside heatmap
-  rows, points or labels.
-- `view_motifs()` has `align=False` to draw motifs as they are, aligns
-  motifs narrower than `min_overlap` over their whole width as comparisons
-  do, and aligns CWMs to the one whose probabilities carry the most
-  information rather than to the first.
+
+Fixes:
+
+- `MotifTree.plot()` keeps its legends inside tight bounding boxes and
+  stacks the size legend below the groups legend, circular and fan trees
+  take in their tip labels, and tip labels no longer sit on sized tips.
+- `view_motifs(use_type="PWM")` uses round, well-spaced y ticks.
+- `plot_motif_proximity()` shades upstream and downstream zones on their
+  own side only.
+- `plot_hits()` size legends fit their rows and keep clear of the x tick
+  labels.
+- `plot_enrichment()` gives leader lines to every label not right beside
+  its point.
+- `plot_match_bkg()` takes `names` to label the two sets.
+- `plot_modisco()` no longer hides database matches that share a
+  pattern's label.
+- `plot_variant_effects()` sets labels in rows with leader lines, so
+  bunched variants stay readable.
+- `plot_seqlets()` marks its information content axis at 0, 1 and 2 bits.
+- Names of neighbouring hits above attribution plots no longer overlap.
 
 ## 0.3.0 (2026-10-26)
 

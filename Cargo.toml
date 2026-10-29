@@ -1,6 +1,6 @@
 [package]
 name = "universalmotif-py"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "MIT"
 publish = false
@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 # The crate next door during development, and the published version for
 # builds from a source distribution.
-universalmotif = { version = "0.2.0", path = "../universalmotif-rs" }
+universalmotif = { version = "0.3.0", path = "../universalmotif-rs" }
 arrow-array = "59"
 arrow-schema = "59"
 numpy = "0.30.0"
