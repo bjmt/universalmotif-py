@@ -164,6 +164,10 @@ def plot_comparison(
     matrix
         A precomputed square matrix of the kind chosen by ``value``. A
         DataFrame's column names become the labels when no motifs are given.
+        Scores are clustered as correlations, so the mean distances of
+        ``compare_motifs(method="EUCL")`` need a tree from
+        [`motif_tree()`][universalmotif.motif_tree] as ``cluster``, or no
+        clustering.
     labels
         A motif attribute to label rows and columns with, such as
         ``"name"`` or ``"altname"``, or one label per motif.

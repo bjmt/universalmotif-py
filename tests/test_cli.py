@@ -439,6 +439,12 @@ def test_scan_options(tmp_path, genome, capsys):
     for _key, grp in kept.group_by("motif", "sequence", "strand"):
         spans = sorted(grp.select("start", "end").rows())
         assert all(a[1] <= b[0] for a, b in itertools.pairwise(spans))
+    run("scan", MOTIFS, "-s", TARGETS, "-P", "1e-3", "--first-hit", "-o", tmp_path / "first.tsv")
+    first = table(tmp_path / "first.tsv")
+    every = table(tmp_path / "all.tsv")
+    assert first.equals(every.group_by("motif", "sequence", maintain_order=True).first().select(every.columns))
+    run("scan", MOTIFS, "-s", TARGETS, "--first-hit", "--no-overlaps", ok=False)
+    assert "cannot be used with --no-overlaps" in capsys.readouterr().err
     run("scan", MOTIFS, "-s", TARGETS, "-g", fasta, ok=False)
     assert "either with -s, or with -g" in capsys.readouterr().err
 
@@ -467,6 +473,10 @@ def test_compare_options(tmp_path, capsys):
     assert mat.columns[1:] == mat["motif"].to_list()
     run("compare", MOTIFS, "--matrix", "score", "--db", MOTIFS, ok=False)
     assert "not with --db" in capsys.readouterr().err
+    run("compare", MOTIFS, "--matrix", "score", "--method", "EUCL", "--overhang", "background",
+        "-o", tmp_path / "e.tsv")
+    dist = table(tmp_path / "e.tsv").drop("motif").rows()
+    assert all((d == 0) == (i == j) for i, row in enumerate(dist) for j, d in enumerate(row))
 
 
 def test_targets_from_genome(tmp_path, genome, capsys):

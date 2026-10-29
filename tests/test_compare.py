@@ -279,3 +279,152 @@ def test_whole_number_matrices_with_uneven_columns():
     m = um.create_motif(np.array([[1.0, 2, 3, 4], [5, 6, 7, 8]]).T, alphabet="DNA", nsites=10,
                         type="PCM")
     assert m.matrix.sum(axis=0).tolist() == [10, 10]
+
+
+def _ppm(m):
+    return np.asarray(um.convert_type(m, "PPM").matrix, dtype=float)
+
+
+def _column_scores(a, b, method):
+    """Column scores as comparisons use them, for columns along the last axis:
+    Pearson correlations centred on 1/4, 0 for uniform columns, or negated
+    Euclidean distances."""
+    if method == "EUCL":
+        return -np.sqrt(((a - b) ** 2).sum(axis=-1))
+    a, b = a - 0.25, b - 0.25
+    na, nb = np.sqrt((a * a).sum(axis=-1)), np.sqrt((b * b).sum(axis=-1))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        r = (a * b).sum(axis=-1) / (na * nb)
+    return np.where((na * na < 1e-12) | (nb * nb < 1e-12), 0.0, r)
+
+
+def _target_terms(query, row, wt, method, bkg):
+    """For each target column, the query column it faces or None, and the
+    weight of its score: 2 for facing columns with background overhangs, 1
+    otherwise, and 0 for overhanging columns without them."""
+    t_start = max(-row["offset"], 0)
+    q_start = row["offset"] + t_start
+    facing = [q_start + j - t_start if t_start <= j < t_start + row["overlap"] else None
+              for j in range(wt)]
+    weights = [(2 if bkg is not None else 1) if f is not None else (1 if bkg is not None else 0)
+               for f in facing]
+    q_out = 0.0
+    if bkg is not None:
+        out = [i for i in range(query.shape[1]) if not q_start <= i < q_start + row["overlap"]]
+        q_out = float(_column_scores(query[:, out].T, np.asarray(bkg), method).sum())
+    return facing, weights, q_out
+
+
+def _alignment_total(query, target_cols, facing, weights, method, bkg):
+    """The target's part of an alignment's score for targets given as arrays
+    of shape (..., width, 4)."""
+    total = 0.0
+    for j, (f, w) in enumerate(zip(facing, weights)):
+        if w == 0:
+            continue
+        other = query[:, f] if f is not None else np.asarray(bkg)
+        total = total + w * _column_scores(target_cols[..., j, :], other, method)
+    return total
+
+
+def test_euclidean_and_background_scores():
+    motifs = um.example_motifs()[:6]
+    for method, overhang in (("EUCL", "ignore"), ("PCC", "background"), ("EUCL", "background")):
+        kw = {"method": method, "overhang": overhang}
+        scores = um.compare_motifs(motifs, **kw)
+        np.testing.assert_allclose(scores, scores.T, atol=1e-12)
+        if method == "EUCL":
+            # Distances of 0 are not -0.
+            assert not np.signbit(np.diag(scores)).any() and (np.diag(scores) == 0).all()
+            assert (scores >= 0).all() and (scores <= np.sqrt(2)).all()
+        else:
+            np.testing.assert_allclose(np.diag(scores), 1)
+        p = um.compare_motifs(motifs, matrix_out="pvalue", **kw)
+        assert ((p >= 0) & (p <= 1)).all()
+        assert (np.argmin(p, axis=1) == np.arange(6)).all()
+        bkg = [0.25] * 4 if overhang == "background" else None
+        rows = um.compare_motifs(motifs, compare_to=list(range(6)), qvalue=1, **kw)
+        for row in rows.iter_rows(named=True):
+            q, t = motifs[row["subject_i"]], motifs[row["target_i"]]
+            assert row["score"] == pytest.approx(scores[row["subject_i"], row["target_i"]])
+            query = _ppm(q)[::-1, ::-1] if row["strand"] == "-" else _ppm(q)
+            target = _ppm(t)
+            facing, weights, q_out = _target_terms(query, row, t.width, method, bkg)
+            total = _alignment_total(query, target.T, facing, weights, method, bkg) + q_out
+            n = q.width + t.width if bkg is not None else row["overlap"]
+            want = total / n
+            assert row["score"] == pytest.approx(-want if method == "EUCL" else want, abs=1e-12)
+
+    # A uniform background correlates 0 with anything, so with correlations
+    # the alignments stay as they are and only the scores are averaged over
+    # both motifs.
+    plain = um.compare_motifs(motifs, compare_to=0, qvalue=1)
+    padded = um.compare_motifs(motifs, compare_to=0, qvalue=1, overhang="background")
+    plain, padded = plain.sort("target_i"), padded.sort("target_i")
+    assert plain.select("offset", "strand", "overlap").equals(padded.select("offset", "strand", "overlap"))
+    widths = np.array([motifs[0].width + motifs[i].width for i in plain["target_i"]])
+    np.testing.assert_allclose(padded["score"], plain["score"] * 2 * plain["overlap"] / widths)
+    # Distance matrices cluster as they are.
+    tree = um.motif_tree(um.compare_motifs(motifs, method="EUCL"), labels=[m.name for m in motifs])
+    assert len(tree.merge) == 5
+
+
+def test_compare_method_checks():
+    motifs = um.example_motifs()[:3]
+    with pytest.raises(ValueError, match="method must be 'PCC' or 'EUCL'"):
+        um.compare_motifs(motifs, method="SW")
+    with pytest.raises(ValueError, match="overhang must be 'ignore' or 'background'"):
+        um.compare_motifs(motifs, overhang="pad")
+    with pytest.raises(ValueError, match="cannot be combined"):
+        um.compare_motifs(motifs, complete=True, overhang="background")
+    with pytest.raises(ValueError, match="bkg must"):
+        um.compare_motifs(motifs, overhang="background", bkg=[0.5, 0.5, 0.5, 0.5])
+    # Complete scores work with distances too, and the defaults are PCC
+    # without overhangs.
+    assert um.compare_motifs(motifs, method="EUCL", complete=True, matrix_out="pvalue").shape == (3, 3)
+    np.testing.assert_array_equal(um.compare_motifs(motifs, method="PCC", overhang="ignore"),
+                                  um.compare_motifs(motifs))
+
+
+def test_euclidean_and_background_pvalues_against_simulation():
+    """Each P-value, less its Bonferroni correction, is the probability that a
+    target of random columns, drawn from the columns of all the motifs as the
+    empirical null has them, scores at least as well in the same alignment.
+    Column scores are rounded to 51 bins for correlations and 201 for
+    distances for the exact null, which can move a total by up to half a bin
+    per column, so the simulated probabilities are taken that much either
+    side of the observed total."""
+    def make(s):
+        return um.create_motif(s, nsites=20, pseudocount=1)
+
+    motifs = [make(["TGACTCA", "TGAGTCA"]), make("TGACGTCA"), make(["CACGTGA", "CACATGA"]),
+              make("GATTACAG"), make(["AACCCTA", "AACCGTA"]), make("TTGACGTCA")]
+    pool = np.concatenate([_ppm(m).T for m in motifs])
+    rng = np.random.default_rng(1)
+    checked = 0
+    for method, overhang, bkg in (("EUCL", "ignore", None), ("EUCL", "background", [0.25] * 4),
+                                  ("PCC", "background", [0.35, 0.15, 0.15, 0.35]),
+                                  ("EUCL", "background", [0.35, 0.15, 0.15, 0.35])):
+        lo, hi, steps = (-np.sqrt(2), 0.0, 200) if method == "EUCL" else (-1.0, 1.0, 50)
+        half_bin = (hi - lo) / steps / 2
+        rows = um.compare_motifs(motifs, compare_to=[0, 3], qvalue=1, min_overlap=4, method=method,
+                                 overhang=overhang, bkg=bkg)
+        for row in rows.iter_rows(named=True):
+            q, t = motifs[row["subject_i"]], motifs[row["target_i"]]
+            mo = min(4, q.width, t.width)
+            n_tested = 2 * (q.width + t.width - 2 * mo + 1)
+            tail = row["pvalue"] / n_tested
+            if row["pvalue"] >= 1 or not 1e-3 < tail < 0.5:
+                continue
+            query = _ppm(q)[::-1, ::-1] if row["strand"] == "-" else _ppm(q)
+            facing, weights, _ = _target_terms(query, row, t.width, method, bkg)
+            observed = _alignment_total(query, _ppm(t).T, facing, weights, method, bkg)
+            random = pool[rng.integers(len(pool), size=(200_000, t.width))]
+            sims = _alignment_total(query, random, facing, weights, method, bkg)
+            slack = (sum(weights) + 1) * half_bin + 1e-9
+            low, high = (sims >= observed + slack).mean(), (sims >= observed - slack).mean()
+            se = np.sqrt(max(high, 1e-4) * (1 - low) / len(sims))
+            ctx = f"{method} {overhang} {bkg} {row['subject']} vs {row['target']}"
+            assert low - 4 * se <= tail <= high + 4 * se, (ctx, low, tail, high)
+            checked += 1
+    assert checked >= 10

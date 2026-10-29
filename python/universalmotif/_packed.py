@@ -13,7 +13,9 @@ class PackedSequences(Mapping[str, str]):
 
     DNA and RNA take two bits per letter, so a human genome needs about
     0.8 GB instead of 3.1 GB as text; other alphabets take a byte per
-    letter. [`scan_sequences()`][universalmotif.scan_sequences] scans them as they are, which makes them
+    letter. The packing borrows the idea of UCSC's
+    [2bit format](https://genome.ucsc.edu/FAQ/FAQformat.html#format7), which also stores four bases to a byte and keeps
+    runs of other letters, such as ``N``, to one side. [`scan_sequences()`][universalmotif.scan_sequences] scans them as they are, which makes them
     the way to scan one large set of sequences many times.
 
     They are also a read-only mapping from names to sequences, so they can

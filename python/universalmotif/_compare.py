@@ -41,6 +41,8 @@ def compare_motifs(
     matrix_out: str = "score",
     nthreads: int = 1,
     complete: bool = False,
+    method: str = "PCC",
+    overhang: str = "ignore",
 ):
     """Compare motifs.
 
@@ -58,6 +60,30 @@ def compare_motifs(
     P-values are worked out for each query's own columns and alignments, so
     a P-value matrix need not be symmetric even where the scores are.
 
+    With ``method="EUCL"``, columns are compared by the Euclidean distance
+    between their probabilities instead, and ``score`` is the mean distance,
+    from 0 for identical columns up to the square root of 2, so that lower
+    means more alike. Since summed distances favour short overlaps, these
+    alignments are chosen by their mean distance, unless ``complete`` or
+    background overhangs make every alignment cover the same number of
+    columns. Everything else, P-values included, works as it does for
+    correlations, with distances counting as negative similarities.
+
+    With ``overhang="background"``, the columns of either motif that hang
+    over the ends of the other are compared with ``bkg``, which is uniform
+    by default and always for alphabets other than DNA and RNA. Every column
+    of both motifs is then scored against what faces it, a column of the
+    other motif or the background, so that each alignment counts as many
+    column scores as the two motifs have columns. The alignment with the
+    highest total is kept, ``score`` is the mean of these column scores,
+    and P-values come from the exact distribution of the total, in which
+    the target's overhanging columns are drawn from the null as well. A
+    partial overlap thus pays for however much its overhanging columns
+    differ from the background. With correlations and a uniform background,
+    overhanging columns score 0, which leaves alignments and P-values much
+    as they are and only lowers the scores of partial overlaps. Background
+    overhangs cannot be combined with ``complete``.
+
     By default only the overlap counts, so a short target that matches part
     of a long query can score as well as one that covers all of it. With
     ``complete``, whole queries are scored instead, as TOMTOM does by
@@ -67,21 +93,23 @@ def compare_motifs(
     count as typical, and the P-value of the best alignment is that of the
     best of all the alignments tried. This favours alignments covering more
     of the query, and scores then depend on which motif is the query too.
-    Either way, ``score`` is the
-    mean column correlation over the overlap.
+    Either way, ``score`` is the mean column correlation or distance over
+    the overlap, as it is whenever overhangs are ignored.
 
     Returns
     -------
     numpy.ndarray | polars.DataFrame
         Without ``compare_to``, an all-against-all numpy array with queries
-        as rows and targets as columns, holding the mean column correlation,
-        P-value or q-value as chosen by ``matrix_out``. With ``compare_to``,
+        as rows and targets as columns, holding the score, P-value or
+        q-value as chosen by ``matrix_out``. Scores from ``method="EUCL"``
+        are mean distances, which
+        [`motif_tree()`][universalmotif.motif_tree] can cluster as they
+        are. With ``compare_to``,
         given as 0-based motif indices or as names, a DataFrame ordered by
         q-value with one row per match passing ``qvalue`` and the columns
         ``subject``, ``subject_i``, ``target``, ``target_i``, ``offset``,
         ``strand``, ``overlap``, ``score``, ``subject_consensus``,
-        ``target_consensus``, ``pvalue`` and ``qvalue``, where ``score`` is
-        the mean column correlation.
+        ``target_consensus``, ``pvalue`` and ``qvalue``.
 
     Notes
     -----
@@ -117,6 +145,16 @@ def compare_motifs(
     >>> hits = um.compare_motifs([wbox, site], compare_to="W-box")
     >>> hits["target"].to_list(), hits["score"].round(2).to_list()
     (['W-box', 'site'], [1.0, 0.65])
+
+    Euclidean distances, here with overhangs compared with the background,
+    are lower for more alike motifs:
+
+    >>> um.compare_motifs(motifs, method="EUCL").round(2).tolist()[0]
+    [0.0, 0.72, 0.74, 0.65]
+    >>> hits = um.compare_motifs([wbox, site], compare_to="W-box", method="EUCL",
+    ...                          overhang="background")
+    >>> hits["score"].round(2).to_list()
+    [0.0, 0.38]
     """
     ms = _motif_list(motifs)
     names = _make_unique([m.name for m in ms])
@@ -132,7 +170,7 @@ def compare_motifs(
         if qvalue != 0.1:
             warnings.warn("qvalue is ignored without compare_to", stacklevel=2)
         d = _core._compare_matrix(ms, min_overlap, rc, null, b, matrix_out != "score", nthreads,
-                                  complete)
+                                  complete, method, overhang)
         return np.array(d[matrix_out], dtype=float)
 
     targets = [compare_to] if isinstance(compare_to, (int, str)) else list(compare_to)
@@ -147,7 +185,8 @@ def compare_motifs(
                 raise ValueError(f"compare_to index {t} is out of range")
             queries.append(int(t))
     df = pl.DataFrame(
-        _core._compare_table(ms, queries, min_overlap, rc, null, b, nthreads, names, complete)
+        _core._compare_table(ms, queries, min_overlap, rc, null, b, nthreads, names, complete,
+                             method, overhang)
     )
     df = df.filter((pl.col("qvalue") <= qvalue) & (pl.col("overlap") > 0))
     return df.sort(["qvalue", "pvalue", "target_i"], maintain_order=True)
@@ -437,7 +476,8 @@ def motif_tree(
     squared distances.
 
     ``motifs`` can also be a square distance matrix, of which only the lower
-    triangle is used. ``labels`` is either a list of labels or a motif
+    triangle is used, such as the scores of ``compare_motifs()`` with
+    ``method="EUCL"``. ``labels`` is either a list of labels or a motif
     attribute to label tips with, such as ``"name"``, ``"altname"`` or
     ``"family"``. Duplicate motif names get ``.1``, ``.2`` and so on, while
     the first of each is left as it is.

@@ -459,7 +459,11 @@ def cmd_scan(a):
     motifs = read_motifs(a.motifs, a.format)
     kw = {"pvalue": a.pvalue, "rc": a.rc, "nthreads": a.threads, "no_overlaps": a.no_overlaps,
               "no_overlaps_by": a.overlaps_by, "no_overlaps_by_strand": a.across_strands,
-              "no_overlaps_by_motif": a.across_motifs, "use_gaps": a.gaps, "correct_gaps": a.correct_gaps}
+              "no_overlaps_by_motif": a.across_motifs, "use_gaps": a.gaps, "correct_gaps": a.correct_gaps,
+              "first_hit": a.first_hit}
+    if a.first_hit and a.no_overlaps:
+        raise CliError("--first-hit keeps one hit per motif and sequence, so it cannot be used with "
+                       "--no-overlaps")
     if a.sequences and (a.genome or a.ranges):
         raise CliError("give the sequences either with -s, or with -g (and optionally -r)")
     if a.sequences:
@@ -493,7 +497,7 @@ def cmd_compare(a):
 
     queries = read_motifs(a.motifs, a.format)
     kw = {"min_overlap": a.min_overlap, "rc": a.rc, "null": a.null, "nthreads": a.threads,
-              "complete": a.complete}
+              "complete": a.complete, "method": a.method, "overhang": a.overhang}
     qvalue = 1.0 if a.all else a.qvalue
     if a.matrix:
         if a.db:
@@ -941,6 +945,9 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="ignore the gaps of gapped motifs")
     p.add_argument("--correct-gaps", action="store_true",
                    help="correct gapped motifs' P-values for the gap sizes tried")
+    p.add_argument("--first-hit", action="store_true",
+                   help="keep only the leftmost hit of each motif in each sequence, which is quicker "
+                        "when most sequences have one")
     p.add_argument("--local", action="store_true",
                    help="with -r, report positions within each range, not on the genome")
     p.add_argument("--genomic", action="store_true",
@@ -967,6 +974,12 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="null model for the P-values (default: empirical)")
     p.add_argument("--complete", action="store_true",
                    help="score whole queries rather than only the overlap")
+    p.add_argument("--method", choices=("PCC", "EUCL"), default="PCC",
+                   help="compare columns by Pearson correlation or Euclidean distance "
+                        "(default: PCC)")
+    p.add_argument("--overhang", choices=("ignore", "background"), default="ignore",
+                   help="compare columns hanging over the other motif's ends with the "
+                        "background (default: ignore)")
     p.add_argument("--matrix", choices=("score", "pvalue", "qvalue"),
                    help="write an all-against-all matrix of this value instead")
     _threads_arg(p)

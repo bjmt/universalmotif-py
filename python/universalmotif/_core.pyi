@@ -261,6 +261,7 @@ def _scan_sequences(
     nthreads: int,
     use_gaps: bool,
     correct_gaps: bool,
+    first_hit: bool,
     motif_names: list[str],
     sequence_names: list[str],
 ) -> ArrowTable: ...
@@ -284,6 +285,7 @@ def _scan_packed(
     nthreads: int,
     use_gaps: bool,
     correct_gaps: bool,
+    first_hit: bool,
     motif_names: list[str],
 ) -> ArrowTable: ...
 def _scan_fasta(
@@ -295,6 +297,7 @@ def _scan_fasta(
     nthreads: int,
     use_gaps: bool,
     correct_gaps: bool,
+    first_hit: bool,
     motif_names: list[str],
 ) -> ArrowTable: ...
 def _dedup(
@@ -316,6 +319,8 @@ def _compare_matrix(
     need_pvalues: bool,
     nthreads: int,
     complete: bool = ...,
+    method: str = ...,
+    overhang: str = ...,
 ) -> dict[str, Any]: ...
 def _compare_table(
     motifs: list[Motif],
@@ -327,6 +332,8 @@ def _compare_table(
     nthreads: int,
     names: list[str],
     complete: bool = ...,
+    method: str = ...,
+    overhang: str = ...,
 ) -> ArrowTable: ...
 def _merge_motifs(
     motifs: list[Motif],

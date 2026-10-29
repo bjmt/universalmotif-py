@@ -7,9 +7,10 @@ use pyo3::types::{PyDict, PyList};
 use universalmotif::Motif;
 use universalmotif::Strand;
 use universalmotif::cluster::{self, Linkage, Tree, TreeOptions};
-use universalmotif::compare::{self, CompareOptions, NullModel};
+use universalmotif::compare::{self, CompareOptions, NullModel, Overhang};
 use universalmotif::dedup::{Interval, dedup};
 use universalmotif::merge::{self, MergeOptions, MergeSimilarOptions};
+use universalmotif::metrics::ColumnMetric;
 use universalmotif::packed::EncodedSequences;
 use universalmotif::pvalue::{self, PvalueOptions};
 use universalmotif::scan::{
@@ -107,6 +108,7 @@ fn scan_options(
     nthreads: usize,
     use_gaps: bool,
     correct_gaps: bool,
+    first_hit: bool,
 ) -> PyResult<ScanOptions> {
     let no_overlaps = no_overlaps
         .map(|(by, ignore_strand, ignore_motif)| {
@@ -133,6 +135,7 @@ fn scan_options(
         nthreads,
         use_gaps,
         correct_gaps,
+        first_hit,
     })
 }
 
@@ -176,7 +179,7 @@ fn hit_table(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, sequences, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, motif_names, sequence_names))]
+#[pyo3(signature = (motifs, sequences, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, first_hit, motif_names, sequence_names))]
 #[allow(clippy::too_many_arguments)]
 fn _scan_sequences<'py>(
     py: Python<'py>,
@@ -188,11 +191,20 @@ fn _scan_sequences<'py>(
     nthreads: usize,
     use_gaps: bool,
     correct_gaps: bool,
+    first_hit: bool,
     motif_names: Vec<String>,
     sequence_names: Vec<String>,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
-    let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps)?;
+    let opts = scan_options(
+        pvalue,
+        rc,
+        no_overlaps,
+        nthreads,
+        use_gaps,
+        correct_gaps,
+        first_hit,
+    )?;
     let t = py
         .detach(|| scan_table(&motifs, &sequences, &opts))
         .map_err(err)?;
@@ -228,7 +240,7 @@ fn _motif_matches<'py>(
     use numpy::IntoPyArray;
 
     let motifs = unwrap(&motifs);
-    let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, false)?;
+    let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, false, false)?;
     let value = value.parse::<MatchValue>().map_err(err)?;
     let m = match (&packed, sequences) {
         (Some(p), _) => {
@@ -256,7 +268,7 @@ fn _motif_matches<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, packed, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, motif_names))]
+#[pyo3(signature = (motifs, packed, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, first_hit, motif_names))]
 #[allow(clippy::too_many_arguments)]
 fn _scan_packed<'py>(
     py: Python<'py>,
@@ -268,10 +280,19 @@ fn _scan_packed<'py>(
     nthreads: usize,
     use_gaps: bool,
     correct_gaps: bool,
+    first_hit: bool,
     motif_names: Vec<String>,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
-    let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps)?;
+    let opts = scan_options(
+        pvalue,
+        rc,
+        no_overlaps,
+        nthreads,
+        use_gaps,
+        correct_gaps,
+        first_hit,
+    )?;
     let p = packed.get();
     let t = py
         .detach(|| scan_encoded(&motifs, &p.seqs, &opts))
@@ -281,7 +302,7 @@ fn _scan_packed<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, path, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, motif_names))]
+#[pyo3(signature = (motifs, path, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, first_hit, motif_names))]
 #[allow(clippy::too_many_arguments)]
 fn _scan_fasta<'py>(
     py: Python<'py>,
@@ -293,10 +314,19 @@ fn _scan_fasta<'py>(
     nthreads: usize,
     use_gaps: bool,
     correct_gaps: bool,
+    first_hit: bool,
     motif_names: Vec<String>,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
-    let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps)?;
+    let opts = scan_options(
+        pvalue,
+        rc,
+        no_overlaps,
+        nthreads,
+        use_gaps,
+        correct_gaps,
+        first_hit,
+    )?;
     let mut f = py
         .detach(|| scan_fasta(&motifs, &path, &opts))
         .map_err(err)?;
@@ -369,6 +399,7 @@ fn bkg4(bkg: Option<Vec<f64>>) -> PyResult<[f64; 4]> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compare_options(
     min_overlap: usize,
     rc: bool,
@@ -376,19 +407,42 @@ fn compare_options(
     bkg: Option<Vec<f64>>,
     nthreads: usize,
     complete: bool,
+    method: &str,
+    overhang: &str,
 ) -> PyResult<CompareOptions> {
+    let method = match method {
+        "PCC" => ColumnMetric::Pcc,
+        "EUCL" => ColumnMetric::Eucl,
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "method must be 'PCC' or 'EUCL'",
+            ));
+        }
+    };
+    let overhang = match overhang {
+        "ignore" => Overhang::Ignore,
+        "background" => Overhang::Background,
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "overhang must be 'ignore' or 'background'",
+            ));
+        }
+    };
     Ok(CompareOptions {
         min_overlap,
         rc,
         null: null_model(null)?,
         bkg: bkg4(bkg)?,
+        method,
+        overhang,
         complete,
         nthreads,
     })
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, min_overlap, rc, null, bkg, need_pvalues, nthreads, complete=false))]
+#[pyo3(signature = (motifs, min_overlap, rc, null, bkg, need_pvalues, nthreads, complete=false,
+                    method="PCC", overhang="ignore"))]
 #[allow(clippy::too_many_arguments)]
 fn _compare_matrix<'py>(
     py: Python<'py>,
@@ -400,9 +454,20 @@ fn _compare_matrix<'py>(
     need_pvalues: bool,
     nthreads: usize,
     complete: bool,
+    method: &str,
+    overhang: &str,
 ) -> PyResult<Bound<'py, PyDict>> {
     let motifs = unwrap(&motifs);
-    let opts = compare_options(min_overlap, rc, null, bkg, nthreads, complete)?;
+    let opts = compare_options(
+        min_overlap,
+        rc,
+        null,
+        bkg,
+        nthreads,
+        complete,
+        method,
+        overhang,
+    )?;
     let m = py
         .detach(|| compare::compare_matrix(&motifs, &opts, need_pvalues))
         .map_err(err)?;
@@ -414,7 +479,8 @@ fn _compare_matrix<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, queries, min_overlap, rc, null, bkg, nthreads, names, complete=false))]
+#[pyo3(signature = (motifs, queries, min_overlap, rc, null, bkg, nthreads, names, complete=false,
+                    method="PCC", overhang="ignore"))]
 #[allow(clippy::too_many_arguments)]
 fn _compare_table(
     py: Python<'_>,
@@ -427,9 +493,20 @@ fn _compare_table(
     nthreads: usize,
     names: Vec<String>,
     complete: bool,
+    method: &str,
+    overhang: &str,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
-    let opts = compare_options(min_overlap, rc, null, bkg, nthreads, complete)?;
+    let opts = compare_options(
+        min_overlap,
+        rc,
+        null,
+        bkg,
+        nthreads,
+        complete,
+        method,
+        overhang,
+    )?;
     let rows = py
         .detach(|| compare::compare_motifs(&motifs, &queries, &opts))
         .map_err(err)?;
