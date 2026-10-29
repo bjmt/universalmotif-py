@@ -148,11 +148,12 @@ def test_motif_effects_variant_rows_and_inputs(data):
     # The deletion is left out, and rows keep their numbers in the input.
     assert 2 not in table["variant"].to_list()
     assert set(table["variant"].to_list()) <= {1, 3}
-    pd = pytest.importorskip("pandas")
-    frame = pd.DataFrame(rows, columns=["POSITION", "REF", "ALT"])
-    assert variant_motif_effects(frame, seq, gata).equals(table)
     assert variant_motif_effects(rows, seq.lower(), gata).equals(table)
     assert variant_motif_effects(rows, seq, gata, rc=False)["strand"].unique().to_list() in ([], ["+"])
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+    frame = pd.DataFrame(rows, columns=["POSITION", "REF", "ALT"])
+    assert variant_motif_effects(frame, seq, gata).equals(table)
 
 
 def test_motif_effects_empty_and_errors(data):
@@ -353,7 +354,9 @@ def test_size_by(data):
 
 def test_inputs(data):
     vcf, seq = data["vcf"], data["seq"]
+    # pandas tables are read with pyarrow, which the pandas extra installs.
     pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
     frame = vcf.rename({"ref": "REF", "alt": "ALT"}).to_pandas()
     ax = plot_variant_effects(frame, sequence=seq, start=START, labels=0).axes[0]
     assert _n_heads(ax) == vcf.height
