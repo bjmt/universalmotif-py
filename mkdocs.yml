@@ -124,4 +124,5 @@ nav:
       - Deep learning: reference/deep.md
       - Example data: reference/data.md
   - Differences from the R package: differences.md
+  - Benchmarks: benchmarks.md
   - Changelog: changelog.md

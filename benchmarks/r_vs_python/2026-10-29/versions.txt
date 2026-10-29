@@ -1,0 +1,13 @@
+date	2026-10-29T10:34:55Z
+os	macOS 26.4.1 (arm64)
+cpu	Apple M5 Pro, 15 cores
+memory	48 GB
+R	4.4.1
+universalmotif (R)	1.31.60
+Biostrings (R)	2.72.1
+universalmotif (R) commit	aa72ba5
+Python	3.12.4
+universalmotif (Python)	0.3.0
+polars	1.44.2
+numpy	2.5.4
+universalmotif (Python) commit	v0.3.0-7-gcc82e49
