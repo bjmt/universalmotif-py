@@ -375,16 +375,23 @@ def _strip_glyphs(m: np.ndarray, alphabet: str):
 
 def _draw_strip(ax: Axes, glyphs, limits, colours, n: int, vertical: bool, zero: bool) -> None:
     """Draw a logo along a strip beside the map, with the positions along x,
-    or along y from the top with the letters turned to face the map."""
+    or along y from the top with the letters standing on the edge of the
+    map, as those above it do."""
     from matplotlib.collections import PolyCollection
 
+    def turned(g):
+        # Each position's letters turn about the middle of its own slot, so
+        # the positions keep their order down the strip.
+        centre = float(np.round(g.x.mean()))
+        return np.column_stack([-g.y, 2 * centre - g.x])
+
     if glyphs:
-        verts = [np.column_stack([g.y, g.x] if vertical else [g.x, g.y]) for g in glyphs]
+        verts = [turned(g) if vertical else np.column_stack([g.x, g.y]) for g in glyphs]
         faces = [colours.get(g.group, _MISSING_COLOUR) for g in glyphs]
         ax.add_collection(PolyCollection(verts, facecolors=faces, edgecolors="none", linewidths=0))
     if vertical:
         ax.set_ylim(n + 0.5, 0.5)
-        ax.set_xlim(*limits)
+        ax.set_xlim(-limits[1], -limits[0])
         if zero:
             ax.axvline(0, color="0.6", linewidth=0.6, zorder=0)
     else:
