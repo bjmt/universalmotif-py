@@ -175,12 +175,6 @@ Tremblay BJM (2024). universalmotif: An R package for biological motif
 analysis. *Journal of Open Source Software* **9**, 7012.
 DOI: [10.21105/joss.07012](https://doi.org/10.21105/joss.07012)
 
-## Licence
-
-MIT. The letter shapes used in logos are outlines of the Roboto font,
-released under the Apache License 2.0, and were exported from the R
-package's `fontDFroboto` with `scripts/make_font.R`.
-
 ## About this port
 
 This package, and the Rust crate it is built on, are AI-assisted rewrites
@@ -195,3 +189,9 @@ the bugs fixed along the way and the features left out, are listed in
 [DIVERGENCES.md](https://github.com/bjmt/universalmotif-rs/blob/main/DIVERGENCES.md).
 The rewrite follows the principles set out at
 [rewrites.bio](https://rewrites.bio).
+
+## Licence
+
+MIT. The letter shapes used in logos are outlines of the Roboto font,
+released under the Apache License 2.0, and were exported from the R
+package's `fontDFroboto` with `scripts/make_font.R`.
