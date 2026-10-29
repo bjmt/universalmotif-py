@@ -10,6 +10,8 @@ Exact P-values and score thresholds, and the scores and probabilities of individ
 
 ::: universalmotif.score_match
 
+::: universalmotif.variant_motif_effects
+
 ::: universalmotif.get_matches
 
 ::: universalmotif.get_scores

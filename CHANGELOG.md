@@ -23,6 +23,20 @@
     sequence on a shared axis, with hits marked across all of them.
   - `plot_spacing()` and `plot_marginalization()` draw a model's response
     to sites written in with `site_spacings()` and `insert_sites()`.
+- More plots for sequence models:
+  - `view_attribution_tracks()` takes `kind="signal"` for plain tracks such
+    as ATAC coverage or a predicted profile.
+  - `hit_contributions()` reads the contribution scores of every hit, along
+    its strand and with flanks, `plot_hit_profile()` draws their mean around
+    a motif's instances, and `plot_hit_contributions()` draws each hit's
+    contribution against its motif score.
+  - `plot_variant_effects()` draws many variant effects along a locus over
+    the motif hits, and `variant_motif_effects()` gives the change each
+    variant makes to the scores of the motif sites it falls in.
+- `pair_spacings()` and `plot_pair_spacing()` count and draw the distances
+  between pairs of motif hits by their orientation, against those expected
+  by chance.
+- Names of neighbouring hits above attribution plots no longer overlap.
 - `read_seqlets()` reads TF-MoDISco seqlets as a table like a scan's,
   optionally placed on the genome and with their contribution scores, so
   they can be drawn with `plot_hits()` or `view_attributions()`.

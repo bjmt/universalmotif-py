@@ -1112,6 +1112,83 @@ def test_view_attribution_tracks_hits_and_region():
     assert len(fig.artists) == 3 and not fig.axes[0].texts
 
 
+def test_view_attribution_tracks_signal():
+    seq, counts, _, ism = _tracks_input()
+    coverage = np.linspace(0, 30, len(seq))
+    fig = view_attribution_tracks({"ATAC": coverage, "Counts": counts, "Mutagenesis": ism}, seq,
+                                  kind={"ATAC": "signal", "Mutagenesis": "heatmap"}, start=100)
+    signal, logo, heat = fig.axes
+    assert signal.get_ylabel() == "ATAC"
+    # Each position is a step one position wide, with no letters drawn.
+    line = signal.lines[0]
+    np.testing.assert_array_equal(line.get_xdata(), np.repeat(np.arange(len(seq) + 1) + 0.5, 2)[1:-1])
+    np.testing.assert_array_equal(line.get_ydata(), np.repeat(coverage, 2))
+    assert len(signal.collections) == 1 and not signal.patches
+    assert signal.get_ylim() == pytest.approx((0, 30 * 1.08))
+    assert signal.get_xlim() == logo.get_xlim() == heat.get_xlim()
+    assert [ax.get_xlabel() for ax in fig.axes] == ["", "", "Position"]
+    # Signal tracks are a little shorter than logos by default.
+    heights = [ax.get_position().height for ax in fig.axes]
+    assert heights[0] / heights[1] == pytest.approx(0.7)
+    assert heights[2] / heights[1] == pytest.approx(1.2)
+    # A signal track at the bottom carries the positions, cut to the region,
+    # and can be given its colour.
+    fig = view_attribution_tracks({"Counts": counts, "ATAC": (coverage, "#2A9D8F")}, seq,
+                                  kind=["observed", "signal"], start=100, region=(104, 112))
+    signal = fig.axes[1]
+    np.testing.assert_array_equal(signal.lines[0].get_ydata(), np.repeat(coverage[4:12], 2))
+    assert matplotlib.colors.to_hex(signal.lines[0].get_color()).upper() == "#2A9D8F"
+    assert [t.get_text() for t in signal.get_xticklabels()] == ["104", "106", "108", "110"]
+    assert signal.get_xlim() == fig.axes[0].get_xlim() == (0.5, 8.5)
+    # Missing values are gaps, and negative values go below zero.
+    gappy = np.sin(np.arange(len(seq)))
+    gappy[3:6] = np.nan
+    fig = view_attribution_tracks([gappy, coverage], kind="signal")
+    assert np.isnan(fig.axes[0].lines[0].get_ydata()[6:12]).all()
+    assert fig.axes[0].get_ylim()[0] < gappy[np.isfinite(gappy)].min()
+    plt.close("all")
+
+
+def test_view_attribution_tracks_signal_sharey_and_hits():
+    seq, counts, profile, _ = _tracks_input()
+    coverage = np.linspace(0, 30, len(seq))
+    hits = pl.DataFrame({"start": [5], "end": [7], "motif": ["mid"]})
+    tracks = {"ATAC": coverage, "Counts": counts, "Profile": profile, "Phylo": coverage / 100}
+    kinds = ["signal", "observed", "observed", "signal"]
+    fig = view_attribution_tracks(tracks, seq, kind=kinds, sharey=True, hits=hits)
+    atac, top, middle, phylo = fig.axes
+    # Only the logos share a scale.
+    assert top.get_ylim() == middle.get_ylim()
+    assert atac.get_ylim() == pytest.approx((0, 30 * 1.08))
+    assert phylo.get_ylim() == pytest.approx((0, 0.3 * 1.08))
+    # Hits are labelled above a signal track at the top and shaded through it.
+    assert [t.get_text() for t in atac.texts] == ["mid"]
+    assert [_span(p) for p in fig.artists] == [(5.5, 7.5)]
+    assert fig.artists[0].get_y() + fig.artists[0].get_height() == pytest.approx(atac.get_position().y1)
+    assert fig.artists[0].get_y() == pytest.approx(phylo.get_position().y0)
+    assert all(ax.get_facecolor()[3] == 0 for ax in fig.axes)
+    plt.close("all")
+
+
+def test_view_attribution_tracks_signal_errors():
+    seq, counts, _, ism = _tracks_input()
+    cases = [
+        ({"tracks": {"ATAC": counts[:-1]}}, "16 letters for 15 positions of signal"),
+        ({"tracks": {"ATAC": counts[:-1], "B": counts}, "sequence": None}, "different lengths: 15, 16"),
+        ({"tracks": {"ATAC": ism}}, r"shape \(length,\)"),
+        ({"tracks": {"ATAC": np.full(len(seq), np.inf)}}, "infinite"),
+        ({"tracks": {"ATAC": counts}, "kind": "bars"}, '"heatmap" or "signal"'),
+    ]
+    for kwargs, message in cases:
+        kwargs.setdefault("sequence", seq)
+        kwargs.setdefault("kind", "signal")
+        with pytest.raises(ValueError, match=message):
+            view_attribution_tracks(**kwargs)
+    with pytest.raises(ValueError, match="view_attribution_tracks"):
+        um.view_attributions(counts, seq, kind="signal")
+    assert not plt.get_fignums()
+
+
 def test_view_attribution_tracks_errors():
     seq, counts, profile, ism = _tracks_input()
     tracks = {"Counts": counts, "Profile": profile}
@@ -1190,3 +1267,15 @@ def test_draw_logo_options_and_errors():
     with pytest.raises(ValueError, match="pseudocount"):
         um.draw_logo(ax, bare, use_type="PWM")
     plt.close(fig)
+
+
+def test_hit_labels_do_not_overlap():
+    seq = "ACGT" * 15
+    hits = pl.DataFrame({"motif": ["a long motif name", "another long name"], "start": [10, 16],
+                         "end": [16, 22], "strand": ["+", "+"]})
+    ax = um.view_attributions(np.ones(len(seq)), seq, hits=hits, figsize=(4, 2))
+    renderer = ax.figure.canvas.get_renderer()
+    boxes = [t.get_window_extent(renderer) for t in ax.texts]
+    assert len(boxes) == 2
+    assert not boxes[0].overlaps(boxes[1])
+    plt.close(ax.figure)

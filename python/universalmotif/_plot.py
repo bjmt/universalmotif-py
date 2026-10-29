@@ -1103,10 +1103,26 @@ def _hit_spans(hits: pl.DataFrame, start: int, a: int, b: int) -> list[tuple[flo
 
 
 def _label_hits(ax: Axes, spans: list[tuple[float, float, Any]]) -> None:
-    for x0, x1, name in spans:
-        if name is not None:
-            ax.annotate(str(name), ((x0 + x1) / 2, 1.0), xycoords=("data", "axes fraction"),
-                        ha="center", va="bottom", fontsize=8, color="0.3", annotation_clip=False)
+    """Name each hit above the axes, moving a name up a row when it would run
+    into one already placed."""
+    renderer = ax.figure.canvas.get_renderer()
+    rows: list[list[tuple[float, float]]] = []
+    for x0, x1, name in sorted(spans, key=lambda s: s[0] + s[1]):
+        if name is None:
+            continue
+        row = 0
+        while True:
+            text = ax.annotate(str(name), ((x0 + x1) / 2, 1.0), xycoords=("data", "axes fraction"),
+                               xytext=(0, 9 * row), textcoords="offset points", ha="center",
+                               va="bottom", fontsize=8, color="0.3", annotation_clip=False)
+            ext = text.get_window_extent(renderer)
+            if row == len(rows):
+                rows.append([])
+            if all(ext.x1 + 2 <= lo or ext.x0 - 2 >= hi for lo, hi in rows[row]):
+                rows[row].append((ext.x0, ext.x1))
+                break
+            text.remove()
+            row += 1
 
 
 def _hide_x(ax: Axes) -> None:
@@ -1139,6 +1155,67 @@ def _band(fig: Figure, axes: Sequence[Axes], x: float, width: float, colour: str
     fig.add_artist(Rectangle((x, bottom), width, top - bottom, facecolor=colour, alpha=alpha,
                              linewidth=0, zorder=-1,
                              transform=blended_transform_factory(axes[0].transData, fig.transFigure)))
+
+
+def _position_axis(ax: Axes, a: int, b: int) -> None:
+    """Label the x-axis of a panel drawing positions ``a`` to ``b``."""
+    n = b - a
+    # As many ticks as fit across the panel, allowing for long positions.
+    width_in = ax.get_position().width * ax.figure.get_figwidth()
+    max_ticks = max(2, min(12, int(width_in / (0.08 * len(str(b)) + 0.25))))
+    step = _nice_step(n, max_ticks)
+    first = -(-a // step) * step
+    ticks = list(range(first, b, step))
+    ax.set_xticks([t - a + 1 for t in ticks], [str(t) for t in ticks])
+    ax.set_xlim(0.5, n + 0.5)
+    ax.set_xlabel("Position")
+
+
+_SIGNAL_COLOUR = "0.35"
+
+
+def _signal_track(track) -> tuple[np.ndarray, str]:
+    """A signal track as its values and colour, given either alone or as a
+    (values, colour) pair."""
+    from ._deep import _to_numpy
+
+    colour = _SIGNAL_COLOUR
+    if isinstance(track, tuple) and len(track) == 2 and isinstance(track[1], str):
+        track, colour = track
+    values = _to_numpy(track).astype(float)
+    while values.ndim > 1 and values.shape[0] == 1:
+        values = values[0]
+    if values.ndim != 1:
+        raise ValueError("signal tracks need one value per position, an array of shape (length,)")
+    if np.isinf(values).any():
+        raise ValueError("the signal has infinite values")
+    return values, colour
+
+
+def _draw_signal(ax: Axes, values: np.ndarray, colour: str, ylabel: str) -> None:
+    """Draw values as steps one position wide, filled down to zero, with
+    missing values left as gaps."""
+    from matplotlib.ticker import MaxNLocator
+
+    xs = np.repeat(np.arange(len(values) + 1) + 0.5, 2)[1:-1]
+    ys = np.repeat(values, 2)
+    ax.fill_between(xs, ys, 0, color=colour, alpha=0.45, linewidth=0, zorder=1)
+    ax.plot(xs, ys, color=colour, linewidth=0.9, zorder=2)
+    ax.axhline(0, color="0.6", linewidth=0.6, zorder=0)
+    finite = values[np.isfinite(values)]
+    lo = min(float(finite.min()), 0.0) if finite.size else 0.0
+    hi = max(float(finite.max()), 0.0) if finite.size else 0.0
+    if hi == lo:
+        hi = lo + 1.0
+    pad = 0.08 * (hi - lo)
+    ax.set_ylim(lo - (pad if lo < 0 else 0), hi + pad)
+    ax.set_ylabel(ylabel)
+    for side in ("top", "right", "bottom"):
+        ax.spines[side].set_visible(False)
+    ax.spines["left"].set_bounds(lo, hi + pad)
+    eps = 1e-9 * (hi - lo)
+    ax.set_yticks([t for t in MaxNLocator(nbins=3).tick_values(lo, hi)
+                   if lo - eps <= t <= hi + pad + eps])
 
 
 def view_attributions(
@@ -1207,6 +1284,9 @@ def view_attributions(
     >>> ax = um.view_attributions(ism, seq, kind="heatmap", ylabel="Effect")
     >>> plt.close("all")
     """
+    if kind == "signal":
+        raise ValueError('kind="signal" is for view_attribution_tracks(), which draws signal '
+                         'alongside attributions')
     if kind not in ("observed", "all", "heatmap"):
         raise ValueError('kind must be "observed", "all" or "heatmap"')
     if len(set(alphabet)) != len(alphabet):
@@ -1271,15 +1351,7 @@ def view_attributions(
         for x0, x1, _ in spans:
             ax.axvspan(x0, x1, color=_HIT_COLOUR, alpha=0.1, linewidth=0, zorder=0)
         _label_hits(ax, spans)
-    # As many ticks as fit across the panel, allowing for long positions.
-    width_in = ax.get_position().width * ax.figure.get_figwidth()
-    max_ticks = max(2, min(12, int(width_in / (0.08 * len(str(b)) + 0.25))))
-    step = _nice_step(n, max_ticks)
-    first = -(-a // step) * step
-    ticks = list(range(first, b, step))
-    ax.set_xticks([t - a + 1 for t in ticks], [str(t) for t in ticks])
-    ax.set_xlim(0.5, n + 0.5)
-    ax.set_xlabel("Position")
+    _position_axis(ax, a, b)
     if own_figure:
         ax.figure.tight_layout()
     return ax
@@ -1400,11 +1472,21 @@ def view_attribution_tracks(
     with one per track, or a dict giving the kinds of some tracks by their
     keys, with the rest drawn as ``"observed"``.
 
+    One more kind, ``"signal"``, draws a track of plain numbers with one
+    value per position, such as the coverage of an ATAC-seq or ChIP-seq
+    experiment read with [`signal_values()`][universalmotif.signal_values],
+    a model's predicted profile or conservation scores. The values are drawn
+    as steps one position wide and filled down to zero, with missing values
+    left as gaps, in grey or in the colour given with them as a
+    (values, colour) pair. Such tracks must be as long as the sequence, and
+    the sequence can be left out when every track is a signal.
+
     Each track gets its own y-axis unless ``sharey`` is ``True``, which puts
     the logos on one scale and the heatmaps on one colour scale, so that the
-    sizes of scores can be compared between tracks. ``heights`` sets the
-    relative heights of the tracks, by default a little taller for heatmaps
-    than for logos. ``start``, ``region``, ``colour_scheme`` and ``flip_neg``
+    sizes of scores can be compared between tracks, while signal tracks keep
+    their own scales. ``heights`` sets the relative heights of the tracks, by
+    default a little taller for heatmaps and shorter for signal than for
+    logos. ``start``, ``region``, ``colour_scheme`` and ``flip_neg``
     work as for [`view_attributions()`][universalmotif.view_attributions],
     and each of ``hits`` is shaded once through every track and labelled
     above the top one.
@@ -1426,6 +1508,9 @@ def view_attribution_tracks(
     >>> ism = np.random.default_rng(1).normal(0, 0.2, (4, len(seq)))
     >>> fig = um.view_attribution_tracks({"Observed": counts, "Mutagenesis": ism}, seq,
     ...                                  kind={"Mutagenesis": "heatmap"})
+    >>> coverage = 30 * np.exp(-((np.arange(len(seq)) - 6.5) / 3) ** 2)
+    >>> fig = um.view_attribution_tracks({"ATAC": coverage, "Observed": counts}, seq,
+    ...                                  kind={"ATAC": "signal"})
     >>> plt.close("all")
     """
     if isinstance(tracks, Mapping):
@@ -1454,11 +1539,16 @@ def view_attribution_tracks(
         if len(kinds) != len(scores):
             raise ValueError(f"kind must have one entry per track, {len(scores)} here")
     for kd in kinds:
-        if kd not in ("observed", "all", "heatmap"):
-            raise ValueError('kind must be "observed", "all" or "heatmap"')
+        if kd not in ("observed", "all", "heatmap", "signal"):
+            raise ValueError('kind must be "observed", "all", "heatmap" or "signal"')
     if len(set(alphabet)) != len(alphabet):
         raise ValueError("the alphabet has repeated letters")
-    lengths = {_attribution_matrix(s, sequence, alphabet, kd).shape[1] for s, kd in zip(scores, kinds)}
+    signals = {i: _signal_track(s) for i, (s, kd) in enumerate(zip(scores, kinds)) if kd == "signal"}
+    for values, _ in signals.values():
+        if sequence is not None and len(sequence) != len(values):
+            raise ValueError(f"the sequence has {len(sequence)} letters for {len(values)} positions of signal")
+    lengths = {len(signals[i][0]) if kd == "signal" else _attribution_matrix(s, sequence, alphabet, kd).shape[1]
+               for i, (s, kd) in enumerate(zip(scores, kinds))}
     if len(lengths) > 1:
         raise ValueError(f"the tracks have different lengths: {', '.join(map(str, sorted(lengths)))}")
     length = lengths.pop()
@@ -1467,7 +1557,7 @@ def view_attribution_tracks(
         raise ValueError(f"region must lie within {start} to {start + length}")
     spans = [] if hits is None else _hit_spans(hits, start, a, b)
     if heights is None:
-        heights = [1.2 if kd == "heatmap" else 1.0 for kd in kinds]
+        heights = [{"heatmap": 1.2, "signal": 0.7}.get(kd, 1.0) for kd in kinds]
     elif len(heights) != len(scores):
         raise ValueError(f"heights must have one entry per track, {len(scores)} here")
     plt = _pyplot()
@@ -1477,7 +1567,12 @@ def view_attribution_tracks(
     fig, axes = plt.subplots(len(scores), 1, figsize=figsize, squeeze=False,
                              gridspec_kw={"height_ratios": list(heights)})
     axes = list(axes[:, 0])
-    for ax, s, kd, label in zip(axes, scores, kinds, labels):
+    for i, (ax, s, kd, label) in enumerate(zip(axes, scores, kinds, labels)):
+        if kd == "signal":
+            values, colour = signals[i]
+            _draw_signal(ax, values[a - start:b - start], colour, label)
+            _position_axis(ax, a, b)
+            continue
         view_attributions(s, sequence, kind=kd, alphabet=alphabet, start=start, region=(a, b),
                           colour_scheme=colour_scheme, flip_neg=flip_neg, ylabel=label, ax=ax)
         if kd == "heatmap":
@@ -1488,7 +1583,7 @@ def view_attribution_tracks(
     for ax in axes[:-1]:
         _hide_x(ax)
     if sharey:
-        logos = [ax for ax, kd in zip(axes, kinds) if kd != "heatmap"]
+        logos = [ax for ax, kd in zip(axes, kinds) if kd in ("observed", "all")]
         if len(logos) > 1:
             _share_logo_y(logos)
         images = [ax.images[0] for ax, kd in zip(axes, kinds) if kd == "heatmap"]

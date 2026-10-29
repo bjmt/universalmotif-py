@@ -6,6 +6,8 @@ Testing motifs for enrichment, co-occurrence and positional enrichment in a set 
 
 ::: universalmotif.motif_coocc
 
+::: universalmotif.pair_spacings
+
 ::: universalmotif.motif_peaks
 
 ::: universalmotif.motif_finder

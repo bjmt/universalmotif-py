@@ -33,6 +33,10 @@ these together on the outputs of a published model.
     options:
       members: [view]
 
+::: universalmotif.hit_contributions
+
+::: universalmotif.HitContributions
+
 ## Sequences and filters
 
 ::: universalmotif.one_hot

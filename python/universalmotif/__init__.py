@@ -99,6 +99,9 @@ from ._plot_comparison import plot_comparison
 from ._plot_hits import plot_hits
 from ._plot_modisco import plot_modisco
 from ._plot_seqlets import plot_seqlets
+from ._hit_contrib import HitContributions, hit_contributions, plot_hit_contributions, plot_hit_profile
+from ._plot_pairs import pair_spacings, plot_pair_spacing
+from ._plot_variants import plot_variant_effects, variant_motif_effects
 from ._plot_response import plot_marginalization, plot_spacing
 from ._plot_results import plot_coocc, plot_enrichment
 from ._plot_scores import plot_score_distribution
@@ -137,6 +140,7 @@ except PackageNotFoundError:  # pragma: no cover
 __all__ = [
     "ContributionScores",
     "Genome",
+    "HitContributions",
     "Motif",
     "MotifMatches",
     "MotifTree",
@@ -172,6 +176,7 @@ __all__ = [
     "get_kmers",
     "get_matches",
     "get_scores",
+    "hit_contributions",
     "icm_to_ppm",
     "implant_motifs",
     "insert_sites",
@@ -199,19 +204,24 @@ __all__ = [
     "one_hot",
     "one_hot_batches",
     "pack_sequences",
+    "pair_spacings",
     "pcm_to_ppm",
     "plot_comparison",
     "plot_coocc",
     "plot_enrichment",
+    "plot_hit_contributions",
+    "plot_hit_profile",
     "plot_hits",
     "plot_marginalization",
     "plot_match_bkg",
     "plot_modisco",
     "plot_motif_peaks",
     "plot_motif_proximity",
+    "plot_pair_spacing",
     "plot_score_distribution",
     "plot_seqlets",
     "plot_spacing",
+    "plot_variant_effects",
     "position_icscore",
     "ppm_to_icm",
     "ppm_to_pcm",
@@ -252,6 +262,7 @@ __all__ = [
     "trim_cwm",
     "trim_motifs",
     "ungap",
+    "variant_motif_effects",
     "view_attribution_tracks",
     "view_attributions",
     "view_logo",
