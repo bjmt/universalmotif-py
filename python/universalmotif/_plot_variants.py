@@ -513,7 +513,10 @@ def plot_variant_effects(
         QTL. P-values and q-values are taken as -log10.
     labels
         How many of the variants with the largest absolute effects to
-        label.
+        label. Labels are set in a row below the lowest effect, or above
+        the highest, and joined to their variants by lines, so that those
+        of variants bunched together stay apart; when they do not fit there,
+        they are placed beside their variants instead.
     label_by
         A column to label variants by, such as variant IDs, instead of
         their position and change.
@@ -845,12 +848,127 @@ def plot_variant_effects(
             if best[i] is not None:
                 t += f"\n{best[i][0]} {best[i][1]:+.1f}"
             text[i] = t
-        # Labels keep clear of the larger effects only, so that in a dense
-        # cluster they stay close to their variants.
-        big = np.abs(y) >= 0.5 * np.abs(y).max()
-        big[chosen] = True
-        _label_points(eff_ax, x, y, area, big, chosen, text, {}, 0.9 * text_size, None)
+        if not _label_rows(eff_ax, x, y, area, chosen, text, 0.9 * text_size):
+            # Labels keep clear of the larger effects only, so that in a
+            # dense cluster they stay close to their variants.
+            big = np.abs(y) >= 0.5 * np.abs(y).max()
+            big[chosen] = True
+            _label_points(eff_ax, x, y, area, big, chosen, text, {}, 0.9 * text_size, None)
     return fig if own_figure else eff_ax
+
+
+def _spread(want: np.ndarray, widths: np.ndarray, lo: float, hi: float, gap: float) -> np.ndarray | None:
+    """Centres for boxes of the given widths on a line from ``lo`` to
+    ``hi``, as near the wanted centres as they can be without overlapping,
+    found by merging boxes that collide into blocks centred on their wanted
+    places. Returns ``None`` when they do not fit."""
+    if widths.sum() + gap * (len(widths) - 1) > hi - lo:
+        return None
+    order = np.argsort(want, kind="stable")
+    # Blocks of consecutive boxes, as (first, last, left edge).
+    blocks: list[list[float]] = []
+    offsets = np.concatenate([[0.0], np.cumsum(widths[order] + gap)[:-1]])
+    for k in range(len(order)):
+        blocks.append([k, k, want[order[k]] - widths[order[k]] / 2])
+        while True:
+            first, last, left = blocks[-1]
+            f, la = int(first), int(last)
+            size = offsets[la] - offsets[f] + widths[order[la]]
+            # The left edge that puts the block's boxes nearest their wanted
+            # centres on average, kept on the line.
+            left = float(np.mean(want[order[f:la + 1]] - (offsets[f:la + 1] - offsets[f])
+                                 - widths[order[f:la + 1]] / 2))
+            left = min(max(left, lo), hi - size)
+            blocks[-1][2] = left
+            if len(blocks) < 2:
+                break
+            pf, pl_, pleft = blocks[-2]
+            pend = pleft + offsets[int(pl_)] - offsets[int(pf)] + widths[order[int(pl_)]]
+            if pend + gap <= left:
+                break
+            blocks[-2:] = [[pf, last, pleft]]
+    centres = np.empty(len(order))
+    for first, last, left in blocks:
+        f, la = int(first), int(last)
+        idx = np.arange(f, la + 1)
+        centres[order[idx]] = left + offsets[idx] - offsets[f] + widths[order[idx]] / 2
+    return centres
+
+
+def _label_rows(ax: Axes, x, y, area, chosen: list[int], text: list[str], size: float) -> bool:
+    """Label the chosen variants in rows below the lowest effect and above
+    the highest, spread out along the axis and joined to their variants by
+    leader lines, making room for the rows on the y-axis. Returns ``False``,
+    drawing nothing, when they do not fit."""
+    fig = ax.figure
+    renderer = fig.canvas.get_renderer()
+    to_pt = 72.0 / fig.dpi
+    box = ax.get_window_extent(renderer)
+    width, height = box.width * to_pt, box.height * to_pt
+    measured = {}
+    for i in chosen:
+        probe = ax.text(0, 0, text[i], fontsize=size, ha="center")
+        ext = probe.get_window_extent(renderer)
+        probe.remove()
+        measured[i] = (ext.width * to_pt, ext.height * to_pt)
+    radius = np.sqrt(np.asarray(area, dtype=float) * 1.3) / 2
+    lead, gap, row_gap = 8.0, 0.6 * size, 0.3 * size
+    x_pts = (ax.transData.transform(np.column_stack([x, np.zeros(len(x))]))[:, 0] - box.x0) * to_pt
+
+    sides = {}
+    for sign in (-1, 1):
+        ids = [i for i in chosen if np.sign(y[i]) == sign]
+        if not ids:
+            continue
+        rows = None
+        for nrows in (1, 2):
+            # With two rows, labels alternate between them along the axis.
+            ordered = sorted(ids, key=lambda i: x[i])
+            groups = [ordered[r::nrows] for r in range(nrows)]
+            spots = [_spread(x_pts[g], np.array([measured[i][0] for i in g]), 0.0, width, gap)
+                     for g in groups]
+            if all(s is not None for s in spots):
+                rows = list(zip(groups, spots))
+                break
+        if rows is None:
+            return False
+        tall = max(measured[i][1] for i in ids)
+        need = float(radius[ids].max()) + lead + len(rows) * tall + (len(rows) - 1) * row_gap
+        sides[sign] = (rows, tall, need)
+
+    lo, hi = ax.get_ylim()
+    need = sum(v[2] for v in sides.values())
+    if height - need < 0.4 * height:
+        return False
+    # The rows take ``need`` points beyond the old limits, which leaves the
+    # rest of the axes to the data.
+    scale = (height - need) / (hi - lo)
+    new_lo = lo - sides[-1][2] / scale if -1 in sides else lo
+    new_hi = hi + sides[1][2] / scale if 1 in sides else hi
+    from matplotlib.ticker import MaxNLocator
+
+    # As many ticks as fit the shorter span of the effects.
+    nbins = max(2, int((height - need) // (3.5 * size)))
+    ticks = [t for t in MaxNLocator(nbins=nbins).tick_values(lo, hi) if lo - 1e-12 <= t <= hi + 1e-12]
+    ax.set_ylim(new_lo, new_hi)
+    # The axis spans the effects only, not the rows of labels.
+    ax.set_yticks(ticks)
+    ax.spines["left"].set_bounds(lo, hi)
+    for sign, (rows, tall, _) in sides.items():
+        edge = min(y[i] for g, _ in rows for i in g) if sign < 0 else max(y[i] for g, _ in rows for i in g)
+        edge = (edge - new_lo) * height / (new_hi - new_lo)
+        ids = [i for g, _ in rows for i in g]
+        start = edge + sign * (float(radius[ids].max()) + lead)
+        for r, (group, centres) in enumerate(rows):
+            ty = start + sign * r * (tall + row_gap)
+            for i, cx in zip(group, centres):
+                arrow = {"arrowstyle": "-", "color": "#7F7F7F", "linewidth": 0.6,
+                         "relpos": (0.5, 1.0 if sign < 0 else 0.0), "shrinkA": 1,
+                         "shrinkB": float(radius[i]) + 1}
+                ax.annotate(text[i], xy=(x[i], y[i]), xytext=(cx / width, ty / height),
+                            textcoords="axes fraction", ha="center", va="top" if sign < 0 else "bottom",
+                            fontsize=size, zorder=5, arrowprops=arrow)
+    return True
 
 
 def _legends(ax, colour_by, colours, df, letter_colours, direction, ringed, size, motif_names, palette,

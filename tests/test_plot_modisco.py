@@ -272,3 +272,22 @@ def test_figsize_and_tight_bbox(modisco, known):
         ext = artist.get_window_extent(renderer)
         assert ext.x0 >= box.x0 - 1 and ext.x1 <= box.x1 + 1
         assert ext.y0 >= box.y0 - 1 and ext.y1 <= box.y1 + 1
+
+
+def test_label_can_share_a_database_name(known):
+    # A pattern labelled after its factor still shows that factor's motif
+    # as its match: patterns are left out by what they are, not by label.
+    gata = known[6]
+    ppm = um.create_motif(um.convert_type(gata, "PPM").matrix, alphabet="DNA", type="PPM",
+                          name="pos_patterns.pattern_0", nsites=50)
+    cmp = um.compare_motifs([ppm] + known, compare_to=[0], qvalue=0.5)
+    names = {"pos_patterns.pattern_0": "GATA"}
+    for matches in (cmp, cmp.drop("subject_i", "target_i")):
+        texts = _texts(plot_modisco([ppm], matches=matches, database=known, names=names))
+        best = texts.index("Best match")
+        assert texts[best + 1:].count("GATA") == 2, texts
+        assert "CCAAT-box" not in texts
+    # The pattern itself is still never its own match.
+    for matches in (cmp, cmp.drop("subject_i", "target_i")):
+        texts = _texts(plot_modisco([ppm], matches=matches, n_matches=12))
+        assert "pos_patterns.pattern_0" not in texts and "pos_0" in texts and "GATA" in texts

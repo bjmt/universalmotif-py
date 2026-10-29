@@ -406,3 +406,30 @@ def test_legend_kept_by_tight_layouts():
         # The tight box is in inches, the legend's in pixels.
         assert leg.get_window_extent(renderer).x1 / fig.dpi <= tight.x1 + 1e-6
     plt.close(fig)
+
+
+def test_size_legend_with_few_lanes():
+    # With few lanes the hits are tall, and the legend's markers once grew
+    # past their rows and the legend's title ran into the last x tick label.
+    seqs = um.create_sequences(seqnum=1, seqlen=3000, seed=1)
+    hits = um.scan_sequences(um.example_motifs()[:4], seqs, pvalue=1e-3)
+    for kw in ({"size_by": "score"}, {"size_by": "score", "shade_by": "score"}):
+        fig = um.plot_hits(hits, seqs, **kw)
+        ax = fig.axes[0]
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        sizes = ax.artists[1]
+        texts = sizes.get_texts()
+        handles = sizes.legend_handles
+        assert max(h.get_markersize() for h in handles) <= 1.5 * 9
+        # Rows are at least as far apart as the largest marker is tall.
+        ys = sorted(t.get_window_extent(renderer).y0 for t in texts)
+        tallest = max(h.get_markersize() for h in handles) * fig.dpi / 72
+        assert all(b - a >= tallest - 1 for a, b in itertools.pairwise(ys))
+        box = sizes.get_window_extent(renderer)
+        for label in ax.get_xticklabels():
+            if label.get_text():
+                e = label.get_window_extent(renderer)
+                assert not (e.x0 < box.x1 and box.x0 < e.x1 and e.y0 < box.y1 and box.y0 < e.y1)
+        tight = fig.get_tightbbox(renderer)
+        assert box.x1 / fig.dpi <= tight.x1 + 1e-6

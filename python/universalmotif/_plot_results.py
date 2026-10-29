@@ -66,7 +66,8 @@ def _place_labels(px: np.ndarray, py: np.ndarray, radius: np.ndarray, sizes: lis
     and takes the one that overlaps the labels placed before it least, then
     other points, then the edge of ``frame``, preferring closer spots.
     Returns the lower left corner of each box relative to its point, and
-    whether it ended up far enough away to need a leader line.
+    whether it sits beyond the nearest ring, where it could be taken for a
+    neighbour's label and so needs a leader line.
     """
     placed: list[tuple[float, float, float, float]] = []
     dots = np.column_stack([px - radius, py - radius, px + radius, py + radius])
@@ -89,7 +90,7 @@ def _place_labels(px: np.ndarray, py: np.ndarray, radius: np.ndarray, sizes: lis
                            + max(frame[1] - box[1], 0) + max(box[3] - frame[3], 0))
                 cost = 1e4 * hit_labels + 1e3 * outside + 5 * hit_dots + ring
                 if cost < best_cost:
-                    best, best_cost = (dx, dy, ring > 1), cost
+                    best, best_cost = (dx, dy, ring >= 1), cost
             if best_cost < ring + 1:
                 break
         dx, dy, _ = best

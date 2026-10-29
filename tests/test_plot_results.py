@@ -187,6 +187,20 @@ def test_place_labels_nudges_apart():
     (dx, dy, far), = _place_labels(px[:1], py[:1], np.full(1, 3.0), [(30.0, 10.0)], [0], (0, 0, 300, 300))
     assert not far
     assert math.hypot(dx, dy + 5) < 10
+    # Every label not right beside its point gets a leader line, so that
+    # it is not read as belonging to a nearer point.
+    px, py = np.full(12, 100.0), np.full(12, 100.0)
+    spots = _place_labels(px, py, np.full(12, 3.0), [(30.0, 10.0)] * 12, list(range(12)), (0, 0, 300, 300))
+    assert any(far for *_, far in spots) and not all(far for *_, far in spots)
+    for dx, dy, far in spots:
+        nearest = math.hypot(min(max(0.0, dx), dx + 30), min(max(0.0, dy), dy + 10))
+        assert far == (nearest > 3.0 + 4.0)
+    # A point ringed by others has its label pushed out to the second ring,
+    # where it is as near the neighbours as its own point.
+    angle = np.arange(8) * np.pi / 4
+    px, py = np.r_[100.0, 100 + 8 * np.cos(angle)], np.r_[100.0, 100 + 8 * np.sin(angle)]
+    (dx, dy, far), = _place_labels(px, py, np.full(9, 3.0), [(30.0, 10.0)], [0], (0, 0, 300, 300))
+    assert math.hypot(dx, dy + 5) > 10 and far
 
 
 def test_enrichment_no_target_hits_at_left_edge():
@@ -408,3 +422,27 @@ def test_coocc_errors():
         plot_coocc(res, order="name")
     with pytest.raises(ValueError, match="cutoff"):
         plot_coocc(res, cutoff=2)
+
+
+def test_enrichment_labels_away_from_points_have_leaders():
+    rng = np.random.default_rng(3)
+    n = 30
+    x = np.concatenate([rng.normal(2.0, 0.08, 12), rng.normal(0, 0.4, n - 12)])
+    lq = -np.concatenate([rng.uniform(3, 3.6, 12), rng.uniform(0, 0.9, n - 12)])
+    res = pl.DataFrame({"motif": [f"motif{i}" for i in range(n)], "target_seq_hits": rng.integers(1, 80, n),
+                        "log2_enrichment": x, "qvalue": 10 ** lq, "log10_qvalue": lq})
+    ax = plot_enrichment(res, labels=12).axes[0]
+    fig = ax.figure
+    renderer = fig.canvas.get_renderer()
+    sizes = {(round(px, 9), round(py, 9)): s for px, py, _, s, _ in _points(ax)}
+    labels = _labels(ax)
+    assert len(labels) == 12
+    for t in labels.values():
+        box = _text_box(t, renderer)
+        px, py = ax.transData.transform(t.xy)
+        radius = math.sqrt(sizes[(round(t.xy[0], 9), round(t.xy[1], 9))]) / 2 * fig.dpi / 72
+        nearest = math.hypot(min(max(px, box.x0), box.x1) - px, min(max(py, box.y0), box.y1) - py)
+        # Labels beyond the first ring around their point, 3 points from its
+        # edge, are joined to it by a line.
+        if nearest > radius + 6 * fig.dpi / 72:
+            assert t.arrow_patch is not None, t.get_text()

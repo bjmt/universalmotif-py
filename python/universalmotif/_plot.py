@@ -96,8 +96,10 @@ def view_logo(
     matrix is. Row names may be several characters long, columns can have
     any height, and negative values are stacked below zero, upside down so
     that they read outward from zero unless ``flip_neg`` is ``False``.
-    Letters are coloured by ``colour_scheme``, a mapping from
-    single characters to colours, or all filled with ``fill``.
+    Letters are coloured by ``colour_scheme``, a mapping from single
+    characters to colours. Without one, a motif's letters take the colours
+    of its alphabet as in [`view_motifs()`][universalmotif.view_motifs],
+    and those of a matrix or mapping are all filled with ``fill``.
 
     Letters shorter than ``min_height`` are left out, ``x_spacer`` and
     ``y_spacer`` set the gaps between letters, ``sort_positions`` stacks
@@ -116,7 +118,9 @@ def view_logo(
     >>> plt.close("all")
     """
     m, rows = _logo_input(x, letters)
-    if colour_scheme is not None:
+    if colour_scheme is None and isinstance(x, Motif):
+        colour_scheme = _default_colours(x.alphabet, rows)
+    elif colour_scheme is not None:
         chars = {c for r in rows for c in r}
         missing = chars - set(colour_scheme)
         if missing:
@@ -361,19 +365,14 @@ def _y_axis(mats: list[np.ndarray], use_type: str):
         return sorted({0.0, float(np.round(top / 2)), top}), (0.0, top)
     lo = min(float(np.where(m > 0, 0, m).sum(axis=0).min()) for m in mats)
     hi = max(float(np.where(m < 0, 0, m).sum(axis=0).max()) for m in mats)
-    if use_type == "CWM":
-        # Contributions can be any size, so the ticks are round numbers and
-        # the space below the lowest letter is a share of the range.
-        span = (hi - lo) or 1.0
-        step = _round_step(span / 4)
-        ticks = np.arange(math.ceil(lo / step - 1e-9), math.floor(hi / step + 1e-9) + 1) * step
-        return [float(t) for t in np.round(ticks, 12)], (lo - 0.05 * span, hi)
-    breaks = np.array([lo, lo / 2, 0, hi / 2, hi])
-    if use_type == "PWM":
-        breaks = np.round(breaks)
-        breaks[4] = math.floor(hi) if breaks[4] > hi else breaks[4]
-    breaks[0] -= max(0.1 * abs(breaks[0]), 0.1)
-    return list(dict.fromkeys(breaks.tolist())), (float(breaks[0]), hi)
+    # Log-odds and contributions can be any size, so the ticks are round
+    # numbers at least a quarter of the range apart, and the space left below
+    # the lowest letter is not labelled.
+    span = (hi - lo) or 1.0
+    step = _round_step(span / 4)
+    ticks = np.arange(math.ceil(lo / step - 1e-9), math.floor(hi / step + 1e-9) + 1) * step
+    pad = 0.05 * span if use_type == "CWM" else max(0.1 * abs(lo), 0.1)
+    return [float(t) for t in np.round(ticks, 12)], (lo - pad, hi)
 
 
 def _panel_glyphs(m, rows, use_type, min_height, x_spacer, y_spacer, sort_positions,
@@ -574,6 +573,17 @@ def view_motifs(
     return fig
 
 
+def _in_order(table: pl.DataFrame, motifs: Sequence[str], what: str) -> pl.DataFrame:
+    """The rows of the named motifs, in the order they are named."""
+    wanted = [motifs] if isinstance(motifs, str) else list(dict.fromkeys(motifs))
+    table = table.filter(pl.col("motif").is_in(wanted))
+    if table.height == 0:
+        raise ValueError(f"none of the requested motifs are in {what}")
+    rank = pl.col("motif").cast(pl.String).replace_strict(wanted, list(range(len(wanted))),
+                                                           return_dtype=pl.Int64)
+    return table.sort(rank, maintain_order=True)
+
+
 def plot_motif_peaks(
     peaks: pl.DataFrame,
     motifs: Sequence[str] | None = None,
@@ -584,9 +594,9 @@ def plot_motif_peaks(
 ) -> Figure:
     """Draw the positions of motif hits found by [`motif_peaks()`][universalmotif.motif_peaks].
 
-    One panel per motif, or per motif named in ``motifs``, shows a
-    histogram of the hit centres, with the most enriched window shaded and
-    the P-value and enrichment in the title.
+    One panel per motif, or per motif named in ``motifs`` in the order
+    named, shows a histogram of the hit centres, with the most enriched
+    window shaded and the P-value and enrichment in the title.
 
     Examples
     --------
@@ -604,9 +614,7 @@ def plot_motif_peaks(
     if peaks.height == 0:
         raise ValueError("peaks has no rows to plot")
     if motifs is not None:
-        peaks = peaks.filter(pl.col("motif").is_in(list(motifs)))
-        if peaks.height == 0:
-            raise ValueError("none of the requested motifs are in peaks")
+        peaks = _in_order(peaks, motifs, "peaks")
     plt = _pyplot()
     n = peaks.height
     ncol = max(1, min(ncol, n))
@@ -810,17 +818,40 @@ def plot_tree(
 
     texts = []
     if labels:
+        from matplotlib.transforms import ScaledTranslation
+
+        # Tips are sized in points, so labels are moved off them by the
+        # radius of the largest, along the branch.
+        nudge = 0.0
+        if size_vals is not None and not tip_logos and np.isfinite(scaled).any():
+            nudge = (math.sqrt(float(np.nanmax(scaled))) / 2 + 1) / 72
         for i, lab in enumerate(tree.labels):
             if polar:
                 t = angle(tip_y[i])
                 r = xmax + 0.03 * xrange
                 deg = math.degrees(t) % 360
                 left = 90 < deg < 270
+                shift = ScaledTranslation(nudge * math.cos(t), nudge * math.sin(t), ax.figure.dpi_scale_trans)
                 texts.append(ax.text(*to_xy(r, t), lab, rotation=deg - 180 if left else deg,
                                      rotation_mode="anchor", ha="right" if left else "left",
-                                     va="center", fontsize=text_size))
+                                     va="center", fontsize=text_size, transform=ax.transData + shift))
             else:
-                texts.append(ax.text(label_x, tip_y[i], lab, ha="left", va="center", fontsize=text_size))
+                shift = ScaledTranslation(nudge, 0, ax.figure.dpi_scale_trans)
+                texts.append(ax.text(label_x, tip_y[i], lab, ha="left", va="center", fontsize=text_size,
+                                     transform=ax.transData + shift))
+
+    if polar:
+        ax.set_aspect("equal")
+        _fit_polar_limits(ax, texts, xmax * 1.05 or 1.0)
+    else:
+        ax.set_xlim(float(x.min()) - 0.02 * xrange, label_x)
+        ax.set_ylim(-0.6, n - 0.4)
+        if texts:
+            # Widen the axes to take in the labels, so a legend beside them
+            # does not cover them.
+            renderer = ax.figure.canvas.get_renderer()
+            right = max(t.get_window_extent(renderer).x1 for t in texts)
+            ax.set_xlim(right=ax.transData.inverted().transform((right, 0))[0])
 
     legends = []
     if legend and (palette or size_vals is not None):
@@ -832,6 +863,9 @@ def plot_tree(
             groups_legend = ax.legend(handles, [str(g) for g in palette], frameon=False,
                                       loc="upper left", bbox_to_anchor=(1.0, 1.0))
             ax.add_artist(groups_legend)
+            # Added artists are clipped to the axes, which would leave the
+            # legend out of tight layouts and bbox_inches="tight".
+            groups_legend.set_clip_on(False)
             legends.append(groups_legend)
         if size_vals is not None and hi > lo:
             # A few round values across the range of tip sizes, drawn at the
@@ -842,28 +876,45 @@ def plot_tree(
             title = None
             if isinstance(tip_size, str):
                 title = f"-log10({tip_size})" if tip_size in ("pval", "qval", "eval") else tip_size
-            legends.append(ax.legend(handles, [f"{b:g}" for b in breaks], title=title,
-                                     frameon=False, loc="lower left", bbox_to_anchor=(1.0, 0.0),
-                                     title_fontsize=text_size, fontsize=text_size))
+            kw = {"title": title, "frameon": False, "title_fontsize": text_size, "fontsize": text_size}
+            sizes_legend = ax.legend(handles, [f"{b:g}" for b in breaks], loc="lower left",
+                                     bbox_to_anchor=(1.0, 0.0), **kw)
+            if legends:
+                # Too little room below the groups, so the sizes go under them.
+                renderer = ax.figure.canvas.get_renderer()
+                above = legends[0].get_window_extent(renderer)
+                if sizes_legend.get_window_extent(renderer).y1 > above.y0:
+                    y = ax.transAxes.inverted().transform((0, above.y0))[1]
+                    sizes_legend = ax.legend(handles, [f"{b:g}" for b in breaks], loc="upper left",
+                                             bbox_to_anchor=(1.0, y), **kw)
+            legends.append(sizes_legend)
 
-    if polar:
-        r = xmax * 1.05 or 1.0
-        ax.set_xlim(-r, r)
-        ax.set_ylim(-r, r)
-        ax.set_aspect("equal")
-    else:
-        ax.set_xlim(float(x.min()) - 0.02 * xrange, label_x)
-        ax.set_ylim(-0.6, n - 0.4)
-        if texts:
-            # Widen the axes to take in the labels, so a legend beside them
-            # does not cover them.
-            renderer = ax.figure.canvas.get_renderer()
-            right = max(t.get_window_extent(renderer).x1 for t in texts)
-            ax.set_xlim(right=ax.transData.inverted().transform((right, 0))[0])
     if legends:
         _fit_legends(ax, legends, own_figure)
+        if own_figure:
+            _fit_height(ax, legends)
+        elif polar:
+            # Axes narrowed to make room shrink the circle with them.
+            _fit_polar_limits(ax, texts, ax.get_xlim()[1])
     ax.set_axis_off()
     return ax
+
+
+def _fit_polar_limits(ax: Axes, texts: list, r: float) -> None:
+    """Set the same limits from -r to r on both axes of a circular tree,
+    widening them until they take in the tip labels."""
+    renderer = ax.figure.canvas.get_renderer()
+    for _ in range(20):
+        ax.set_xlim(-r, r)
+        ax.set_ylim(-r, r)
+        if not texts:
+            return
+        ax.apply_aspect()
+        inv = ax.transData.inverted()
+        reach = max(float(np.abs(inv.transform(t.get_window_extent(renderer).corners())).max()) for t in texts)
+        if reach <= r:
+            return
+        r = reach * 1.02
 
 
 def _fit_legends(ax: Axes, legends: list, own_figure: bool) -> None:
@@ -886,6 +937,25 @@ def _fit_legends(ax: Axes, legends: list, own_figure: bool) -> None:
         ax.set_position([pos.x0, pos.y0, max(pos.width - shrink, 0.1), pos.height])
 
 
+def _fit_height(ax: Axes, artists: list) -> None:
+    """Make a figure made here taller when legends run below or text runs
+    above it, keeping the axes the same size."""
+    fig = ax.figure
+    renderer = fig.canvas.get_renderer()
+    boxes = [a.get_window_extent(renderer) for a in artists]
+    below = max(0.0, -min(b.y0 for b in boxes))
+    above = max(0.0, max(b.y1 for b in boxes) - fig.bbox.y1)
+    if below <= 0 and above <= 0:
+        return
+    w, h = fig.get_size_inches()
+    pos = ax.get_position()
+    extra_below = below / fig.dpi + (0.1 if below else 0)
+    extra_above = above / fig.dpi + (0.05 if above else 0)
+    new_h = h + extra_below + extra_above
+    fig.set_size_inches(w, new_h)
+    ax.set_position([pos.x0, (pos.y0 * h + extra_below) / new_h, pos.width, pos.height * h / new_h])
+
+
 def plot_motif_proximity(
     proximity: pl.DataFrame,
     motifs: Sequence[str] | None = None,
@@ -898,8 +968,10 @@ def plot_motif_proximity(
     """Draw each motif's distances to the nearest anchor, from
     [`motif_proximity()`][universalmotif.motif_proximity], with the most enriched zone shaded.
 
-    Distances are signed and negative upstream of stranded anchors. With
-    ``log_x`` the absolute distances plus one are drawn on a log scale.
+    Distances are signed and negative upstream of stranded anchors, and the
+    zone of an upstream or downstream test is shaded on that side only.
+    ``motifs`` picks the motifs to draw and their order. With ``log_x`` the
+    absolute distances plus one are drawn on a log scale.
 
     Examples
     --------
@@ -919,9 +991,7 @@ def plot_motif_proximity(
     if proximity.height == 0:
         raise ValueError("proximity has no rows to plot")
     if motifs is not None:
-        proximity = proximity.filter(pl.col("motif").is_in(list(motifs)))
-        if proximity.height == 0:
-            raise ValueError("none of the requested motifs are in proximity")
+        proximity = _in_order(proximity, motifs, "proximity")
     plt = _pyplot()
     n = proximity.height
     ncol = max(1, min(ncol, n))
@@ -934,7 +1004,14 @@ def plot_motif_proximity(
         if log_x:
             d = np.abs(d) + 1
         if row["best_dist"] is not None:
-            lo, hi = (1.0, row["best_dist"] + 1.0) if log_x else (-row["best_dist"], row["best_dist"])
+            side = row.get("orientation")
+            lo, hi = -row["best_dist"], row["best_dist"]
+            if log_x:
+                lo, hi = 1.0, row["best_dist"] + 1.0
+            elif side == "upstream":
+                hi = 0
+            elif side == "downstream":
+                lo = 0
             ax.axvspan(lo, hi, color=fill_zone, alpha=0.5, linewidth=0)
         if d.size:
             edges = np.geomspace(1, d.max() * 1.01, bins + 1) if log_x and d.max() > 1 else bins
@@ -975,6 +1052,7 @@ def plot_match_bkg(
     bkg: Sequence[str] | Mapping[str, str] | None = None,
     by: Sequence[str] | None = None,
     indices: pl.DataFrame | None = None,
+    names: Sequence[str] = ("target", "matched"),
     figsize: tuple[float, float] | None = None,
 ) -> Figure:
     """Compare the composition of targets and their matched background
@@ -982,7 +1060,9 @@ def plot_match_bkg(
 
     Give the targets and the background to draw their GC fraction and length,
     or the ``indices`` table from ``match_bkg(..., return_indices=True)`` to
-    also see any covariates. ``by`` picks the axes to draw.
+    also see any covariates. ``by`` picks the axes to draw, and ``names``
+    gives the two sets their names in the legend, such as
+    ``("peaks", "shuffled")`` for a background that was not matched.
 
     Examples
     --------
@@ -995,6 +1075,9 @@ def plot_match_bkg(
     'Figure'
     >>> plt.close(fig)
     """
+    names = [names] if isinstance(names, str) else list(names)
+    if len(names) != 2:
+        raise ValueError("names must give two names, for the targets and the background")
     labels = {"gc": "GC fraction", "length": "Sequence length"}
     panels: list[tuple[str, np.ndarray, np.ndarray]] = []
     if indices is not None:
@@ -1025,7 +1108,7 @@ def plot_match_bkg(
     plt = _pyplot()
     fig, axes = plt.subplots(1, len(panels), figsize=figsize or (4.0 * len(panels), 3.2), squeeze=False)
     for ax, (label, tv, uv) in zip(axes[0], panels):
-        for vals, name, colour in ((tv, "target", "#1f77b4"), (uv, "matched", "#ff7f0e")):
+        for vals, name, colour in ((tv, names[0], "#1f77b4"), (uv, names[1], "#ff7f0e")):
             if len(vals) and np.ptp(vals) == 0:
                 # A constant has no density to draw; mark its value.
                 ax.axvline(float(vals[0]), color=colour, linewidth=1.2, label=name)
@@ -1381,8 +1464,12 @@ def view_variant(
     with its ``kind`` of ``"observed"`` or ``"all"``. ``position`` and
     ``region`` are given in the same positions as the axis, which start at
     ``start``. The two logos share a y-axis so that they can be compared,
-    the changed position is shaded, and the bottom panel shows how the total
-    score at each position changes, alternative minus reference.
+    the changed position is shaded, and the bottom panel shows the change,
+    alternative minus reference. With ``kind="observed"`` it is the change
+    in the score of the letter each sequence has at each position, as bars.
+    With ``kind="all"`` it is the change in the score of every letter, drawn
+    as a logo like the two above, which suits hypothetical scores and
+    mutagenesis maps alike.
 
     Needs the ``plot`` extra.
 
@@ -1424,7 +1511,26 @@ def view_variant(
                           colour_scheme=colour_scheme, flip_neg=flip_neg, ylabel=label, ax=ax)
         _hide_x(ax)
     _share_logo_y(axes[:2])
-    diff = (m_alt.sum(axis=0) - m_ref.sum(axis=0))[a - start:b - start]
+    scale = max(float(np.abs(m_ref).max(initial=0.0)), float(np.abs(m_alt).max(initial=0.0)))
+    if kind == "all":
+        # The change in the score of every letter, as a logo of its own;
+        # rounding error is not drawn as a change.
+        d = m_alt - m_ref
+        d[np.abs(d) <= 1e-9 * scale] = 0.0
+        view_attributions(d, alt_seq, kind="all", alphabet=alphabet, start=start, region=(a, b),
+                          colour_scheme=colour_scheme, flip_neg=flip_neg, ylabel="Difference",
+                          ax=axes[2])
+        fig.tight_layout()
+        _band(fig, axes, position - a + 0.5, 1, "#F2C14E", 0.25)
+        for ax in axes:
+            ax.set_facecolor("none")
+        return fig
+    from ._deep import one_hot
+
+    seen_ref = (one_hot(sequence, alphabet=alphabet, dtype=float)[0] * m_ref).sum(axis=0)
+    seen_alt = (one_hot(alt_seq, alphabet=alphabet, dtype=float)[0] * m_alt).sum(axis=0)
+    diff = (seen_alt - seen_ref)[a - start:b - start]
+    diff[np.abs(diff) <= 1e-9 * scale] = 0.0
     axes[2].bar(np.arange(1, n + 1), diff, width=0.8,
                 color=np.where(diff >= 0, "#C0504D", "#4F81BD"))
     axes[2].axhline(0, color="0.6", linewidth=0.6)
@@ -1432,12 +1538,20 @@ def view_variant(
     axes[2].set_xticks(ticks, [str(round(t) + a - 1) for t in ticks])
     axes[2].set_xlim(axes[0].get_xlim())
     axes[2].set_ylabel("Difference")
+    axes[2].ticklabel_format(axis="y", useOffset=False)
     axes[2].set_xlabel("Position")
     for side in ("top", "right", "bottom"):
         axes[2].spines[side].set_visible(False)
     d_lo, d_hi = min(float(diff.min()), 0.0), max(float(diff.max()), 0.0)
     axes[2].spines["left"].set_bounds(d_lo, d_hi)
-    axes[2].set_yticks([t for t in axes[2].get_yticks() if d_lo - 1e-12 <= t <= d_hi + 1e-12])
+    inside = [t for t in axes[2].get_yticks() if d_lo - 1e-12 <= t <= d_hi + 1e-12]
+    if len(inside) < 2 and d_hi > d_lo:
+        from matplotlib.ticker import MaxNLocator
+
+        # Finer ticks, so that a change is given a scale.
+        finer = MaxNLocator(nbins=4).tick_values(d_lo, d_hi)
+        inside = [t for t in finer if d_lo - 1e-12 <= t <= d_hi + 1e-12]
+    axes[2].set_yticks(inside)
     fig.tight_layout()
     _band(fig, axes, position - a + 0.5, 1, "#F2C14E", 0.25)
     for ax in axes:

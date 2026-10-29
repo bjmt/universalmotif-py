@@ -37,6 +37,27 @@
   between pairs of motif hits by their orientation, against those expected
   by chance.
 - Names of neighbouring hits above attribution plots no longer overlap.
+- The API reference shows example figures of every plotting function.
+- Plotting fixes:
+  - `MotifTree.plot()` keeps its legends inside tight bounding boxes and
+    stacks the size legend below the groups legend, circular and fan trees
+    take in their tip labels, and tip labels no longer sit on sized tips.
+  - `view_motifs(use_type="PWM")` uses round, well-spaced y ticks.
+  - `plot_motif_proximity()` shades upstream and downstream zones on their
+    own side only, and it and `plot_motif_peaks()` draw motifs in the order
+    given.
+  - `plot_hits()` size legends fit their rows and keep clear of the x tick
+    labels.
+  - `plot_enrichment()` gives leader lines to every label not right beside
+    its point.
+  - `plot_match_bkg()` takes `names` to label the two sets.
+  - `view_logo()` colours a motif's letters by its alphabet by default.
+  - `plot_modisco()` no longer hides database matches that share a
+    pattern's label.
+  - `view_variant(kind="all")` draws the change in every letter as a logo,
+    which is meaningful for centred hypothetical scores.
+  - `plot_variant_effects()` sets labels in rows with leader lines, so
+    bunched variants stay readable.
 - `read_seqlets()` reads TF-MoDISco seqlets as a table like a scan's,
   optionally placed on the genome and with their contribution scores, so
   they can be drawn with `plot_hits()` or `view_attributions()`.

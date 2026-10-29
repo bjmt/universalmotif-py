@@ -481,7 +481,14 @@ def test_view_logo_inputs():
     ax = um.view_logo(motif)
     assert len(ax.collections[0].get_paths()) == 6
     assert all(e == pytest.approx((0.0, 1.0)) for e in _column_extents(ax).values())
+    # A motif takes the colours of its alphabet, and a matrix is filled
+    # with one colour.
+    faces = [matplotlib.colors.to_hex(c).upper() for c in ax.collections[0].get_facecolors()]
+    assert faces == [DNA_COLOURS[c] for c in "TTGACA"]
+    ax = um.view_logo(np.array(motif.matrix), letters=list(motif.letters))
     assert {matplotlib.colors.to_hex(c) for c in ax.collections[0].get_facecolors()} == {"#000000"}
+    ax = um.view_logo(motif, colour_scheme=dict.fromkeys("ACGT", "#123456"))
+    assert {matplotlib.colors.to_hex(c) for c in ax.collections[0].get_facecolors()} == {"#123456"}
     # Nothing at all to draw leaves the axes empty.
     ax = um.view_logo(np.zeros((2, 3)), letters=["A", "C"])
     assert not ax.collections
@@ -761,6 +768,117 @@ def test_tree_legends_are_fitted():
     assert ax.get_position().bounds == pytest.approx((0.05, 0.1, 0.3, 0.8))
 
 
+
+def _extent(artist, renderer):
+    return artist.get_window_extent(renderer)
+
+
+def test_tree_legends_are_in_tight_bounds():
+    # The groups legend is added as an artist, which is clipped to the axes
+    # unless told otherwise and then left out of bbox_inches="tight".
+    tree = um.motif_tree(um.example_motifs())
+    for kw in ({}, {"tip_size": "icscore"}, {"layout": "circular"}):
+        ax = tree.plot(groups="family", **kw)
+        fig = ax.figure
+        renderer = fig.canvas.get_renderer()
+        tight = fig.get_tightbbox(renderer)
+        legends = [a for a in ax.artists if hasattr(a, "get_texts")]
+        assert legends and not legends[0].get_clip_on()
+        for leg in [*legends, ax.get_legend()]:
+            assert _extent(leg, renderer).x1 <= tight.x1 * fig.dpi + 1e-6, kw
+            assert _extent(leg, renderer).y0 >= -1e-6, kw
+
+
+def test_tree_size_legend_goes_below_groups():
+    tree = um.motif_tree(um.example_motifs())
+    ax = tree.plot(groups="family", tip_size="icscore")
+    renderer = ax.figure.canvas.get_renderer()
+    groups = next(a for a in ax.artists if hasattr(a, "get_texts"))
+    sizes = ax.get_legend()
+    assert _extent(sizes, renderer).y1 <= _extent(groups, renderer).y0
+    # A tall figure has room for both, and keeps the sizes at the bottom.
+    ax = tree.plot(groups=["x"] * 6 + ["y"] * 6, tip_size="icscore")
+    renderer = ax.figure.canvas.get_renderer()
+    assert ax.get_legend().get_window_extent(renderer).y0 == pytest.approx(
+        ax.get_window_extent(renderer).y0, abs=12)
+
+
+def test_polar_tree_limits_take_in_labels():
+    tree = um.motif_tree(um.example_motifs())
+    for layout in ("circular", "fan"):
+        ax = tree.plot(layout=layout, groups="family")
+        renderer = ax.figure.canvas.get_renderer()
+        box = ax.get_window_extent(renderer)
+        for t in ax.texts:
+            e = t.get_window_extent(renderer)
+            assert box.x0 - 0.5 <= e.x0 and e.x1 <= box.x1 + 0.5, (layout, t.get_text())
+            assert box.y0 - 0.5 <= e.y0 and e.y1 <= box.y1 + 0.5, (layout, t.get_text())
+        legend = next(a for a in ax.artists if hasattr(a, "get_texts"))
+        assert all(not _boxes_overlap(_extent(legend, renderer), t.get_window_extent(renderer))
+                   for t in ax.texts)
+        lo, hi = ax.get_xlim()
+        assert lo == -hi and ax.get_ylim() == (lo, hi)
+    # Axes passed in that are narrowed for the legend still take in the labels.
+    fig, axes = plt.subplots(1, 2, figsize=(9, 4.5))
+    ax = tree.plot(layout="circular", groups="family", ax=axes[0])
+    renderer = fig.canvas.get_renderer()
+    box = ax.get_window_extent(renderer)
+    assert all(box.x0 - 0.5 <= t.get_window_extent(renderer).x0
+               and t.get_window_extent(renderer).x1 <= box.x1 + 0.5 for t in ax.texts)
+
+
+def _boxes_overlap(a, b):
+    return a.x0 < b.x1 and b.x0 < a.x1 and a.y0 < b.y1 and b.y0 < a.y1
+
+
+def test_tree_labels_clear_tip_points():
+    tree = um.motif_tree(um.example_motifs())
+    for layout in ("rectangular", "slanted", "circular", "fan"):
+        ax = tree.plot(layout=layout, tip_size="icscore", legend=False)
+        fig = ax.figure
+        renderer = fig.canvas.get_renderer()
+        points = ax.collections[1]
+        centres = points.get_offset_transform().transform(points.get_offsets())
+        radii = np.sqrt(points.get_sizes()) / 2 * fig.dpi / 72
+        # Each label starts beyond the edge of its tip, along its branch.
+        anchors = np.array([t.get_transform().transform(t.get_position()) for t in ax.texts])
+        assert (np.hypot(*(anchors - centres).T) >= radii).all(), layout
+        if layout in ("circular", "fan"):
+            continue
+        # Labels drawn level do not reach any tip.
+        boxes = [t.get_window_extent(renderer) for t in ax.texts]
+        for (cx, cy), r in zip(centres, radii):
+            for b in boxes:
+                nx, ny = min(max(cx, b.x0), b.x1), min(max(cy, b.y0), b.y1)
+                assert np.hypot(nx - cx, ny - cy) >= r, layout
+    # Without tip sizes, labels stay where they were.
+    ax = _small_tree().plot()
+    assert _text_positions(ax)["a"] == (2.04, 1.0)
+    assert ax.texts[0].get_window_extent(ax.figure.canvas.get_renderer()).x0 == pytest.approx(
+        ax.transData.transform((2.04, 0))[0])
+
+
+def test_pwm_ticks_are_round_and_apart():
+    w_box = um.example_motifs()[5]
+    fig = um.view_motifs(w_box, use_type="PWM")
+    ax = fig.axes[0]
+    ticks = list(ax.get_yticks())
+    assert ticks == [-15.0, -10.0, -5.0, 0.0]
+    lo, hi = ax.get_ylim()
+    # The axis still reaches below the lowest letter, without a tick there.
+    assert lo < -15.0 and lo not in ticks and hi > 1.0
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    boxes = [t.get_window_extent(renderer) for t in ax.get_yticklabels() if t.get_text()]
+    assert all(boxes[k].y1 < boxes[k + 1].y0 for k in range(len(boxes) - 1))
+    for m in um.example_motifs():
+        mat = np.array(um.convert_type(m, "PWM").matrix)
+        ticks, (lo, hi) = _y_axis([mat], "PWM")
+        step = ticks[1] - ticks[0]
+        assert step >= (hi - lo) / 4 * 0.9 and 0.0 in ticks
+        assert all(float(t / step).is_integer() for t in ticks)
+
+
 # --- Peaks, proximity and matched backgrounds ------------------------------------
 
 
@@ -791,8 +909,9 @@ def test_plot_motif_peaks_panels():
     assert a.get_xlabel() == "Hit centre position" and a.get_ylabel() == "Count"
     assert sum(p.get_height() for p in b.patches) == 2, "no window, so no shading"
     assert len(c.patches) == 1 and _span(c.patches[0]) == (45.0, 55.0)
+    # Motifs named are drawn in the order named.
     fig = um.plot_motif_peaks(_peaks(), motifs=["c", "a"], ncol=3)
-    assert [ax.get_title()[0] for ax in fig.axes] == ["a", "c"]
+    assert [ax.get_title()[0] for ax in fig.axes] == ["c", "a"]
     # Without seq_length the axis fits the hits.
     ax = um.plot_motif_peaks(_peaks().drop("seq_length"), motifs=["b"]).axes[0]
     assert ax.get_xlim()[1] < 10
@@ -819,6 +938,18 @@ def test_plot_motif_proximity_panels():
     assert sum(p.get_height() for p in a.patches[1:]) == 5
     assert sum(p.get_height() for p in b.patches) == 2, "no zone, so no shading"
     assert [_span(p) for p in c.patches] == [(-10.0, 10.0)], "no distances, so no histogram"
+    # Directed zones are shaded on their side of the anchor only.
+    directed = _proximity().with_columns(orientation=pl.Series(["upstream", "downstream", "downstream"]))
+    a, _, c, _ = um.plot_motif_proximity(directed).axes
+    assert _span(a.patches[0]) == (-50.0, 0.0)
+    assert _span(c.patches[0]) == (0.0, 10.0)
+    a = um.plot_motif_proximity(directed, motifs=["a"], log_x=True).axes[0]
+    assert _span(a.patches[0]) == (1.0, 51.0)
+    undirected = _proximity().with_columns(orientation=pl.lit("undirected"))
+    assert _span(um.plot_motif_proximity(undirected).axes[0].patches[0]) == (-50.0, 50.0)
+    # Motifs named are drawn in the order named.
+    fig = um.plot_motif_proximity(_proximity(), motifs=["c", "a"])
+    assert [ax.get_title()[0] for ax in fig.axes] == ["c", "a"]
     # On a log scale, distances are absolute and shifted by one.
     a = um.plot_motif_proximity(_proximity(), motifs=["a"], log_x=True).axes[0]
     assert a.get_xscale() == "log"
@@ -867,6 +998,11 @@ def test_plot_match_bkg_from_sequences():
     assert list(length.lines[1].get_xdata()) == [6.0, 6.0]
     assert [t.get_text() for t in gc.get_legend().get_texts()] == ["target", "matched"]
     assert len(um.plot_match_bkg(targets, bkg, by=["length"]).axes) == 1
+    fig = um.plot_match_bkg(targets, bkg, names=["peaks", "shuffled"])
+    assert [t.get_text() for t in fig.axes[0].get_legend().get_texts()] == ["peaks", "shuffled"]
+    assert [line.get_label() for line in fig.axes[1].lines] == ["peaks", "shuffled"]
+    with pytest.raises(ValueError, match="two names"):
+        um.plot_match_bkg(targets, bkg, names=["peaks"])
     with pytest.raises(ValueError, match="give the targets and the background"):
         um.plot_match_bkg(targets)
     with pytest.raises(ValueError, match="by must name"):
@@ -1015,9 +1151,37 @@ def test_view_variant_all_letters():
     rng = np.random.default_rng(4)
     ref, alt = rng.normal(0, 1, (4, 8)), rng.normal(0, 1, (4, 8))
     fig = um.view_variant(ref, alt, seq, position=3, alt="G", kind="all")
-    np.testing.assert_allclose([p.get_height() for p in fig.axes[2].containers[0]],
-                               alt.sum(axis=0) - ref.sum(axis=0))
+    # The difference is drawn as a logo of the change in every letter.
+    bottom = fig.axes[2]
+    assert not bottom.containers
+    assert len(bottom.collections[0].get_paths()) == 32
+    d = alt - ref
+    lo, hi = bottom.get_ylim()
+    assert lo <= np.where(d < 0, d, 0).sum(axis=0).min() + 1e-9
+    assert hi >= np.where(d > 0, d, 0).sum(axis=0).max() - 1e-9
     assert len(fig.axes[0].collections[0].get_paths()) == 32
+
+
+def test_view_variant_centred_scores_have_no_noise():
+    # Centred hypothetical scores sum to zero at every position, which once
+    # gave a panel of rounding error with an offset label.
+    seq = "ACGTACGTAC"
+    rng = np.random.default_rng(7)
+    ref = rng.normal(0, 1, (4, 10))
+    ref -= ref.mean(axis=0)
+    alt = ref.copy()
+    alt[:, 4:7] *= 0.2
+    alt -= alt.mean(axis=0)
+    fig = um.view_variant(ref, alt, seq, position=5, alt="T", kind="all")
+    bottom = fig.axes[2]
+    # Letters are drawn only where the scores changed.
+    centres = [p.vertices[:, 0].mean() for p in bottom.collections[0].get_paths()]
+    assert centres and all(4 < c < 7 + 1 for c in centres)
+    fig.canvas.draw()
+    assert bottom.yaxis.get_offset_text().get_text() == ""
+    # Identical scores give no letters at all.
+    fig = um.view_variant(ref, ref, seq, position=5, alt="C", kind="all")
+    assert all(len(c.get_paths()) == 0 for c in fig.axes[2].collections)
 
 
 def _tracks_input():

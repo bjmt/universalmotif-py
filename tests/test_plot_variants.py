@@ -12,6 +12,7 @@ from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection, PathCollection
 from matplotlib.colors import to_hex
 from matplotlib.figure import Figure
+from matplotlib.text import Text
 from universalmotif._deep import _site_letters
 from universalmotif._plot_variants import plot_variant_effects, variant_motif_effects
 
@@ -428,3 +429,66 @@ def test_saves_tightly_with_legends_inside(data):
     buf = io.BytesIO()
     fig.savefig(buf, format="png", bbox_inches="tight")
     assert buf.getbuffer().nbytes > 0
+
+
+def _clustered():
+    gata = um.example_motifs()[6]
+    seq = um.create_sequences(seqnum=1, seqlen=120, seed=3)[0]
+    seq = seq[:50] + "TTAGATAAGG" + seq[60:]
+
+    def model(batch):
+        words = [s[i:i + 8] for s in um.from_one_hot(batch) for i in range(len(s) - 7)]
+        return um.score_match(gata, words).reshape(len(batch), -1).max(axis=1)
+
+    return um.mutagenesis_effects(model(um.mutagenesis(seq)), seq), seq, gata
+
+
+def _overlap(a, b):
+    return a.x0 < b.x1 and b.x0 < a.x1 and a.y0 < b.y1 and b.y0 < a.y1
+
+
+@pytest.mark.parametrize("kw", [{}, {"region": (30, 80)}, {"labels": 8}])
+def test_bunched_labels_are_set_apart(kw):
+    # Every substitution in one site: the top variants are bunched, so their
+    # labels go in a row below the stems, joined to them by lines.
+    ism, seq, gata = _clustered()
+    fig = plot_variant_effects(ism, sequence=seq, motifs=gata, pvalue=1e-3, **kw)
+    ax = fig.axes[0]
+    renderer = fig.canvas.get_renderer()
+    labels = [t for t in ax.texts if t.get_text()]
+    assert len(labels) == kw.get("labels", 5)
+    boxes = []
+    for t in labels:
+        # The text alone, without its leader line.
+        t.update_positions(renderer)
+        boxes.append(Text.get_window_extent(t, renderer))
+    assert not any(_overlap(a, b) for k, a in enumerate(boxes) for b in boxes[k + 1:])
+    assert all(t.arrow_patch is not None for t in labels)
+    # No label covers a stem or a head.
+    stems = next(c for c in ax.collections if isinstance(c, LineCollection))
+    lowest = min(ax.transData.transform(s)[:, 1].min() for s in stems.get_segments())
+    heads = [c for c in ax.collections if isinstance(c, PathCollection)]
+    lowest = min([lowest] + [c.get_window_extent(renderer).y0 for c in heads])
+    assert all(b.y1 < lowest for b in boxes)
+    # Labels stay in the axes, and the axis spans the effects only.
+    frame = ax.get_window_extent(renderer)
+    assert all(frame.x0 <= b.x0 and b.x1 <= frame.x1 and frame.y0 <= b.y0 for b in boxes)
+    effects = np.array([seg[1][1] for seg in stems.get_segments()])
+    lo, hi = ax.spines["left"].get_bounds()
+    assert lo <= effects.min() and hi >= effects.max() and lo > ax.get_ylim()[0]
+    assert all(lo - 1e-9 <= t <= hi + 1e-9 for t in ax.get_yticks())
+
+
+def test_spread_keeps_boxes_apart_and_near():
+    from universalmotif._plot_variants import _spread
+
+    # Boxes apart from each other stay where they are wanted.
+    np.testing.assert_allclose(_spread(np.array([10.0, 50.0]), np.array([10.0, 10.0]), 0, 100, 2),
+                               [10.0, 50.0])
+    # Boxes wanted at one place are spread evenly around it.
+    np.testing.assert_allclose(_spread(np.array([50.0, 50.0, 50.0]), np.full(3, 10.0), 0, 100, 2),
+                               [38.0, 50.0, 62.0])
+    # A block running off the line is pushed back onto it, in input order.
+    np.testing.assert_allclose(_spread(np.array([99.0, 98.0]), np.full(2, 10.0), 0, 100, 0),
+                               [95.0, 85.0])
+    assert _spread(np.array([50.0, 50.0]), np.full(2, 60.0), 0, 100, 0) is None

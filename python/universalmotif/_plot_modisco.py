@@ -138,9 +138,19 @@ def _find_matches(pats: list[_Pattern], every: list[_Pattern], matches: pl.DataF
             for m in database:
                 m = _check_motif(m)
                 db.setdefault(m.name, m)
-    own = {p.name for p in every} | {p.label for p in every}
+    # Patterns compared with each other are left out by what they are, the
+    # motifs compared as subjects, and not by their labels, which can be the
+    # name of the very database motif a pattern matches.
+    names = {p.name for p in every}
+    labels = {p.label for p in every}
+    subjects = set(matches["subject"].cast(pl.String).to_list())
+    if "subject_i" in matches.columns and "target_i" in matches.columns:
+        ids = matches.filter(pl.col("subject").is_in(list(names | labels)))["subject_i"].unique().to_list()
+        own = pl.col("target_i").is_in(ids) | pl.col("target").is_in(list(names))
+    else:
+        own = pl.col("target").is_in(list(names | (labels & subjects)))
     keys = [c for c in ("qvalue", "pvalue") if c in matches.columns]
-    table = matches.filter(~pl.col("target").is_in(list(own)))
+    table = matches.filter(~own)
     if db is not None:
         table = table.filter(pl.col("target").is_in(list(db)))
     if "score" in table.columns:

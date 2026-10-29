@@ -11,7 +11,7 @@ import polars as pl
 
 from ._analysis import _make_unique
 from ._core import Motif
-from ._plot import _fit_legends, _pyplot, draw_logo
+from ._plot import _fit_height, _fit_legends, _pyplot, draw_logo
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -534,45 +534,42 @@ def _draw_legends(ax, motif_names, palette, logos, value_legends, text_size, hit
         if hi <= lo:
             continue
         breaks = [v for v in MaxNLocator(nbins=3).tick_values(lo, hi) if lo <= v <= hi]
+        # Markers keep the hits' proportions but are no taller than a line
+        # and a half of text, and the rows are spaced to fit the largest.
+        largest = min(hit_pts, 1.5 * text_size)
         handles = []
         for v in breaks:
             frac = (v - lo) / (hi - lo)
-            size = (0.35 + 0.65 * frac) * hit_pts if kind in ("size", "both") else 0.8 * hit_pts
+            size = (0.35 + 0.65 * frac) * largest if kind in ("size", "both") else min(0.8 * hit_pts, text_size)
             a = 0.25 + 0.75 * frac if kind in ("shade", "both") else 1.0
-            handles.append(Line2D([], [], linestyle="", marker=">", markersize=min(size, 2 * text_size),
+            handles.append(Line2D([], [], linestyle="", marker=">", markersize=size,
                                   markerfacecolor="0.3", markeredgecolor="none", alpha=a))
+        tallest = max(h.get_markersize() for h in handles) / text_size
         renderer = ax.figure.canvas.get_renderer()
         if legends:
             below = legends[-1].get_window_extent(renderer)
             y = ax.transAxes.inverted().transform((0, below.y0))[1] - 0.04
         else:
             y = 1.0
-        leg = ax.legend(handles, [f"{v:g}" for v in breaks], title=title, frameon=False,
-                        loc="upper left", bbox_to_anchor=(1.01, y), fontsize=text_size,
-                        title_fontsize=text_size, borderaxespad=0.0, handlelength=1.2,
-                        alignment="left")
+        kw: dict[str, Any] = {"title": title, "frameon": False, "loc": "upper left", "fontsize": text_size,
+                              "title_fontsize": text_size, "borderaxespad": 0.0,
+                              "handlelength": max(1.2, tallest), "handleheight": max(0.7, tallest),
+                              "alignment": "left"}
+        labels = [f"{v:g}" for v in breaks]
+        leg = ax.legend(handles, labels, bbox_to_anchor=(1.01, y), **kw)
+        # A legend low enough to reach the x tick labels is moved right of
+        # the last of them.
+        box = leg.get_window_extent(renderer)
+        ticks = [t.get_window_extent(renderer) for t in ax.get_xticklabels() if t.get_visible() and t.get_text()]
+        clash = [t for t in ticks if t.x1 > box.x0 and t.x0 < box.x1 and t.y1 > box.y0 and t.y0 < box.y1]
+        if clash:
+            right = max(t.x1 for t in clash) + 0.3 * text_size * ax.figure.dpi / 72
+            leg.remove()
+            x = ax.transAxes.inverted().transform((right, 0))[0]
+            leg = ax.legend(handles, labels, bbox_to_anchor=(x, y), **kw)
         ax.add_artist(leg)
         # Added artists are clipped to the axes, which would leave the legend
         # out of tight layouts and bbox_inches="tight".
         leg.set_clip_on(False)
         legends.append(leg)
     return legends
-
-
-def _fit_height(ax: Axes, artists: list) -> None:
-    """Make a figure made here taller when legends run below or text runs
-    above it, keeping the axes the same size."""
-    fig = ax.figure
-    renderer = fig.canvas.get_renderer()
-    boxes = [a.get_window_extent(renderer) for a in artists]
-    below = max(0.0, -min(b.y0 for b in boxes))
-    above = max(0.0, max(b.y1 for b in boxes) - fig.bbox.y1)
-    if below <= 0 and above <= 0:
-        return
-    w, h = fig.get_size_inches()
-    pos = ax.get_position()
-    extra_below = below / fig.dpi + (0.1 if below else 0)
-    extra_above = above / fig.dpi + (0.05 if above else 0)
-    new_h = h + extra_below + extra_above
-    fig.set_size_inches(w, new_h)
-    ax.set_position([pos.x0, (pos.y0 * h + extra_below) / new_h, pos.width, pos.height * h / new_h])
