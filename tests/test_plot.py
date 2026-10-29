@@ -7,7 +7,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 import universalmotif as um  # noqa: E402
-from universalmotif._logo import _flip_negative, matrix_glyphs, motif_glyphs, position_glyphs  # noqa: E402
+from universalmotif._logo import matrix_glyphs, motif_glyphs, position_glyphs  # noqa: E402
 from universalmotif._plot import (  # noqa: E402
     AA_COLOURS,
     DNA_COLOURS,
@@ -34,16 +34,6 @@ def _ref(key):
     return load_reference("plot.json", key)
 
 
-@pytest.fixture
-def flush_negative_letters(monkeypatch):
-    # The R package stacks negative letters with no gaps between them and
-    # the largest next to zero, where the port leaves the same gaps as above
-    # zero and mirrors the letters above, so the reference comparisons
-    # stack them as R does.
-    monkeypatch.setattr("universalmotif._logo._flip_negative",
-                        lambda glyphs, s, d, f, y_spacer=0.0: _flip_negative(glyphs, s, not d, f))
-
-
 def _motifs():
     return [motif_from_record(r) for r in _ref("motifs")]
 
@@ -59,7 +49,7 @@ def _check_glyphs(glyphs, want, ctx):
     np.testing.assert_allclose(y, nums(want["y"]), rtol=1e-12, atol=1e-13, err_msg=ctx)
 
 
-def test_logo_polygons_reference(flush_negative_letters):
+def test_logo_polygons_reference():
     mats = _ref("logo_matrices")
     for case in _ref("logo"):
         m = mats[case["matrix"]]
@@ -133,7 +123,7 @@ def test_cwm_anchor_has_information_content():
     np.testing.assert_allclose(raw["small"][:, 1:4], raw["big"][:, 1:4])
 
 
-def test_single_motif_polygons_reference(flush_negative_letters):
+def test_single_motif_polygons_reference():
     ms = _motifs()
     for case in _ref("single"):
         m = ms[case["idx"] - 1]

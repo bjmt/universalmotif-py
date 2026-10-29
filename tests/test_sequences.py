@@ -48,10 +48,7 @@ def test_windows_reference():
 
 def test_complexity_reference():
     for case in _ref("complexity"):
-        # Without an alphabet, the R package uses the letters of the string
-        # itself; the port uses ACGT for DNA, so R's default is passed explicitly.
-        alph = case["alph"] or "".join(sorted(set(case["string"])))
-        got = um.calc_complexity(case["string"], case["method"], alph, case["max_word"])
+        got = um.calc_complexity(case["string"], case["method"], case["alph"], case["max_word"])
         assert got == pytest.approx(nums(case["value"])[0], rel=1e-12, abs=1e-15, nan_ok=True), case
     got = um.calc_complexity(["ACGT", "AAAA"], "WoottonFederhen")
     assert isinstance(got, np.ndarray) and got.shape == (2,)
@@ -137,10 +134,8 @@ def test_motif_finder_reference():
             for k, v in a.items()
             if k not in ("RC",)
         }
-        # The port corrects P-values for the words searched and counts every
-        # word in the q-values, where the R package does neither. The motifs found are the same,
-        # so each one R reports is looked for among all of the port's.
-        kw.setdefault("qvalue", 1e-3)
+        # Each motif R reports is looked for among all of the port's.
+        kw.setdefault("qvalue", 0.05)
         kept = um.motif_finder(pos, neg, rc=a.get("RC", True), **kw)
         assert kept.height <= len(case["motifs"]), a
         assert (kept["qvalue"] <= kw["qvalue"]).all(), a
@@ -153,9 +148,8 @@ def test_motif_finder_reference():
             row = got.row(k, named=True)
             for col in ("width", "seqs_pos", "seqs_neg", "sites_pos", "sites_neg", "n_pos", "n_neg"):
                 assert row[col] == nums(s.get(col))[i], (a, col)
-            p = min(1.0, nums(s["pvalue"])[i] * row["candidates"])
-            assert row["pvalue"] == pytest.approx(p, rel=1e-9), a
-            assert row["qvalue"] >= nums(s["qvalue"])[i] * (1 - 1e-9), a
+            assert row["pvalue"] == pytest.approx(nums(s["pvalue"])[i], rel=1e-9), a
+            assert row["qvalue"] == pytest.approx(nums(s["qvalue"])[i], rel=1e-9), a
             assert row["log10_pvalue"] == pytest.approx(np.log10(row["pvalue"]), rel=1e-9), a
         assert got["rank"].to_list() == list(range(1, got.height + 1))
         assert got["pvalue"].is_sorted()

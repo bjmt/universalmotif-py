@@ -42,6 +42,9 @@
   P-values and q-values change, while scores and alignments do not.
 - Comparisons, `motif_tree()` and `merge_similar()` are otherwise about 10%
   faster, with identical results.
+- `motif_proximity()` takes `chrom_lengths` to clip zones at chromosome
+  ends when the universe is a range table, and keeps the lengths of
+  `sequences` in that case instead of dropping them.
 - `draw_logo()` draws a motif's logo in a box on any matplotlib plot, in
   data coordinates or fractions of the axes, for logos beside heatmap
   rows, points or labels.

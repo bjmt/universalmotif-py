@@ -187,13 +187,11 @@ def test_masking():
 
     mr = _ref("mask_ranges")
     seqs = dict(zip(mr["names"], mr["seqs"]))
-    # The R package fails on the first and third cases.
-    fixed = {0: ["------GTACGTACGT", "GGGG----AAAATTTT"], 2: ["NNNNNCGTACGTANNN", "GGGGCCCCAAAATTTT"]}
-    for i, case in enumerate(mr["cases"]):
+    for case in mr["cases"]:
         # R counts positions from 1, with the end included.
         ranges = [(c, s - 1, e) for c, s, e in zip(case["chrom"], case["start"], case["end"])]
         call = lambda: um.mask_ranges(seqs, ranges, case["letter"])  # noqa: E731
-        want = fixed.get(i, case.get("value"))
+        want = case.get("value")
         if want is not None:
             assert list(call().values()) == list(want), case
         else:

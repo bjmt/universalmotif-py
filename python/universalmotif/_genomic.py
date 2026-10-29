@@ -159,6 +159,7 @@ def motif_proximity(
     motifs: Motif | Iterable[Motif] | None = None,
     sequences: Mapping[str, str] | None = None,
     universe=None,
+    chrom_lengths: Mapping[str, int] | None = None,
     method: str = "binomial",
     count: str = "hits",
     orientation: str = "undirected",
@@ -215,6 +216,11 @@ def motif_proximity(
         default the whole of ``sequences``. Zones are clipped at chromosome
         ends when lengths are known. Only chromosomes carrying anchors are
         used.
+    chrom_lengths
+        Chromosome lengths, as a mapping from names to lengths, so that zones
+        are clipped at chromosome ends when ``universe`` is a range table.
+        They are otherwise taken from ``universe`` when it gives lengths, or
+        from ``sequences``.
     count
         ``"hits"`` counts hits in the zone, where overlapping hits of a
         motif count once with the best score kept, across strands unless
@@ -319,10 +325,11 @@ def motif_proximity(
         )
     else:
         uni = _range_table(universe, "universe")
-        lengths = {}
+    if chrom_lengths is not None:
+        lengths = {**lengths, **{str(k): int(v) for k, v in chrom_lengths.items()}}
     names = pl.concat([uni["chrom"], anc["chrom"], h["chrom"]]).unique(maintain_order=True).to_list()
     index = {c: i for i, c in enumerate(names)}
-    chrom_lengths = [lengths.get(c) for c in names]
+    lengths_by_chrom = [lengths.get(c) for c in names]
     # Motif names as str() gives them.
     motif_names = hits["motif"].cast(pl.String).fill_null("None")
     # Motifs keep the numbers scan_sequences() gave them (those of the last
@@ -344,7 +351,7 @@ def motif_proximity(
         hits["score"].cast(pl.Float64).to_numpy(),
         _cols(anc, index),
         _cols(uni, index),
-        chrom_lengths,
+        lengths_by_chrom,
         method,
         count,
         orientation,

@@ -47,23 +47,18 @@ def _close(got, want, ctx):
 def test_proximity_reference():
     chroms = _chroms()
     lengths = {k: len(v) for k, v in chroms.items()}
-    whole = pl.DataFrame({"chrom": list(lengths), "start": [0] * 3, "end": list(lengths.values())})
     hits, anchors = _hits(), _ranges(_ref("anchors"))
     for case in _ref("proximity"):
         a = args(case["args"])
         count = a.get("count", "hits")
-        if case["universe"]:
-            universe = _ranges(_ref("universe"))
-        elif count == "anchors":
-            # Without lengths zones are not clipped at chromosome ends, which
-            # is what the R package ends up doing.
-            universe = whole
-        else:
-            universe = lengths
+        # The R package clips zones at the chromosome lengths its ranges
+        # carry, which are given here with chrom_lengths.
+        universe = _ranges(_ref("universe")) if case["universe"] else lengths
         got = um.motif_proximity(
             hits,
             anchors,
             universe=universe,
+            chrom_lengths=lengths,
             method=a.get("method", "binomial"),
             count=count,
             orientation=a.get("orientation", "undirected"),
@@ -73,8 +68,8 @@ def test_proximity_reference():
         )
         t = case["table"]
         ctx = (a, case["universe"])
-        # Ties in P-value are ordered by motif index here and by name in the
-        # R package, so rows are matched by motif.
+        # Ties in P-value can be ordered differently, so rows are matched by
+        # motif.
         assert got["pvalue"].is_sorted(), ctx
         assert sorted(got["motif"].to_list()) == sorted(t["motif"]), ctx
         got = pl.concat([got.filter(pl.col("motif") == m) for m in t["motif"]])

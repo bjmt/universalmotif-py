@@ -151,11 +151,6 @@ def test_ops():
                 call()
         else:
             got = call()
-            if op == "normalize" and motif.type == "PCM" and motif.pseudocount == 0:
-                # The R package leaves a PCM's pseudocount at zero, so its
-                # weights stay infinite; the port sets it to 1.
-                assert got.pseudocount == 1, ctx
-                got = got.replace(pseudocount=0)
             assert_motif_matches(got, case["motif"], ctx, skip_nsites=skip_nsites,
                                  skip_derived=derived)
             if derived:
