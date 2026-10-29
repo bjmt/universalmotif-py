@@ -16,6 +16,8 @@ Sequence logos and plots of analysis results, drawn with matplotlib, which is in
 
 ::: universalmotif.plot_variant_effects
 
+::: universalmotif.plot_interactions
+
 ::: universalmotif.plot_modisco
 
 ::: universalmotif.plot_seqlets

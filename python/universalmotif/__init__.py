@@ -94,6 +94,7 @@ from ._core import Motif
 from ._enrich import enrich_motifs, motif_coocc, motif_peaks
 from ._genome import Genome, extract_ranges, signal_stats, signal_values
 from ._genomic import match_bkg, motif_proximity
+from ._interactions import interaction_effects, pair_mutagenesis, plot_interactions
 from ._intervals import genomic_hits, to_polars_bio, to_pyranges
 from ._plot_comparison import plot_comparison
 from ._plot_hits import plot_hits
@@ -180,6 +181,7 @@ __all__ = [
     "icm_to_ppm",
     "implant_motifs",
     "insert_sites",
+    "interaction_effects",
     "log_string_pval",
     "logo_svg",
     "mask_ranges",
@@ -204,6 +206,7 @@ __all__ = [
     "one_hot",
     "one_hot_batches",
     "pack_sequences",
+    "pair_mutagenesis",
     "pair_spacings",
     "pcm_to_ppm",
     "plot_comparison",
@@ -212,6 +215,7 @@ __all__ = [
     "plot_hit_contributions",
     "plot_hit_profile",
     "plot_hits",
+    "plot_interactions",
     "plot_marginalization",
     "plot_match_bkg",
     "plot_modisco",

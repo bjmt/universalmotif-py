@@ -62,10 +62,19 @@ background sequences, and [`site_spacings()`][universalmotif.site_spacings]
 places two sites at a range of distances apart.
 [`view_variant()`][universalmotif.view_variant] compares the scores of a
 sequence with those of a variant of it.
+[`pair_mutagenesis()`][universalmotif.pair_mutagenesis] adds every pair of
+substitutions, and [`interaction_effects()`][universalmotif.interaction_effects]
+turns the predictions for them into the epistasis between each pair of
+positions, which [`plot_interactions()`][universalmotif.plot_interactions]
+draws as a map.
 
 ::: universalmotif.mutagenesis
 
 ::: universalmotif.mutagenesis_effects
+
+::: universalmotif.pair_mutagenesis
+
+::: universalmotif.interaction_effects
 
 ::: universalmotif.insert_sites
 

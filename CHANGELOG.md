@@ -33,6 +33,14 @@
   - `plot_variant_effects()` draws many variant effects along a locus over
     the motif hits, and `variant_motif_effects()` gives the change each
     variant makes to the scores of the motif sites it falls in.
+- `pair_mutagenesis()` makes the single and double substitutions of a
+  sequence for in silico double mutagenesis, with one substitution per
+  position by default, and `interaction_effects()` turns a model's
+  predictions for them into the epistasis between each pair of positions.
+  `plot_interactions()` draws any square matrix of interactions between
+  positions, such as these or a Jacobian of attributions, as a heatmap or
+  a triangle, with the sequence or a contribution logo and motif hits
+  along its edges.
 - `pair_spacings()` and `plot_pair_spacing()` count and draw the distances
   between pairs of motif hits by their orientation, against those expected
   by chance.
