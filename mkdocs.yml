@@ -31,6 +31,7 @@ theme:
 hooks:
   - hooks/notebooks.py
   - hooks/cli_help.py
+  - hooks/plot_examples.py
 
 plugins:
   - search
@@ -73,6 +74,7 @@ markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
   - attr_list
+  - md_in_html
   - toc:
       permalink: true
   - pymdownx.highlight
@@ -86,6 +88,10 @@ markdown_extensions:
 # The API reference comes from the docstrings, so rebuild when they change.
 watch:
   - python/universalmotif
+  - hooks/figures
+
+extra_css:
+  - stylesheets/plots.css
 
 extra_javascript:
   - javascripts/mathjax.js
