@@ -1,3 +1,5 @@
+import inspect
+
 import numpy as np
 import polars as pl
 import pytest
@@ -614,6 +616,20 @@ def test_view_motifs_contribution_weights():
     assert ext[2][0] < -0.05 and ext[2][1] == pytest.approx(0.3, abs=0.01)
 
 
+def test_view_motifs_draws_cwms_as_cwms_by_default():
+    cwm = um.create_motif(np.array([[0.5, -0.2, 0.1, 0], [0, 0, 0.3, -0.1]]).T, alphabet="DNA",
+                          type="CWM", name="cwm")
+    fig = um.view_motifs(cwm)
+    assert fig.axes[0].get_ylabel() == "contribution"
+    plt.close(fig)
+    np.testing.assert_array_equal(next(iter(um.view_motifs(cwm, return_raw=True).values())), cwm.matrix)
+    # A mix of CWMs and other types shares one scale, in bits.
+    mixed = um.view_motifs([cwm, um.create_motif("TGACTCA", name="ap1")], rc=False)
+    assert [ax.get_ylabel() for ax in mixed.axes] == ["bits", "bits"]
+    plt.close(mixed)
+    assert "fit_to_height: 'Any' = <default>" in str(inspect.signature(um.view_motifs))
+
+
 def test_view_motifs_fit_to_height_ignored_for_cwm_warns():
     cwm = um.create_motif(np.array([[0.5, -0.2, 0.1, 0], [0, 0, 0.3, -0.1]]).T, alphabet="DNA",
                           type="CWM")
@@ -743,6 +759,18 @@ def test_tree_tip_logos_sit_left_of_labels():
     assert len(label_x) == 1
     logo_x = max(p.vertices[:, 0].max() for c in ax.collections[1:] for p in c.get_paths())
     assert logo_x < label_x.pop()
+
+
+def test_tree_tip_logos_of_cwms():
+    rng = np.random.default_rng(1)
+    cwms = [um.create_motif(rng.normal(0, 0.1, (4, 6)), alphabet="DNA", type="CWM", name=f"c{i}")
+            for i in range(3)]
+    ax = um.motif_tree(cwms).plot(tip_logos=True, tip_logo_height=0.8)
+    logos = [p.vertices[:, 1] for c in ax.collections[1:] for p in c.get_paths()]
+    lo, hi = min(v.min() for v in logos), max(v.max() for v in logos)
+    # Contributions above and below zero fit in the band of each tip.
+    assert -0.4 - 1e-9 <= lo and hi <= 2.4 + 1e-9
+    plt.close(ax.figure)
 
 
 def test_tree_legends_are_fitted():

@@ -111,8 +111,10 @@ def test_proximity_options():
     with pytest.raises(ValueError, match="stranded"):
         um.motif_proximity(_hits(), anchors.with_columns(pl.lit("*").alias("strand")),
                            universe=lengths, orientation="upstream")
-    strict = um.motif_proximity(_hits(), anchors, universe=lengths)
+    strict = um.motif_proximity(_hits(), anchors, universe=lengths, qvalue=0.1)
     assert (strict["qvalue"] <= 0.1).all()
+    every = um.motif_proximity(_hits(), anchors, universe=lengths)
+    assert every.height > strict.height and every["pvalue"].is_sorted()
 
 
 def test_match_bkg():

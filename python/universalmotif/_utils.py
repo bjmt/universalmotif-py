@@ -517,9 +517,10 @@ def mask_ranges(sequences: Mapping[str, str], ranges, letter: str = "-") -> dict
             for name, seq in sequences.items()}
 
 
-def shuffle_string(string: str, k: int = 1, method: str = "euler", seed: int | None = None) -> str:
-    """Shuffle one string while keeping its k-mer counts, as
-    [`shuffle_sequences()`][universalmotif.shuffle_sequences] does.
+def shuffle_string(string: str, k: int = 2, method: str = "euler", seed: int | None = None) -> str:
+    """Shuffle one string while keeping its k-mer counts, dinucleotides by
+    default, as [`shuffle_sequences()`][universalmotif.shuffle_sequences]
+    does.
 
     Examples
     --------

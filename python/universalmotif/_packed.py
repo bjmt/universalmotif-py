@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 
 from . import _core
+from ._threads import _nthreads
 
 
 class PackedSequences(Mapping[str, str]):
@@ -107,7 +108,7 @@ def _size(nbytes: int) -> str:
 def pack_sequences(
     sequences: str | Sequence[str] | Mapping[str, str],
     alphabet: str = "DNA",
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> PackedSequences:
     """Pack sequences for scanning as [`PackedSequences`][universalmotif.PackedSequences].
 
@@ -115,6 +116,9 @@ def pack_sequences(
     alphabet, and must match the motifs the sequences will be scanned with.
     Unnamed sequences are called ``seq1``, ``seq2`` and so on; names must be
     unique.
+
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
 
     Examples
     --------
@@ -127,6 +131,7 @@ def pack_sequences(
     >>> um.scan_sequences(wbox, packed).equals(um.scan_sequences(wbox, seqs))
     True
     """
+    nthreads = _nthreads(nthreads)
     from ._analysis import _sequence_pairs
 
     names, seqs = _sequence_pairs(sequences)

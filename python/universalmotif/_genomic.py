@@ -10,11 +10,19 @@ import numpy as np
 import polars as pl
 
 from . import _core
-from ._analysis import _genome_hits, _make_unique, _sequence_pairs, _warn_unreachable, scan_sequences
+from ._analysis import (
+    _default_rc,
+    _genome_hits,
+    _make_unique,
+    _sequence_pairs,
+    _warn_unreachable,
+    scan_sequences,
+)
 from ._genome import Genome, signal_stats
 from ._packed import PackedSequences
 from ._api import _check_motif
 from ._core import Motif
+from ._threads import _nthreads
 from ._sequences import _seed
 
 _CHROM_COLUMNS = ("chrom", "seqnames", "sequence", "chr", "chromosome")
@@ -164,14 +172,14 @@ def motif_proximity(
     count: str = "hits",
     orientation: str = "undirected",
     scan_pvalue: float = 1e-4,
-    rc: bool = True,
+    rc: bool | None = None,
     dist_thresholds: Sequence[int] | None = None,
     n_perm: int = 1000,
     perm_per_chrom: bool = True,
     ignore_strand: bool = True,
-    qvalue: float = 0.1,
+    qvalue: float | None = None,
     seed: int | None = None,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> pl.DataFrame:
     """Test whether motif hits sit closer to genomic anchors than chance.
 
@@ -201,9 +209,11 @@ def motif_proximity(
         ``motif``, ``score``, ``start``, ``end`` and ``strand`` columns and
         the chromosome names in ``sequence``. Give this, or give ``motifs``
         and ``sequences`` as a mapping from chromosome names to sequences to
-        scan them with ``scan_pvalue`` and ``rc``; only chromosomes with
-        anchors are scanned, and a [`Genome`][universalmotif.Genome] on disk
-        is read one of them at a time.
+        scan them with ``scan_pvalue`` and ``rc`` as ``scan_sequences()``
+        does, where ``rc`` is on by default for DNA and off for RNA. Only
+        chromosomes with anchors are scanned, and a
+        [`Genome`][universalmotif.Genome] on disk is read one of them at a
+        time.
     anchors
         The anchor coordinates, as a DataFrame with ``chrom``, ``start``,
         ``end`` or ``width``, and optionally ``strand`` columns, or as
@@ -230,16 +240,19 @@ def motif_proximity(
     orientation
         ``"undirected"``, or ``"upstream"``/``"downstream"`` of stranded
         anchors.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
     -------
     polars.DataFrame
-        A DataFrame of motifs with q-values up to ``qvalue``, in order of
-        P-value, with the columns ``motif``, ``motif_i``, ``method``,
-        ``count``, ``orientation``, ``nhits``, ``best_dist``, ``hits_near``,
-        ``hits_far``, ``frac_near``, ``expected_near``, ``enrichment``,
-        ``log2_enrichment``, ``pvalue``, ``qvalue``, ``ks_d`` and
-        ``dist_to_nearest``. ``motif_i`` is the motif's 0-based index among
+        A DataFrame of every motif in order of P-value, or with ``qvalue``
+        only those with q-values up to it, with the columns ``motif``,
+        ``motif_i``, ``method``, ``count``, ``orientation``, ``nhits``,
+        ``best_dist``, ``hits_near``, ``hits_far``, ``frac_near``,
+        ``expected_near``, ``enrichment``, ``log2_enrichment``, ``pvalue``,
+        ``qvalue``, ``ks_d`` and ``dist_to_nearest``. ``motif_i`` is the motif's 0-based index among
         ``motifs``, or in ``hits`` the ``motif_i`` from
         [`scan_sequences()`][universalmotif.scan_sequences] if it is there and
         otherwise the order in which motifs first appear, and
@@ -262,13 +275,14 @@ def motif_proximity(
     >>> f"{res['pvalue'][0]:.1e}"
     '2.2e-05'
     """
+    nthreads = _nthreads(nthreads)
     if method not in ("binomial", "permutation", "ks"):
         raise ValueError("method must be 'binomial', 'permutation' or 'ks'")
     if count not in ("hits", "anchors"):
         raise ValueError("count must be 'hits' or 'anchors'")
     if orientation not in ("undirected", "upstream", "downstream"):
         raise ValueError("orientation must be 'undirected', 'upstream' or 'downstream'")
-    if not 0 < qvalue <= 1:
+    if qvalue is not None and not 0 < qvalue <= 1:
         raise ValueError("qvalue must be in (0, 1]")
     if anchors is None:
         raise ValueError("anchors are required")
@@ -298,8 +312,8 @@ def motif_proximity(
                 raise ValueError("none of the anchor chromosomes are in sequences")
             ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
             _warn_unreachable(ms, scan_pvalue)
-            hits = _genome_hits(ms, sequences, chroms, scan_pvalue, rc, None, nthreads, True,
-                                False, _make_unique([m.name for m in ms]))
+            hits = _genome_hits(ms, sequences, chroms, scan_pvalue, _default_rc(rc, ms), None,
+                                nthreads, True, True, _make_unique([m.name for m in ms]))
             lengths = sequences.lengths
         else:
             chroms = {k: v for k, v in sequences.items() if k in anchored}
@@ -370,7 +384,9 @@ def motif_proximity(
     )
     cols["method"], cols["count"], cols["orientation"] = [method] * n, [count] * n, [orientation] * n
     df = pl.DataFrame({k: cols[k] for k in _PROXIMITY_SCHEMA}, schema=_PROXIMITY_SCHEMA)
-    return df.filter(pl.col("qvalue") <= qvalue).sort("pvalue", "motif_i", maintain_order=True)
+    if qvalue is not None:
+        df = df.filter(pl.col("qvalue") <= qvalue)
+    return df.sort("pvalue", "motif_i", maintain_order=True)
 
 
 _NUCLEOTIDES = set("ACGTUNRYKMSWBDHV-acgtunrykmswbdhv")

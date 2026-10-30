@@ -274,6 +274,7 @@ def _motif_matches(
     no_overlaps: tuple[str, bool, bool] | None,
     nthreads: int,
     use_gaps: bool,
+    correct_gaps: bool,
     value: str,
 ) -> tuple[int, int, npt.NDArray[np.uint32], npt.NDArray[np.uint32], npt.NDArray[np.float64]]: ...
 def _scan_packed(
@@ -299,6 +300,7 @@ def _scan_fasta(
     correct_gaps: bool,
     first_hit: bool,
     motif_names: list[str],
+    trim_names: bool,
 ) -> ArrowTable: ...
 def _dedup(
     sequence: list[int],
@@ -351,8 +353,9 @@ def _merge_similar(
     rc: bool,
     bkg: list[float] | None,
     weighted: bool,
+    linkage: str,
     nthreads: int,
-) -> tuple[list[int], list[Motif]]: ...
+) -> tuple[list[int], list[Motif], list[str]]: ...
 def _hclust(dist: list[list[float]], method: str, labels: list[str]) -> dict[str, Any]: ...
 def _motif_tree(
     motifs: list[Motif],

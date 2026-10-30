@@ -132,6 +132,7 @@ from ._sequences import (
     shuffle_sequences,
     window_string,
 )
+from ._threads import get_nthreads, set_nthreads
 
 try:
     __version__ = version("universalmotif")
@@ -176,6 +177,7 @@ __all__ = [
     "get_consensus_aa",
     "get_kmers",
     "get_matches",
+    "get_nthreads",
     "get_scores",
     "hit_contributions",
     "icm_to_ppm",
@@ -249,6 +251,7 @@ __all__ = [
     "scan_sequences",
     "score_match",
     "sequence_complexity",
+    "set_nthreads",
     "shuffle_motifs",
     "shuffle_sequences",
     "shuffle_string",

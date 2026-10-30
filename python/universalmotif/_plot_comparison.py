@@ -15,6 +15,7 @@ from ._api import _check_motif
 from ._compare import MotifTree, _tree
 from ._core import Motif
 from ._plot import _pyplot, draw_logo
+from ._threads import _nthreads
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
@@ -143,7 +144,7 @@ def plot_comparison(
     logos: bool | None = None,
     text_size: float = 10,
     figsize: tuple[float, float] | None = None,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> Figure:
     """Draw motif similarities as a clustered heatmap.
 
@@ -175,7 +176,11 @@ def plot_comparison(
         What is drawn: ``"score"``, the mean column correlation, or
         ``"pvalue"`` or ``"qvalue"``.
     min_overlap, rc, nthreads
-        Passed to ``compare_motifs()``.
+        Passed to ``compare_motifs()``, with ``nthreads`` by default the
+        package setting from [`set_nthreads()`][universalmotif.set_nthreads].
+        ``min_overlap`` follows the default of 6 of
+        [`motif_tree()`][universalmotif.motif_tree], so the scores can differ
+        slightly from those of ``compare_motifs()`` with its default of 5.
     cluster, method
         Order the motifs by clustering them with ``method``, as in
         [`motif_tree()`][universalmotif.motif_tree], or keep them in input
@@ -228,6 +233,7 @@ def plot_comparison(
     ...                       dendrogram="both")
     >>> plt.close(fig)
     """
+    nthreads = _nthreads(nthreads)
     if value not in _VALUE_LABELS:
         raise ValueError("value must be 'score', 'pvalue' or 'qvalue'")
     if dendrogram not in ("left", "top", "both", "none"):

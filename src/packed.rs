@@ -99,7 +99,7 @@ fn _read_fasta_packed(
         .detach(|| fasta::read_encoded(&path, &alphabet, skip))
         .map_err(err)?;
     if trim_names {
-        names = names.into_iter().map(crate::io::first_word).collect();
+        names = fasta::trim_names(names).map_err(err)?;
     }
     PyPacked::new(names, seqs)
 }

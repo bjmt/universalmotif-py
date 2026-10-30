@@ -1,5 +1,56 @@
 # Changelog
 
+## Unreleased
+
+Changes in behaviour:
+
+- `read_fasta()` and scans of FASTA paths name sequences by the first word
+  of the header, as `Genome` does, and a repeated name is an error;
+  `trim_names=False` keeps whole headers.
+- Gapped motifs' P-values are corrected for the gap sizes tried by
+  default (`correct_gaps=True`) in `scan_sequences()`, `match_motifs()`,
+  `enrich_motifs()`, `motif_coocc()` and `motif_proximity()`.
+- `no_overlaps` compares hits on both strands by default in
+  `scan_sequences()` and `motif_coocc()`, and so does `dedup_hits()`
+  (`ignore_strand=True`), so a palindromic site counts once.
+- A motif for the `+` or `-` strand is scanned on that strand only, and
+  RNA is scanned on one strand by default (`rc=None`).
+- `read_meme()` gives DNA and RNA motifs both strands when the file has no
+  `strands:` line, and `motif_finder(rc=False)` gives motifs for the `+`
+  strand.
+- `shuffle_sequences()`, `shuffle_string()` and the `shuffle` command keep
+  dinucleotides by default (`k=2`).
+- `enrich_motifs()`, `motif_peaks()` and `motif_proximity()` return every
+  motif unless `qvalue` is given, and so do the `enrich`, `proximity` and
+  `posenr` commands unless given `-q`.
+- `view_motifs()` draws CWMs as contributions by default and other motifs
+  as information content, with a mix drawn as information content, and
+  tree tip logos follow it.
+- `plot_coocc()` marks pairs with q-values up to 0.1 by default, rather
+  than 0.05.
+- Functions taking `nthreads` default to the package setting, which is 1
+  unless changed.
+
+New:
+
+- `set_nthreads()` and `get_nthreads()` set and read the threads used by
+  every function whose `nthreads` is left out, and the
+  `UNIVERSALMOTIF_NTHREADS` environment variable sets them at import.
+- `merge_similar(linkage="complete")` joins only motifs that are all
+  similar to each other, and `merge_similar()` warns when one cluster holds
+  more than a quarter of the motifs; the `merge` command takes `--linkage`.
+- `match_motifs(correct_gaps=)`, `motif_coocc(no_overlaps_by_strand=)` and
+  `scan_sequences(trim_names=)`, and the `--no-correct-gaps` and
+  `--no-across-strands` options of the command line.
+
+Fixes:
+
+- `umotif enrich --test` takes `sites`, the name `enrich_motifs()` uses,
+  and still accepts `hits`.
+- Command line errors no longer lose a quote at either end of the message.
+- `view_motifs()` signatures show `fit_to_height=<default>` instead of an
+  object address.
+
 ## 0.4.0 (2026-10-29)
 
 Changes in behaviour:

@@ -11,10 +11,11 @@ import numpy as np
 import polars as pl
 
 from . import _core
-from ._analysis import _make_unique, _sequence_pairs, _warn_unreachable
+from ._analysis import _default_rc, _make_unique, _sequence_pairs, _warn_unreachable
 from ._api import _check_motif
 from ._core import Motif
 from ._packed import PackedSequences
+from ._threads import _nthreads
 
 _DTYPES = {"matches": np.uint8, "counts": np.uint32, "scores": np.float64}
 
@@ -114,10 +115,11 @@ def match_motifs(
     sequences: str | Sequence[str] | Mapping[str, str] | PackedSequences,
     pvalue: float = 5e-5,
     value: str = "matches",
-    rc: bool = True,
+    rc: bool | None = None,
     no_overlaps: bool = False,
     use_gaps: bool = True,
-    nthreads: int = 1,
+    correct_gaps: bool = True,
+    nthreads: int | None = None,
 ) -> MotifMatches:
     """Which motifs match which sequences, as a sparse matrix.
 
@@ -133,9 +135,24 @@ def match_motifs(
     when many sequences contain it. Palindromic sites are hit on
     both strands, so ``no_overlaps`` drops overlapping hits of each motif,
     on either strand, before they are counted, keeping the one with the
-    lowest P-value.
+    lowest P-value. ``rc``, ``use_gaps`` and ``correct_gaps`` are as for
+    ``scan_sequences()``, so the reverse strand is scanned by default for
+    DNA but not for RNA, motifs whose ``strand`` is ``"+"`` or ``"-"`` are
+    scanned on that strand only, and gapped motifs' P-values are corrected
+    for the combinations of gap sizes tried.
+
+    Short or degenerate motifs cannot always reach the default ``pvalue``
+    of 5e-5: about a quarter of JASPAR motifs have a best possible match
+    that is less significant than that, so they never match and come with a
+    warning. The smallest P-value of a motif is that of the highest score
+    from [`motif_range()`][universalmotif.motif_range], given to
+    [`motif_pvalue()`][universalmotif.motif_pvalue], and a looser
+    ``pvalue`` such as 1e-4 lets more of them match.
 
     Needs the ``scipy`` extra.
+
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
     -------
@@ -160,6 +177,7 @@ def match_motifs(
     >>> int(once.matrix[:, 3].sum()), int(once.matrix[:, 3].max())
     (12, 1)
     """
+    nthreads = _nthreads(nthreads)
     sp = _scipy_sparse()
     if value not in _DTYPES:
         raise ValueError('value must be "matches", "counts" or "scores"')
@@ -167,6 +185,7 @@ def match_motifs(
     if not ms:
         raise ValueError("no motifs given")
     _warn_unreachable(ms, pvalue)
+    rc = _default_rc(rc, ms)
     overlaps = ("pvalue", True, False) if no_overlaps else None
     if isinstance(sequences, PackedSequences):
         names = list(sequences)
@@ -175,7 +194,7 @@ def match_motifs(
         names, seqs = _sequence_pairs(sequences)
         args = (seqs, None)
     n, m, rows, cols, vals = _core._motif_matches(
-        ms, *args, pvalue, rc, overlaps, nthreads, use_gaps, value
+        ms, *args, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, value
     )
     matrix = sp.csr_array((vals.astype(_DTYPES[value]), (rows, cols)), shape=(n, m))
     return MotifMatches(matrix, names, _make_unique([x.name for x in ms]), value)

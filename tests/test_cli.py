@@ -104,6 +104,7 @@ def test_summary_filter_trim(tmp_path):
         [m.width for m in um.trim_motifs(motifs, min_ic=0.5)]
 
 
+@pytest.mark.filterwarnings("ignore:cluster .* holds:UserWarning")
 def test_merge_and_tree(tmp_path):
     motifs = um.read_transfac(MOTIFS)
     run("merge", MOTIFS, "-q", "0.5", "--clusters", tmp_path / "c.tsv", "-o", tmp_path / "m.meme")
@@ -227,6 +228,46 @@ def test_matrix(tmp_path, genome):
     assert anndata.read_h5ad(tmp_path / "m.h5ad").shape == (100, 12)
 
 
+def test_enrich_test_sites(tmp_path):
+    motifs = um.read_transfac(MOTIFS)
+    want = um.enrich_motifs(motifs, um.example_sequences("targets"), um.example_sequences("controls"),
+                            test="sites")
+    run("enrich", MOTIFS, "-s", TARGETS, "-b", CONTROLS, "--test", "sites", "-o", tmp_path / "s.tsv")
+    got = table(tmp_path / "s.tsv")
+    assert got["motif"].to_list() == want["motif"].to_list()
+    assert got["target_site_hits"].to_list() == want["target_site_hits"].to_list()
+    # "hits" is still taken, as the older name for "sites".
+    run("enrich", MOTIFS, "-s", TARGETS, "-b", CONTROLS, "--test", "hits", "-o", tmp_path / "h.tsv")
+    assert table(tmp_path / "h.tsv").equals(got)
+    with pytest.raises(SystemExit):
+        main(["enrich", MOTIFS, "-s", TARGETS, "--test", "positions"])
+
+
+def test_error_messages_keep_their_quotes(monkeypatch, capsys):
+    from universalmotif import _cli
+
+    for raised, shown in [
+        (KeyError("chr9"), "chr9"),
+        (KeyError("it's"), "it's"),
+        (ValueError("no motif named 'x'"), "no motif named 'x'"),
+        (ValueError("'a' and 'b' differ"), "'a' and 'b' differ"),
+        (ValueError('"quoted"'), "quoted"),
+    ]:
+        def fail(a, e=raised):
+            raise e
+
+        monkeypatch.setattr(_cli, "cmd_shuffle", fail)
+        run("shuffle", "-s", TARGETS, ok=False)
+        assert capsys.readouterr().err == f"universalmotif shuffle: error: {shown}\n"
+
+
+def test_threads_default_to_the_package_setting():
+    from universalmotif._cli import build_parser
+
+    assert build_parser().parse_args(["shuffle", "-s", TARGETS]).threads is None
+    assert build_parser().parse_args(["shuffle", "-s", TARGETS, "-p", "0"]).threads == 0
+
+
 def test_proximity_coocc_posenr(tmp_path, genome):
     fasta, _bed, _chroms, peaks = genome
     summits = tmp_path / "summits.bed"
@@ -245,9 +286,12 @@ def test_proximity_coocc_posenr(tmp_path, genome):
     want = um.motif_coocc(um.read_transfac(MOTIFS), um.example_sequences("targets"))
     assert table(tmp_path / "c.tsv").select("motif_a", "motif_b").rows() == \
         want.select("motif_a", "motif_b").rows()
-    run("posenr", MOTIFS, "-s", TARGETS, "-o", tmp_path / "e.tsv")
+    run("posenr", MOTIFS, "-s", TARGETS, "-q", "0.1", "-o", tmp_path / "e.tsv")
     pe = table(tmp_path / "e.tsv")
     assert pe["motif"].to_list() == ["W-box"] and pe["motif_i"].to_list() == [5]
+    run("posenr", MOTIFS, "-s", TARGETS, "-o", tmp_path / "every.tsv")
+    every = table(tmp_path / "every.tsv")
+    assert every.height == 12 and every["motif"][0] == "W-box"
     assert "centres" not in pe.columns
     run("posenr", "--hits", tmp_path / "h.tsv", ok=False)
 
@@ -648,8 +692,8 @@ def test_coocc_from_hits(tmp_path, capsys):
 def test_posenr_from_hits(tmp_path, capsys):
     run("scan", MOTIFS, "-s", TARGETS, "-o", tmp_path / "h.tsv")
     length = len(next(iter(um.example_sequences("targets").values())))
-    run("posenr", MOTIFS, "-s", TARGETS, "--centres", "-o", tmp_path / "scanned.tsv")
-    run("posenr", "--hits", tmp_path / "h.tsv", "--seq-length", length, "--centres",
+    run("posenr", MOTIFS, "-s", TARGETS, "--centres", "-q", "0.1", "-o", tmp_path / "scanned.tsv")
+    run("posenr", "--hits", tmp_path / "h.tsv", "--seq-length", length, "--centres", "-q", "0.1",
         "-o", tmp_path / "hits.tsv")
     got = table(tmp_path / "hits.tsv")
     assert got["motif"].to_list() == ["W-box"] and "centres" in got.columns
@@ -737,3 +781,23 @@ def test_warning_format_is_restored():
     before = warnings.showwarning
     run("summary", DATA / "example.jaspar")
     assert warnings.showwarning is before
+
+
+def test_cli_defaults(tmp_path):
+    run("scan", MOTIFS, "-s", TARGETS, "-P", "1e-3", "--no-overlaps", "-o", tmp_path / "once.tsv")
+    run("scan", MOTIFS, "-s", TARGETS, "-P", "1e-3", "--no-overlaps", "--no-across-strands",
+        "-o", tmp_path / "strands.tsv")
+    targets = um.example_sequences("targets")
+    motifs = um.read_transfac(MOTIFS)
+    once = um.scan_sequences(motifs, targets, pvalue=1e-3, no_overlaps=True)
+    assert table(tmp_path / "once.tsv").height == once.height
+    assert table(tmp_path / "strands.tsv").height > once.height
+    # Motif files hold no gaps, so correcting for them changes nothing here.
+    run("scan", MOTIFS, "-s", TARGETS, "-P", "1e-3", "--no-correct-gaps", "-o", tmp_path / "raw.tsv")
+    assert table(tmp_path / "raw.tsv").height == um.scan_sequences(motifs, targets, pvalue=1e-3).height
+    run("merge", MOTIFS, "-q", "0.5", "--linkage", "complete", "--clusters", tmp_path / "c.tsv",
+        "-o", tmp_path / "m.meme")
+    assert table(tmp_path / "c.tsv")["cluster"].to_list() == um.merge_similar(
+        motifs, qvalue=0.5, linkage="complete", return_clusters=True)["cluster"].to_list()
+    run("shuffle", "-s", TARGETS, "--seed", "3", "-o", tmp_path / "s.fa")
+    assert um.read_fasta(tmp_path / "s.fa") == um.shuffle_sequences(targets, k=2, seed=3)

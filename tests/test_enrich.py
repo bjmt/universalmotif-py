@@ -276,9 +276,12 @@ def test_enrich_qvalue_filter():
     tgt = [_plant((5, "TGACTCA"))] * 8 + [_FLANK] * 2
     bkg = [_FLANK] * 10
     other = um.create_motif("CACGTGC", name="gbox")
-    res = um.enrich_motifs([other, _ap1()], tgt, bkg, rc=False)
+    res = um.enrich_motifs([other, _ap1()], tgt, bkg, rc=False, qvalue=0.1)
     assert res["motif"].to_list() == ["ap1"] and res["motif_i"].to_list() == [1]
     assert um.enrich_motifs([other, _ap1()], tgt, bkg, rc=False, qvalue=1).height == 2
+    # Every motif is returned by default, the most significant first.
+    every = um.enrich_motifs([other, _ap1()], tgt, bkg, rc=False)
+    assert every["motif"].to_list() == ["ap1", "gbox"] and every["qvalue"][1] > 0.1
 
 
 def test_enrich_argument_errors():

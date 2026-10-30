@@ -65,8 +65,9 @@ A few conventions hold across the commands.
 - **Output** goes to standard output unless a file is given with `-o`, so
   commands can be chained with pipes. Files ending in `.gz` are written
   gzipped.
-- **Threads** are set with `-p` and default to 1, and `--seed` makes the
-  commands that draw random numbers reproducible.
+- **Threads** are set with `-p` and default to 1, or to the
+  `UNIVERSALMOTIF_NTHREADS` environment variable if it is set, and `--seed`
+  makes the commands that draw random numbers reproducible.
 
 Warnings, such as for motifs that cannot reach a P-value cutoff, are
 printed to standard error, and errors end the command with a short message
@@ -96,8 +97,8 @@ a bigWig file of signal, such as ATAC-seq coverage, adding
 umotif bkg -g genome.fa.gz -r peaks.narrowPeak --seed 1 -o bkg.fa
 ```
 
-Now the enrichment test, which lists the enriched motifs in order of
-significance. Broad peaks can have hundreds of enriched motifs, so here we
+Now the enrichment test, which lists every motif in order of significance,
+or with `-q` only those passing a q-value cutoff. Broad peaks can have hundreds of enriched motifs, so here we
 keep the twenty most significant, and then find their hits on the genome and
 draw their logos:
 

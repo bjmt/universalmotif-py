@@ -159,6 +159,10 @@ def read_meme(
     """Read MEME motifs, from MEME, DREME or STREME output or minimal MEME
     files.
 
+    The ``strands:`` line gives every motif its ``strand``, which scanning
+    respects. Without it, DNA and RNA motifs are for both strands and those
+    of other alphabets for one.
+
     Parameters
     ----------
     readsites
@@ -482,15 +486,17 @@ def read_fasta(
     skip: int = 0,
     packed: bool = False,
     alphabet: str = "DNA",
-    trim_names: bool = False,
+    trim_names: bool = True,
 ) -> dict[str, str] | PackedSequences:
     """Read a FASTA file into a dict from names to sequences, where each name
-    is the whole header line after ``>``, or with ``trim_names`` only its
-    first word, as most tools use. The file is read line by line, so a
-    genome needs little more memory than its sequences, and the first
-    ``skip`` lines are ignored. Gzipped files, bgzip included, are recognized
-    from their first bytes and decompressed as they are read. When names
-    repeat, the last sequence with each name is kept, with a warning.
+    is the first word of the header line after ``>``, as most tools and
+    [`Genome`][universalmotif.Genome] use, and two sequences with the same
+    name are an error. With ``trim_names`` off, names are whole header lines,
+    and when they repeat, the last sequence with each name is kept, with a
+    warning. The file is read line by line, so a genome needs little more
+    memory than its sequences, and the first ``skip`` lines are ignored.
+    Gzipped files, bgzip included, are recognized from their first bytes and
+    decompressed as they are read.
 
     With ``packed``, the sequences are packed for scanning as they are read
     and returned as [`PackedSequences`][universalmotif.PackedSequences] for

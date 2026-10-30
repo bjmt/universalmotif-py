@@ -14,6 +14,7 @@ from . import _core
 from ._api import _check_motif
 from ._core import Motif
 from ._packed import PackedSequences
+from ._threads import _nthreads
 
 
 def _is_number(x: object) -> bool:
@@ -25,7 +26,7 @@ def motif_pvalue(
     score: float | Sequence[float] | Sequence[Sequence[float]] | None = None,
     pvalue: float | Sequence[float] | Sequence[Sequence[float]] | None = None,
     bkg_probs: Sequence[float] | Mapping[str, float] | Sequence[object] | None = None,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ):
     """P-values for motif scores, or score thresholds for P-values.
 
@@ -55,7 +56,8 @@ def motif_pvalue(
         one per motif, where a set is a sequence in alphabet order or a
         mapping from letters. Each motif's own background by default.
     nthreads
-        Threads to use; 0 means all available.
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
     -------
@@ -78,6 +80,7 @@ def motif_pvalue(
     >>> um.motif_pvalue(motifs[:3], pvalue=1e-4).round(3).tolist()
     [10.252, 10.419, 10.806]
     """
+    nthreads = _nthreads(nthreads)
     if (score is None) == (pvalue is None):
         raise ValueError("give exactly one of score and pvalue")
     values = score if score is not None else pvalue
@@ -231,6 +234,14 @@ def _warn_unreachable(ms: list[Motif], pvalue: float, stacklevel: int = 3) -> No
     )
 
 
+def _default_rc(rc: bool | None, ms: list[Motif]) -> bool:
+    """``rc`` as given, or when it is None, whether the motifs are not RNA,
+    since RNA is usually read on one strand."""
+    if rc is not None:
+        return bool(rc)
+    return not ms or ms[0].alphabet != "RNA"
+
+
 def _sample_letters(seqs: list[str], n_seqs: int = 100, n_letters: int = 10_000) -> set[str]:
     """The letters, in upper case, of the start of the first few sequences."""
     return set("".join(s[:n_letters] for s in seqs[:n_seqs]).upper())
@@ -253,22 +264,24 @@ def scan_sequences(
     motifs: Motif | Iterable[Motif],
     sequences: str | Sequence[str] | Mapping[str, str] | os.PathLike[str],
     pvalue: float = 1e-4,
-    rc: bool = True,
-    nthreads: int = 1,
+    rc: bool | None = None,
+    nthreads: int | None = None,
     no_overlaps: bool = False,
     no_overlaps_by: str = "pvalue",
-    no_overlaps_by_strand: bool = False,
+    no_overlaps_by_strand: bool = True,
     no_overlaps_by_motif: bool = False,
     use_gaps: bool = True,
-    correct_gaps: bool = False,
+    correct_gaps: bool = True,
     first_hit: bool = False,
+    trim_names: bool = True,
 ) -> pl.DataFrame:
     """Scan sequences for motif hits.
 
     Motifs and sequences of any alphabet can be scanned. Each motif's score
     threshold comes from the ``pvalue`` cutoff, and every window scoring at
     least that much is reported with its P-value. Only DNA and RNA have a
-    reverse strand, which is scanned with ``rc``.
+    reverse strand, which is scanned with ``rc``, and a motif whose
+    ``strand`` is ``"+"`` or ``"-"`` is scanned on that strand alone.
 
     A motif too short or too degenerate to reach the ``pvalue`` cutoff can
     have no hits, and is named in a warning with the smallest P-value it can
@@ -291,15 +304,20 @@ def scan_sequences(
         [`Genome`][universalmotif.Genome] is scanned a few chromosomes at a
         time, about 64 Mb of them or one if it is longer.
     rc
-        Also scan the reverse strand.
+        Also scan the reverse strand, for motifs whose ``strand`` is
+        ``"+-"``, as it is for motifs created or read from most files. By
+        default it is on for DNA and off for RNA, which is usually read on
+        one strand.
     no_overlaps
         Remove overlapping hits with
         [`dedup_hits()`][universalmotif.dedup_hits], keeping the best by
-        ``no_overlaps_by``, which is ``"pvalue"`` or ``"score"``.
-        ``no_overlaps_by_strand`` and ``no_overlaps_by_motif`` also compare
-        hits across strands and across motifs.
+        ``no_overlaps_by``, which is ``"pvalue"`` or ``"score"``. Hits on
+        opposite strands are compared too, so that a palindromic site is
+        kept once, unless ``no_overlaps_by_strand`` is false, and
+        ``no_overlaps_by_motif`` also compares hits of different motifs.
     nthreads
-        Threads to use; 0 means all available.
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
     use_gaps
         Scan gapped motifs, such as those made with
         [`add_gap()`][universalmotif.add_gap], with every combination of
@@ -309,9 +327,12 @@ def scan_sequences(
         strands like any other.
     correct_gaps
         Bonferroni-correct gapped motifs' P-values for the number of
-        combinations of gap sizes tried: hits must reach ``pvalue`` divided
-        by that number, and their P-values are multiplied by it and capped
-        at 1.
+        combinations of gap sizes tried, since each window is scored once
+        per combination and the best is kept: hits must reach ``pvalue``
+        divided by that number, and their P-values are multiplied by it and
+        capped at 1. Turn it off to give each hit the P-value of its score
+        under the motif without its gaps. Motifs without gaps are not
+        affected.
     first_hit
         Keep only the first hit of each motif in each sequence, the one
         listed first without this option: the hit with the lowest ``start``,
@@ -324,6 +345,11 @@ def scan_sequences(
         each motif, [`match_motifs()`][universalmotif.match_motifs] does
         the same without building a table of hits. It cannot be combined
         with ``no_overlaps``.
+    trim_names
+        When scanning a FASTA file from its path, name each sequence by the
+        first word of its header, as
+        [`read_fasta()`][universalmotif.read_fasta] does, which fails if two
+        sequences then share a name; otherwise names are whole headers.
 
     Returns
     -------
@@ -364,7 +390,9 @@ def scan_sequences(
     >>> first.select("sequence", "start", "strand").row(0)
     ('target_015', 187, '+')
     """
+    nthreads = _nthreads(nthreads)
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
+    rc = _default_rc(rc, ms)
     if first_hit and no_overlaps:
         raise ValueError("first_hit keeps one hit per motif and sequence, so it cannot be combined "
                          "with no_overlaps")
@@ -388,7 +416,7 @@ def scan_sequences(
     elif isinstance(sequences, os.PathLike):
         path = os.fspath(sequences)
         hits = _core._scan_fasta(ms, path, pvalue, rc, overlaps, nthreads, use_gaps, correct_gaps, first_hit,
-                                 motif_names)
+                                 motif_names, trim_names)
     else:
         names, seqs = _sequence_pairs(sequences)
         _warn_alphabet_mismatch(ms, _sample_letters(seqs))
@@ -414,7 +442,7 @@ def dedup_hits(
     hits: pl.DataFrame,
     by: str = "pvalue",
     reverse: bool = False,
-    ignore_strand: bool = False,
+    ignore_strand: bool = True,
     ignore_motif: bool = False,
     seq: str = "sequence",
     motif: str = "motif",
@@ -422,13 +450,16 @@ def dedup_hits(
 ) -> pl.DataFrame:
     """Remove overlapping hits.
 
-    Hits are grouped by sequence, motif and strand. Within a group, overlapping
-    hits are taken in order of the ``by`` column and each is kept unless it
+    Hits are grouped by sequence and motif. Within a group, overlapping hits
+    are taken in order of the ``by`` column and each is kept unless it
     overlaps one already kept. Lower values come first for columns whose name
     starts with ``pval`` and higher values otherwise; ``reverse`` flips this,
-    and ties go to the earlier row. ``ignore_strand`` and ``ignore_motif``
-    compare hits across strands and motifs. ``start`` and ``end`` columns are
-    required, with the end left out as in a slice.
+    and ties go to the earlier row. Hits on opposite strands are compared by
+    default, so that a palindromic site is kept once, as
+    [`scan_sequences()`][universalmotif.scan_sequences] does with
+    ``no_overlaps``; ``ignore_strand=False`` keeps the strands apart, and
+    ``ignore_motif`` compares hits of different motifs too. ``start`` and
+    ``end`` columns are required, with the end left out as in a slice.
 
     Examples
     --------
@@ -439,8 +470,10 @@ def dedup_hits(
     >>> hits = um.scan_sequences(gbox, "TTACACGTGTTAAACCACGTGGTT", pvalue=1e-3)
     >>> hits.select("start", "end", "strand").rows()
     [(2, 10, '+'), (2, 10, '-'), (14, 22, '+'), (14, 22, '-')]
-    >>> um.dedup_hits(hits, ignore_strand=True).select("start", "end", "strand").rows()
+    >>> um.dedup_hits(hits).select("start", "end", "strand").rows()
     [(2, 10, '+'), (14, 22, '+')]
+    >>> um.dedup_hits(hits, ignore_strand=False).height
+    4
     """
     for col in (seq, motif, strand, "start", "end", by):
         if col not in hits.columns:

@@ -9,6 +9,7 @@ import polars as pl
 
 from . import _core
 from ._analysis import (
+    _default_rc,
     _first_codes,
     _make_unique,
     _sequence_pairs,
@@ -18,6 +19,7 @@ from ._analysis import (
 from ._api import _check_motif
 from ._core import Motif
 from ._sequences import _seed
+from ._threads import _nthreads
 
 
 def _motif_list(motifs: Motif | Iterable[Motif]) -> list[Motif]:
@@ -48,13 +50,13 @@ def enrich_motifs(
     sequences: Sequence[str] | Mapping[str, str],
     bkg_sequences: Sequence[str] | Mapping[str, str] | None = None,
     pvalue: float = 1e-4,
-    qvalue: float = 0.1,
+    qvalue: float | None = None,
     test: str = "seqs",
-    rc: bool = True,
+    rc: bool | None = None,
     shuffle_k: int = 2,
     seed: int | None = None,
     pseudocount: int = 1,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> pl.DataFrame:
     """Test motifs for enrichment in target sequences.
 
@@ -64,21 +66,29 @@ def enrich_motifs(
     test with ``pseudocount`` added to every cell. With ``test="seqs"`` it
     tests the number of sequences with a hit, and with ``test="sites"`` the
     number of hits out of all the positions the motif could occupy.
-    Q-values are Benjamini-Hochberg adjusted across all motifs.
+    Q-values are Benjamini-Hochberg adjusted across all motifs. As in
+    ``scan_sequences()``, the reverse strand is scanned with ``rc``, by
+    default for DNA but not for RNA, motifs whose ``strand`` is ``"+"`` or
+    ``"-"`` are scanned on that strand only, and gapped motifs' P-values are
+    corrected for the combinations of gap sizes tried.
 
     Without ``bkg_sequences``, the background is the targets shuffled with
     [`shuffle_sequences()`][universalmotif.shuffle_sequences] using the
     Euler method with ``k=shuffle_k`` and ``seed``.
 
-    Returns a DataFrame of the motifs with q-values up to ``qvalue``, in
-    order of P-value, with the columns ``motif``, ``motif_i``,
-    ``consensus``, ``target_seq_n``, ``target_seq_hits``,
-    ``target_site_hits``, ``bkg_seq_n``, ``bkg_seq_hits``, ``bkg_site_hits``,
-    ``enrichment``, ``log2_enrichment``, ``pvalue``, ``log10_pvalue``,
-    ``qvalue`` and ``log10_qvalue``. ``motif_i`` is 0-based, ``enrichment``
+    Returns a DataFrame of every motif in order of P-value, or with
+    ``qvalue`` only those with q-values up to it, with the columns
+    ``motif``, ``motif_i``, ``consensus``, ``target_seq_n``,
+    ``target_seq_hits``, ``target_site_hits``, ``bkg_seq_n``,
+    ``bkg_seq_hits``, ``bkg_site_hits``, ``enrichment``,
+    ``log2_enrichment``, ``pvalue``, ``log10_pvalue``, ``qvalue`` and
+    ``log10_qvalue``. ``motif_i`` is 0-based, ``enrichment``
     is the ratio of hit rates, with a floor of half a hit on the background
     rate, and the log columns stay finite when the P-values are too small
     for a double.
+
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
 
     Examples
     --------
@@ -91,13 +101,21 @@ def enrich_motifs(
     >>> controls = um.example_sequences("controls")
     >>> res = um.enrich_motifs(motifs, targets, controls, nthreads=1)
     >>> res.select("motif", "target_seq_hits", "bkg_seq_hits").rows()
-    [('G-box', 21, 3), ('W-box', 30, 9)]
+    [('G-box', 21, 3), ('W-box', 30, 9), ('TATA-box', 60, 63)]
     >>> res["log2_enrichment"].round(1).to_list()
-    [2.8, 1.7]
+    [2.8, 1.7, -0.1]
+    >>> [f"{q:.1g}" for q in res["qvalue"]]
+    ['0.0003', '0.0003', '0.7']
+
+    ``qvalue`` keeps only the significant motifs:
+
+    >>> um.enrich_motifs(motifs, targets, controls, qvalue=0.1, nthreads=1)["motif"].to_list()
+    ['G-box', 'W-box']
     """
+    nthreads = _nthreads(nthreads)
     if test not in ("seqs", "sites"):
         raise ValueError("test must be 'seqs' or 'sites'")
-    if not 0 < qvalue <= 1:
+    if qvalue is not None and not 0 < qvalue <= 1:
         raise ValueError("qvalue must be in (0, 1]")
     if shuffle_k < 1:
         raise ValueError("shuffle_k must be at least 1")
@@ -105,6 +123,7 @@ def enrich_motifs(
         raise ValueError("pseudocount must be non-negative")
     ms = _motif_list(motifs)
     _warn_unreachable(ms, pvalue)
+    rc = _default_rc(rc, ms)
     _, seqs = _sequence_pairs(sequences)
     bkg = None if bkg_sequences is None else _sequence_pairs(bkg_sequences)[1]
     cols = _core._enrich(ms, seqs, bkg, pvalue, test, rc, shuffle_k, _seed(seed), pseudocount, nthreads)
@@ -112,7 +131,9 @@ def enrich_motifs(
     cols["motif"] = [names[i] for i in cols["motif_i"]]
     cols["consensus"] = [ms[i].consensus or "" for i in cols["motif_i"]]
     df = pl.DataFrame({k: cols[k] for k in _ENRICH_SCHEMA}, schema=_ENRICH_SCHEMA)
-    return df.filter(pl.col("qvalue") <= qvalue).sort("pvalue", "motif_i", maintain_order=True)
+    if qvalue is not None:
+        df = df.filter(pl.col("qvalue") <= qvalue)
+    return df.sort("pvalue", "motif_i", maintain_order=True)
 
 
 def _outside(values: pl.Series, lo: int, hi: int | None = None) -> bool:
@@ -169,14 +190,15 @@ def motif_coocc(
     hits: pl.DataFrame | None = None,
     n_sequences: int | None = None,
     pvalue: float = 1e-4,
-    rc: bool = True,
+    rc: bool | None = None,
     no_overlaps: bool = False,
     no_overlaps_by: str = "pvalue",
+    no_overlaps_by_strand: bool = True,
     max_distance: int | None = None,
     min_coocc: int = 1,
     pseudocount: int = 0,
     self_pairs: bool = False,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> pl.DataFrame:
     """Find motif pairs that share sequences more often than expected.
 
@@ -189,7 +211,11 @@ def motif_coocc(
     Give either ``sequences`` or a ``hits`` table plus ``n_sequences``.
     Sequences are scanned with
     [`scan_sequences()`][universalmotif.scan_sequences] using ``pvalue`` and
-    ``rc``, and ``no_overlaps`` removes overlapping hits of the same motif. A
+    ``rc``, which by default is on for DNA and off for RNA, and
+    ``no_overlaps`` removes overlapping hits of the same motif, keeping the
+    best by ``no_overlaps_by``. Hits on opposite strands are compared too,
+    so that a palindromic site counts once, unless
+    ``no_overlaps_by_strand`` is false. A
     hits table, which works for any alphabet, needs a 0-based
     ``sequence_i`` column and either a 0-based ``motif_i`` column or a
     ``motif`` column of names.
@@ -199,7 +225,8 @@ def motif_coocc(
     nearest pair of hits by start position is within
     ``max_distance``, and ``median_distance``, the median of those nearest
     distances. ``self_pairs`` also pairs each motif with itself.
-    ``nthreads`` applies to the scan and to testing the pairs.
+    ``nthreads`` applies to the scan and to testing the pairs, and defaults
+    to the package setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns a DataFrame with the columns ``motif_a``, ``motif_b``,
     ``a_only``, ``b_only``, ``both``, ``neither``, ``odds_ratio``,
@@ -217,6 +244,7 @@ def motif_coocc(
     >>> round(res["pvalue"][0], 3)
     0.256
     """
+    nthreads = _nthreads(nthreads)
     if (sequences is None) == (hits is None):
         raise ValueError("give exactly one of sequences and hits")
     if max_distance is not None and max_distance < 0:
@@ -237,7 +265,8 @@ def motif_coocc(
             h = scan_sequences(ms, seqs, pvalue=pvalue, rc=rc, nthreads=nthreads, first_hit=True)
         else:
             h = scan_sequences(ms, seqs, pvalue=pvalue, rc=rc, nthreads=nthreads,
-                               no_overlaps=no_overlaps, no_overlaps_by=no_overlaps_by)
+                               no_overlaps=no_overlaps, no_overlaps_by=no_overlaps_by,
+                               no_overlaps_by_strand=no_overlaps_by_strand)
         motif, sequence, start = (h[c].cast(pl.Int64).to_numpy() for c in ("motif_i", "sequence_i", "start"))
     else:
         if n_sequences is None or n_sequences < 1:
@@ -277,12 +306,12 @@ def motif_peaks(
     seq_length: int,
     mode: str = "central",
     seq_strand: Mapping[object, str] | None = None,
-    qvalue: float = 0.1,
+    qvalue: float | None = None,
     min_window: int = 10,
     max_window: int | None = None,
     window_step: int = 10,
     position_step: int = 5,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> pl.DataFrame:
     """Test whether motif hits cluster along sequences of equal length.
 
@@ -309,15 +338,19 @@ def motif_peaks(
         ``"-"``. Centres on ``-`` sequences are reflected to
         ``seq_length - 1 - centre`` so they read in the feature's
         orientation, which matters only for local mode.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
     -------
     polars.DataFrame
-        A DataFrame of the motifs with q-values up to ``qvalue``, in order of
-        P-value, with the columns ``motif``, ``motif_i``, ``mode``,
-        ``seq_length``, ``nhits``, ``best_window``, ``best_centre``,
-        ``hits_in``, ``hits_out``, ``expected_in``, ``enrichment``,
-        ``log2_enrichment``, ``pvalue``, ``qvalue`` and ``centres``.
+        A DataFrame of every motif in order of P-value, or with ``qvalue``
+        only those with q-values up to it, with the columns ``motif``,
+        ``motif_i``, ``mode``, ``seq_length``, ``nhits``, ``best_window``,
+        ``best_centre``, ``hits_in``, ``hits_out``, ``expected_in``,
+        ``enrichment``, ``log2_enrichment``, ``pvalue``, ``qvalue`` and
+        ``centres``.
         ``motif_i`` is the motif's ``motif_i`` from
         [`scan_sequences()`][universalmotif.scan_sequences] if ``hits`` has
         one, and otherwise the 0-based rank of its name among those in
@@ -337,9 +370,10 @@ def motif_peaks(
     >>> f"{peaks['pvalue'][0]:.1e}"
     '1.3e-04'
     """
+    nthreads = _nthreads(nthreads)
     if mode not in ("central", "local"):
         raise ValueError("mode must be 'central' or 'local'")
-    if not 0 < qvalue <= 1:
+    if qvalue is not None and not 0 < qvalue <= 1:
         raise ValueError("qvalue must be in (0, 1]")
     if seq_length < 1:
         raise ValueError("seq_length must be at least 1")
@@ -401,7 +435,9 @@ def motif_peaks(
     cols["mode"] = [mode] * n
     cols["seq_length"] = [seq_length] * n
     df = pl.DataFrame({k: cols[k] for k in _PEAKS_SCHEMA}, schema=_PEAKS_SCHEMA)
-    return df.filter(pl.col("qvalue") <= qvalue).sort("pvalue", "motif_i", maintain_order=True)
+    if qvalue is not None:
+        df = df.filter(pl.col("qvalue") <= qvalue)
+    return df.sort("pvalue", "motif_i", maintain_order=True)
 
 
 __all__ = ["enrich_motifs", "motif_coocc", "motif_peaks"]

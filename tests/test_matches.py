@@ -111,10 +111,13 @@ def test_counts_and_scores_by_hand():
     top = um.motif_range(site)[1]
     assert best.matrix.toarray()[:, 0].tolist() == [0, top, top]
     assert best.to_polars().rows() == [("one", "motif", top), ("two", "motif", top)]
-    # RNA sequences and motifs match alike.
-    rna = um.match_motifs(um.switch_alph(site), {k: v.replace("T", "U") for k, v in seqs.items()},
-                          value="counts", pvalue=5e-4)
+    # RNA sequences and motifs match alike on both strands, though only the
+    # forward strand of RNA is scanned by default.
+    rna_seqs = {k: v.replace("T", "U") for k, v in seqs.items()}
+    rna = um.match_motifs(um.switch_alph(site), rna_seqs, value="counts", pvalue=5e-4, rc=True)
     assert (rna.matrix != counts.matrix).nnz == 0
+    rna = um.match_motifs(um.switch_alph(site), rna_seqs, value="counts", pvalue=5e-4)
+    assert rna.matrix.toarray()[:, 0].tolist() == [0, 1, 2]
 
 
 @pytest.mark.parametrize("no_overlaps", [False, True])

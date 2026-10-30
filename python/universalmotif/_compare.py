@@ -13,6 +13,7 @@ from . import _core
 from ._analysis import _make_unique
 from ._api import _check_motif, summarize_motifs
 from ._core import Motif
+from ._threads import _nthreads
 
 
 def _motif_list(motifs) -> list[Motif]:
@@ -39,7 +40,7 @@ def compare_motifs(
     null: str = "empirical",
     bkg: Sequence[float] | Mapping[str, float] | None = None,
     matrix_out: str = "score",
-    nthreads: int = 1,
+    nthreads: int | None = None,
     complete: bool = False,
     method: str = "PCC",
     overhang: str = "ignore",
@@ -95,6 +96,18 @@ def compare_motifs(
     of the query, and scores then depend on which motif is the query too.
     Either way, ``score`` is the mean column correlation or distance over
     the overlap, as it is whenever overhangs are ignored.
+
+    To search a database with a query motif, such as to name a motif from
+    [`motif_finder()`][universalmotif.motif_finder] or a TF-MoDISco pattern,
+    ``complete=True`` is the better choice, as it picks the same best match
+    as TOMTOM for 94% of queries against 78% with the default, as the Notes
+    show. All-against-all matrices,
+    [`motif_tree()`][universalmotif.motif_tree] and
+    [`merge_similar()`][universalmotif.merge_similar] keep the default,
+    whose scores do not depend on which motif is the query.
+
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
     -------
@@ -156,6 +169,7 @@ def compare_motifs(
     >>> hits["score"].round(2).to_list()
     [0.0, 0.38]
     """
+    nthreads = _nthreads(nthreads)
     ms = _motif_list(motifs)
     names = _make_unique([m.name for m in ms])
     if matrix_out not in ("score", "pvalue", "qvalue"):
@@ -198,7 +212,7 @@ def merge_motifs(
     rc: bool = True,
     new_name: str | None = None,
     weighted: bool = False,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> Motif:
     """Merge motifs into one PPM.
 
@@ -210,6 +224,9 @@ def merge_motifs(
     with a warning.
     The default name joins the merged motifs' names.
 
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
+
     Examples
     --------
     >>> import universalmotif as um
@@ -219,6 +236,7 @@ def merge_motifs(
     >>> merged.name, merged.consensus, merged.type
     ('W-box merged', 'STTTGACYAAW', 'PPM')
     """
+    nthreads = _nthreads(nthreads)
     ms = _motif_list(motifs)
     merged, used = _core._merge_motifs(ms, min_overlap, rc, new_name, weighted, nthreads)
     if len(used) < len(ms):
@@ -241,21 +259,32 @@ def merge_similar(
     bkg: Sequence[float] | Mapping[str, float] | None = None,
     weighted: bool = False,
     return_clusters: bool = False,
-    nthreads: int = 1,
+    linkage: str = "single",
+    nthreads: int | None = None,
 ):
     """Cluster similar motifs and merge each cluster.
 
     Motifs are linked when [`compare_motifs()`][universalmotif.compare_motifs]
-    gives them a q-value of at most ``qvalue`` in either direction, clusters
-    are the connected groups, and each cluster of several motifs is merged with
-    [`merge_motifs()`][universalmotif.merge_motifs]. Since a single link is
-    enough, motifs that are only alike in part, such as those of one family of
-    transcription factors, can chain into one large cluster; cutting a
-    [`motif_tree()`][universalmotif.motif_tree] at a fixed height avoids that.
+    gives them a q-value of at most ``qvalue`` in either direction, and each
+    cluster of several motifs is merged with
+    [`merge_motifs()`][universalmotif.merge_motifs]. With
+    ``linkage="single"``, clusters are the connected groups, so one link to
+    any member is enough to join a cluster, and motifs that are only alike in
+    part, such as those of one family of transcription factors, can chain
+    into one large cluster. With ``linkage="complete"``, every pair of motifs
+    in a cluster is linked: the clusters come from complete-linkage
+    clustering of the q-values cut at ``qvalue``, which joins the closest
+    clusters first and breaks ties by input order, so the result does not
+    depend on chance. A cluster of more than two motifs that holds over a
+    quarter of them is named in a warning, as a sign that unlike motifs were
+    joined.
 
     Returns one motif per cluster, or with ``return_clusters`` a summary
     DataFrame of the input motifs with 0-based ``motif_i`` and ``cluster``
     columns.
+
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
 
     Examples
     --------
@@ -268,10 +297,15 @@ def merge_similar(
     >>> um.merge_similar([v1, v2, gbox], return_clusters=True)["cluster"].to_list()
     [0, 0, 1]
     """
+    if linkage not in ("single", "complete"):
+        raise ValueError("linkage must be 'single' or 'complete'")
+    nthreads = _nthreads(nthreads)
     ms = _motif_list(motifs)
-    clusters, merged = _core._merge_similar(
-        ms, qvalue, null, min_overlap, rc, _bkg4(bkg), weighted, nthreads
+    clusters, merged, notes = _core._merge_similar(
+        ms, qvalue, null, min_overlap, rc, _bkg4(bkg), weighted, linkage, nthreads
     )
+    for note in notes:
+        warnings.warn(note, stacklevel=2)
     if return_clusters:
         if not ms:
             return pl.DataFrame(schema={"name": pl.String, "motif_i": pl.UInt32, "cluster": pl.Int64})
@@ -413,7 +447,7 @@ class MotifTree:
             either ``"icscore"`` or one of ``"pval"``, ``"qval"`` and
             ``"eval"``, which are taken as their -log10.
         tip_logos
-            Draw each motif's logo at its tip, aligned as in
+            Draw each motif's logo at its tip, aligned and drawn as by
             [`view_motifs()`][universalmotif.view_motifs], in the rectangular
             and slanted layouts only.
             ``tip_logo_width`` is the width of one position in tree units
@@ -463,7 +497,7 @@ def motif_tree(
     rc: bool = True,
     method: str = "complete",
     labels: str | Sequence[str] = "name",
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> MotifTree:
     """Cluster motifs into a tree.
 
@@ -482,6 +516,9 @@ def motif_tree(
     ``"family"``. Duplicate motif names get ``.1``, ``.2`` and so on, while
     the first of each is left as it is.
 
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
+
     Examples
     --------
     >>> import universalmotif as um
@@ -493,6 +530,7 @@ def motif_tree(
     >>> tree.height.round(3).tolist()
     [0.096, 0.211, 0.354, 0.384, 0.447]
     """
+    nthreads = _nthreads(nthreads)
     if isinstance(motifs, np.ndarray) or (
         isinstance(motifs, Sequence) and motifs and not isinstance(motifs[0], Motif)
     ):

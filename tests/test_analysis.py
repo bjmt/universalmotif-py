@@ -70,7 +70,11 @@ def test_dedup_hits_matches_scan_option():
         a = um.dedup_hits(hits, by=by)
         b = um.scan_sequences(motifs, seqs, pvalue=1e-3, no_overlaps=True, no_overlaps_by=by)
         assert a.equals(b)
-    both = um.dedup_hits(hits, ignore_strand=True, ignore_motif=True)
+        a = um.dedup_hits(hits, by=by, ignore_strand=False)
+        b = um.scan_sequences(motifs, seqs, pvalue=1e-3, no_overlaps=True, no_overlaps_by=by,
+                              no_overlaps_by_strand=False)
+        assert a.equals(b)
+    both = um.dedup_hits(hits, ignore_motif=True)
     assert both.height < hits.height
     starts = both.group_by("sequence").agg("start", "end")
     for row in starts.iter_rows(named=True):
@@ -189,7 +193,7 @@ def test_scan_hits_are_consistent():
         assert r["pvalue"] == pytest.approx(um.motif_pvalue(motifs[r["motif_i"]], score=r["score"]))
     # RNA motifs find the same sites in RNA.
     rna = um.scan_sequences([um.switch_alph(m) for m in motifs],
-                            {k: v.replace("T", "U") for k, v in seqs.items()}, pvalue=1e-3)
+                            {k: v.replace("T", "U") for k, v in seqs.items()}, pvalue=1e-3, rc=True)
     assert rna.drop("match").equals(hits.drop("match"))
     assert rna["match"].to_list() == [s.replace("T", "U") for s in hits["match"]]
     # Windows holding an N are skipped.
@@ -258,21 +262,21 @@ def _first_rows(hits):
 @pytest.mark.parametrize("rc", [True, False])
 def test_first_hit_is_the_first_row_of_a_full_scan(rc, tmp_path):
     motifs, seqs = _first_hit_inputs()
-    full = um.scan_sequences(motifs, seqs, pvalue=1e-3, rc=rc, nthreads=2)
+    full = um.scan_sequences(motifs, seqs, pvalue=1e-3, rc=rc, correct_gaps=False, nthreads=2)
     want = _first_rows(full)
     assert want.height > 1000 and (want["start"] >= 1 << 16).any()
     if rc:
         both = full.filter(pl.col("sequence") == "long2", pl.col("motif_i") == 14)
         assert {"+", "-"} <= set(both["strand"])
     for nthreads in (1, 2):
-        got = um.scan_sequences(motifs, seqs, pvalue=1e-3, rc=rc, nthreads=nthreads, first_hit=True)
+        got = um.scan_sequences(motifs, seqs, pvalue=1e-3, rc=rc, correct_gaps=False, nthreads=nthreads, first_hit=True)
         assert got.equals(want), nthreads
-    packed = um.scan_sequences(motifs, um.pack_sequences(seqs), pvalue=1e-3, rc=rc, first_hit=True)
+    packed = um.scan_sequences(motifs, um.pack_sequences(seqs), pvalue=1e-3, rc=rc, correct_gaps=False, first_hit=True)
     assert packed.equals(want)
     path = tmp_path / "seqs.fa"
     um.write_fasta(seqs, path)
-    assert um.scan_sequences(motifs, path, pvalue=1e-3, rc=rc, nthreads=2, first_hit=True).equals(want)
-    genome = um.scan_sequences(motifs, um.Genome(path), pvalue=1e-3, rc=rc, nthreads=2, first_hit=True)
+    assert um.scan_sequences(motifs, path, pvalue=1e-3, rc=rc, correct_gaps=False, nthreads=2, first_hit=True).equals(want)
+    genome = um.scan_sequences(motifs, um.Genome(path), pvalue=1e-3, rc=rc, correct_gaps=False, nthreads=2, first_hit=True)
     assert genome.equals(want)
 
 

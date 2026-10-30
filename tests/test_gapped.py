@@ -18,7 +18,9 @@ def test_gapped_scans_match_r(tmp_path):
     for case in load_reference("gapped.json"):
         w = case["table"]
         for inp in (seqs, tmp_path / "gapped.fa", packed):
-            got = um.scan_sequences(motifs, inp, pvalue=case["threshold"], rc=False, nthreads=2)
+            # The reference scans do not correct for the gap sizes tried.
+            got = um.scan_sequences(motifs, inp, pvalue=case["threshold"], rc=False, nthreads=2,
+                                    correct_gaps=False)
             got = got.sort(["motif_i", "sequence_i", "start", "match"])
             assert got["motif_i"].to_list() == [int(x) - 1 for x in nums(w["motif.i"])]
             assert got["sequence_i"].to_list() == [int(x) - 1 for x in nums(w["sequence.i"])]
@@ -41,8 +43,9 @@ def test_gapped_scans_match_r(tmp_path):
 def test_gap_correction():
     motifs = [motif_from_record(r) for r in load_reference("gapped.json", "motifs")]
     seqs = load_reference("gapped.json", "sequences")
-    raw = um.scan_sequences(motifs, seqs, pvalue=1e-2)
-    adj = um.scan_sequences(motifs, seqs, pvalue=1e-2, correct_gaps=True)
+    raw = um.scan_sequences(motifs, seqs, pvalue=1e-2, correct_gaps=False)
+    adj = um.scan_sequences(motifs, seqs, pvalue=1e-2)
+    assert adj.equals(um.scan_sequences(motifs, seqs, pvalue=1e-2, correct_gaps=True))
     combos = {0: 4, 1: 12, 2: 1}
     n = raw["motif_i"].replace_strict(combos, return_dtype=float)
     keep = raw.with_columns((raw["pvalue"] * n).clip(upper_bound=1.0).alias("pvalue")).filter(

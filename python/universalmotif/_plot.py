@@ -14,6 +14,7 @@ from ._analysis import _make_unique, _sequence_pairs
 from ._api import _check_motif
 from ._core import Motif
 from ._logo import Glyph, matrix_glyphs, motif_glyphs
+from ._threads import _nthreads
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -264,10 +265,19 @@ def _rc_matrix(m: np.ndarray) -> np.ndarray:
 
 
 class _Default:
-    pass
+    """A default that depends on other arguments."""
+
+    def __repr__(self) -> str:
+        return "<default>"
 
 
 _DEFAULT = _Default()
+
+
+def _shared_logo_type(motifs: list) -> str:
+    """The type motifs are drawn as by default: CWMs if they all are, and
+    otherwise ICMs, so that panels share a scale."""
+    return "CWM" if motifs and all(getattr(m, "type", None) == "CWM" for m in motifs) else "ICM"
 
 
 def _anchor_ic(m: Motif) -> float:
@@ -404,7 +414,7 @@ def _style_axes(ax, ylabel, ticks, ylim, n, show_positions, labels=None, text_si
 
 def view_motifs(
     motifs: Motif | Iterable[Motif],
-    use_type: str = "ICM",
+    use_type: str | None = None,
     rc: bool = True,
     min_overlap: int = 6,
     align: bool = True,
@@ -426,7 +436,7 @@ def view_motifs(
     text_size: float = 12,
     figsize: tuple[float, float] | None = None,
     return_raw: bool = False,
-    nthreads: int = 1,
+    nthreads: int | None = None,
     ax: Axes | None = None,
 ):
     """Draw motifs as sequence logos.
@@ -448,8 +458,10 @@ def view_motifs(
         least ``min_overlap`` columns (or the whole of the narrower motif).
     use_type
         Matrix type to draw, one of ``"ICM"``, ``"PPM"``, ``"PWM"``,
-        ``"PCM"``, or ``"CWM"`` for motifs that are CWMs. ICMs are drawn in
-        bits, and motifs without ``nsites`` count as 100 sites.
+        ``"PCM"``, or ``"CWM"`` for motifs that are CWMs. By default CWMs
+        are drawn as CWMs and other motifs as ICMs, and a mix of CWMs and
+        other types is drawn as ICMs so that the panels share a scale. ICMs
+        are drawn in bits, and motifs without ``nsites`` count as 100 sites.
     sort_by
         Display order, which is the input order with ``"none"``, decreasing
         information content with ``"ic"``, or clusters by correlation with
@@ -465,15 +477,20 @@ def view_motifs(
         red T or U, amino acids to colours grouped by side-chain chemistry,
         and other alphabets to a categorical palette.
     min_height, x_spacer, y_spacer, sort_positions, sort_positions_decreasing, fit_to_height, flip_neg
-        Letter layout, as in [`view_logo()`][universalmotif.view_logo]. Letters are sorted by height
-        except for PCMs and PPMs, and PPM positions are scaled to a height of
-        1, unless told otherwise.
+        Letter layout, as in [`view_logo()`][universalmotif.view_logo]. By
+        default letters are sorted by height except for PCMs and PPMs, and
+        ``fit_to_height`` scales every PPM position to a height of 1 and
+        leaves PCM positions as they are. It is ignored for ICMs, PWMs and
+        CWMs.
     return_raw
         Return the aligned matrices as a dict from names to (letters,
         positions) arrays instead of drawing them.
     ax
         Draw a single motif on these axes, such as a panel of a larger
         figure, instead of in a new figure. ``figsize`` is then ignored.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
     -------
@@ -505,8 +522,12 @@ def view_motifs(
     True
     >>> plt.close(fig)
     """
+    nthreads = _nthreads(nthreads)
     if names_pos not in ("top", "right"):
         raise ValueError("names_pos must be 'top' or 'right'")
+    motifs = [motifs] if isinstance(motifs, Motif) else list(motifs)
+    if use_type is None:
+        use_type = _shared_logo_type(motifs)
     if sort_positions is None:
         sort_positions = use_type not in ("PCM", "PPM")
     if fit_to_height is _DEFAULT:
@@ -516,7 +537,6 @@ def view_motifs(
 
         warnings.warn('fit_to_height is ignored for use_type "ICM", "PWM" and "CWM"', stacklevel=2)
         fit_to_height = None
-    motifs = [motifs] if isinstance(motifs, Motif) else list(motifs)
     names, mats, offsets, widths, alphabet = _prepare_motifs(
         motifs, use_type, rc, min_overlap, relative_entropy, sort_by, rc_text, nthreads, align
     )
@@ -596,7 +616,10 @@ def plot_motif_peaks(
 
     One panel per motif, or per motif named in ``motifs`` in the order
     named, shows a histogram of the hit centres, with the most enriched
-    window shaded and the P-value and enrichment in the title.
+    window shaded and the P-value and enrichment in the title. Since
+    [`motif_peaks()`][universalmotif.motif_peaks] returns every motif by
+    default, a long table is best filtered by q-value first or narrowed
+    with ``motifs``.
 
     Examples
     --------
@@ -803,17 +826,21 @@ def plot_tree(
             raise ValueError("tip logos need the rectangular or slanted layout")
         if tree.motifs is None:
             raise ValueError("tip logos need a tree made by motif_tree()")
-        logos = view_motifs(tree.motifs, return_raw=True, sort_by="none")
+        use_type = _shared_logo_type(tree.motifs)
+        logos = view_motifs(tree.motifs, use_type=use_type, return_raw=True, sort_by="none")
         mats = list(logos.values())
         frame = mats[0].shape[1]
         alph = tree.motifs[0].alphabet
         rows = list(tree.motifs[0].letters)
         pos_width = tip_logo_width if tip_logo_width is not None else 0.6 * xrange / frame
         x0 = xmax + 0.08 * xrange
+        # Contributions share the range of all the logos, as in view_motifs().
+        lo, hi = _y_axis(mats, use_type)[1] if use_type == "CWM" else (0.0, 2.0)
+        yscale = tip_logo_height / ((hi - lo) or 1.0)
         for i, m in enumerate(mats):
-            glyphs = motif_glyphs(m, rows, "ICM", 0.01, 0.04, 0.01, True, True, None, False)
-            _draw_glyphs(ax, glyphs, _default_colours(alph, rows), x0=x0 - 0.5 * pos_width, y0=tip_y[i] - tip_logo_height / 2,
-                         xscale=pos_width, yscale=tip_logo_height / 2)
+            glyphs = motif_glyphs(m, rows, use_type, 0.01, 0.04, 0.01, True, True, None, use_type == "CWM")
+            _draw_glyphs(ax, glyphs, _default_colours(alph, rows), x0=x0 - 0.5 * pos_width,
+                         y0=tip_y[i] - tip_logo_height / 2 - lo * yscale, xscale=pos_width, yscale=yscale)
         label_x = x0 + frame * pos_width + 0.02 * xrange
 
     texts = []
@@ -970,8 +997,9 @@ def plot_motif_proximity(
 
     Distances are signed and negative upstream of stranded anchors, and the
     zone of an upstream or downstream test is shaded on that side only.
-    ``motifs`` picks the motifs to draw and their order. With ``log_x`` the
-    absolute distances plus one are drawn on a log scale.
+    ``motifs`` picks the motifs to draw and their order, and otherwise every
+    row gets a panel, so a long table is best filtered by q-value first. With
+    ``log_x`` the absolute distances plus one are drawn on a log scale.
 
     Examples
     --------

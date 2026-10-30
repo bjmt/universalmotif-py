@@ -272,8 +272,9 @@ def _out_arg(p: argparse.ArgumentParser, what: str = "the table") -> None:
 
 
 def _threads_arg(p: argparse.ArgumentParser) -> None:
-    p.add_argument("-p", "--threads", type=int, default=1,
-                   help="threads to use; 0 uses all available (default: 1)")
+    p.add_argument("-p", "--threads", type=int,
+                   help="threads to use; 0 uses all available (default: 1, or "
+                        "UNIVERSALMOTIF_NTHREADS if set)")
 
 
 def _seed_arg(p: argparse.ArgumentParser) -> None:
@@ -283,8 +284,8 @@ def _seed_arg(p: argparse.ArgumentParser) -> None:
 def _scan_args(p: argparse.ArgumentParser, pvalue: float = 1e-4) -> None:
     p.add_argument("-P", "--pvalue", type=float, default=pvalue,
                    help=f"P-value cutoff for motif hits (default: {pvalue:g})")
-    p.add_argument("--no-rc", dest="rc", action="store_false",
-                   help="scan only the forward strand")
+    p.add_argument("--no-rc", dest="rc", action="store_false", default=None,
+                   help="scan only the forward strand, as is done by default for RNA")
 
 
 # Commands -------------------------------------------------------------------
@@ -359,10 +360,14 @@ def cmd_merge(a):
                                   weighted=a.weighted, nthreads=a.threads)]
     else:
         kw = {"qvalue": a.qvalue, "null": a.null, "min_overlap": a.min_overlap, "rc": a.rc,
-                  "weighted": a.weighted, "nthreads": a.threads}
+                  "weighted": a.weighted, "linkage": a.linkage, "nthreads": a.threads}
         merged = um.merge_similar(motifs, **kw)
         if a.clusters:
-            write_table(um.merge_similar(motifs, return_clusters=True, **kw), a.clusters)
+            with warnings.catch_warnings():
+                # Already given for the merge itself.
+                warnings.simplefilter("ignore", UserWarning)
+                clusters = um.merge_similar(motifs, return_clusters=True, **kw)
+            write_table(clusters, a.clusters)
     write_motifs(merged, a.output, a.to)
 
 
@@ -876,6 +881,9 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--no-rc", dest="rc", action="store_false",
                    help="do not align motifs as reverse complements")
     p.add_argument("--weighted", action="store_true", help="weight motifs by their nsites")
+    p.add_argument("--linkage", choices=("single", "complete"), default="single",
+                   help="join a motif to a cluster when it is similar to any member (single) or "
+                        "to every member (complete) (default: single)")
     p.add_argument("--all", action="store_true", help="merge all the motifs into one")
     p.add_argument("--name", help="name of the merged motif, with --all")
     p.add_argument("--clusters", help="also write a table of which motifs were merged")
@@ -937,14 +945,15 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="remove overlapping hits of each motif, keeping the best")
     p.add_argument("--overlaps-by", choices=("pvalue", "score"), default="pvalue",
                    help="what makes the best hit with --no-overlaps (default: pvalue)")
-    p.add_argument("--across-strands", action="store_true",
-                   help="with --no-overlaps, compare hits on both strands")
+    p.add_argument("--across-strands", action=argparse.BooleanOptionalAction, default=True,
+                   help="with --no-overlaps, compare hits on opposite strands, so that a "
+                        "palindromic site is kept once (default: on)")
     p.add_argument("--across-motifs", action="store_true",
                    help="with --no-overlaps, compare hits of different motifs")
     p.add_argument("--no-gaps", dest="gaps", action="store_false",
                    help="ignore the gaps of gapped motifs")
-    p.add_argument("--correct-gaps", action="store_true",
-                   help="correct gapped motifs' P-values for the gap sizes tried")
+    p.add_argument("--correct-gaps", action=argparse.BooleanOptionalAction, default=True,
+                   help="correct gapped motifs' P-values for the gap sizes tried (default: on)")
     p.add_argument("--first-hit", action="store_true",
                    help="keep only the leftmost hit of each motif in each sequence, which is quicker "
                         "when most sequences have one")
@@ -992,10 +1001,13 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("-b", "--bkg", help="FASTA file of background sequences")
     _out_arg(p)
     _scan_args(p)
-    p.add_argument("-q", "--qvalue", type=float, default=0.1,
-                   help="q-value cutoff for reported motifs (default: 0.1)")
-    p.add_argument("--test", choices=("seqs", "hits"), default="seqs",
-                   help="count sequences with hits, or hits (default: seqs)")
+    p.add_argument("-q", "--qvalue", type=float,
+                   help="q-value cutoff for reported motifs (default: report every motif)")
+    # "hits" is an older name for "sites", still accepted.
+    p.add_argument("--test", choices=("seqs", "sites"), default="seqs",
+                   type=lambda s: "sites" if s == "hits" else s,
+                   help="count sequences with hits, or hits among all possible sites "
+                        "(default: seqs)")
     p.add_argument("--shuffle-k", type=int, default=2,
                    help="k-mer size kept when shuffling targets for a background (default: 2)")
     _seed_arg(p)
@@ -1018,8 +1030,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="enrichment P-value at which to stop (default: 1e-3)")
     p.add_argument("-q", "--qvalue", type=float, default=0.05,
                    help="q-value cutoff for reported motifs (default: 0.05)")
-    p.add_argument("--no-rc", dest="rc", action="store_false",
-                   help="search only the forward strand")
+    p.add_argument("--no-rc", dest="rc", action="store_false", default=None,
+                   help="search only the forward strand, as is done by default for RNA")
     p.add_argument("--shuffle-k", type=int, default=2,
                    help="k-mer size kept when shuffling targets for a background (default: 2)")
     _seed_arg(p)
@@ -1028,7 +1040,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p = command("shuffle", cmd_shuffle, "shuffle sequences, keeping k-mer counts")
     p.add_argument("-s", "--sequences", required=True, help="FASTA file of sequences")
     _out_arg(p, "the shuffled sequences")
-    p.add_argument("-k", type=int, default=1, help="size of the k-mers kept (default: 1)")
+    p.add_argument("-k", type=int, default=2, help="size of the k-mers kept (default: 2)")
     p.add_argument("--method", choices=("euler", "linear", "markov"), default="euler",
                    help="shuffling method (default: euler)")
     _seed_arg(p)
@@ -1115,8 +1127,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="move anchors anywhere in the universe, not within their chromosome")
     p.add_argument("--stranded", action="store_true",
                    help="count overlapping hits on the two strands separately")
-    p.add_argument("-q", "--qvalue", type=float, default=0.1,
-                   help="q-value cutoff for reported motifs (default: 0.1)")
+    p.add_argument("-q", "--qvalue", type=float,
+                   help="q-value cutoff for reported motifs (default: report every motif)")
     p.add_argument("--nearest", action="store_true",
                    help="include each hit's distance to its nearest anchor")
     _seed_arg(p)
@@ -1156,8 +1168,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--mode", choices=("central", "local"), default="central",
                    help="windows centred on the sequences, or anywhere along them "
                         "(default: central)")
-    p.add_argument("-q", "--qvalue", type=float, default=0.1,
-                   help="q-value cutoff for reported motifs (default: 0.1)")
+    p.add_argument("-q", "--qvalue", type=float,
+                   help="q-value cutoff for reported motifs (default: report every motif)")
     p.add_argument("--min-window", type=int, default=10, help="smallest window (default: 10)")
     p.add_argument("--max-window", type=int,
                    help="largest window (default: half the sequence length)")
@@ -1173,6 +1185,14 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
 
 def _show_warning(message, category, filename, lineno, file=None, line=None):
     print(f"warning: {message}", file=sys.stderr)
+
+
+def _unquote(msg: str) -> str:
+    """The message without the quotes KeyError puts around it, if the whole
+    of it is wrapped in one matching pair."""
+    if len(msg) >= 2 and msg[0] == msg[-1] and msg[0] in "'\"" and msg[0] not in msg[1:-1]:
+        return msg[1:-1]
+    return msg
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1197,7 +1217,7 @@ def main(argv: list[str] | None = None) -> int:
             raise
         if not isinstance(e, (CliError, ValueError, OSError, ImportError, KeyError)):
             raise
-        msg = str(e).strip("'\"") or type(e).__name__
+        msg = _unquote(str(e)) or type(e).__name__
         print(f"{prog} {args.command}: error: {msg}", file=sys.stderr)
         return 1
     finally:

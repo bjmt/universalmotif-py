@@ -213,13 +213,15 @@ def variant_motif_effects(
     pvalue: float = 1e-4,
     start: int = 0,
     hits: pl.DataFrame | None = None,
-    rc: bool = True,
+    rc: bool | None = None,
 ) -> pl.DataFrame:
     """How single-letter variants change the motif sites they fall in.
 
     Every window of each motif's width that holds a variant is scored before
     and after the change, as [`scan_sequences()`][universalmotif.scan_sequences]
-    scores it, on both strands of DNA and RNA with ``rc``. A window is kept
+    scores it, on both strands of DNA and RNA with ``rc``, which is on by
+    default for DNA and off for RNA, and on the one strand of a motif whose
+    ``strand`` is ``"+"`` or ``"-"``. A window is kept
     when it reaches the ``pvalue`` cutoff in either sequence, so that the
     table holds sites a variant weakens or destroys and sites it strengthens
     or creates. With ``hits``, such as from ``scan_sequences()`` run on
@@ -295,8 +297,10 @@ def variant_motif_effects(
         except UnicodeEncodeError as e:
             raise ValueError("the sequence and variants must be plain ASCII letters") from e
         rows, s, ref_w, alt_w = _windows(motif, codes, idx, alt_codes)
-        strands = [("+", ref_w, alt_w)]
-        if rc and motif.alphabet in _COMPLEMENTS:
+        nucleotide = motif.alphabet in _COMPLEMENTS
+        both = motif.strand == "+-" and (motif.alphabet != "RNA" if rc is None else rc)
+        strands = [("+", ref_w, alt_w)] if not nucleotide or motif.strand != "-" else []
+        if nucleotide and (both or motif.strand == "-"):
             table = np.arange(256, dtype=np.uint8)
             a, b = _COMPLEMENTS[motif.alphabet]
             table[np.frombuffer(a.encode(), dtype=np.uint8)] = np.frombuffer(b.encode(), dtype=np.uint8)

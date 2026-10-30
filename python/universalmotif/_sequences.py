@@ -16,6 +16,7 @@ from . import _core
 from ._analysis import _sequence_pairs
 from ._api import _check_motif
 from ._core import Motif
+from ._threads import _nthreads
 
 _ALPHABETS = {"DNA": "ACGT", "RNA": "ACGU", "AA": "ACDEFGHIKLMNPQRSTVWY"}
 
@@ -208,7 +209,7 @@ def sequence_complexity(
     window_overlap: float | None = None,
     method: str = "WoottonFederhen",
     trifonov_max_word_size: int = 7,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> pl.DataFrame:
     """Complexity in sliding windows along sequences.
 
@@ -218,6 +219,9 @@ def sequence_complexity(
     [`calc_complexity()`][universalmotif.calc_complexity] for the methods. Returns a DataFrame with
     columns ``sequence``, ``start``, ``end`` and ``complexity``, where
     positions count from 0 and leave the end out.
+
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
 
     Examples
     --------
@@ -229,6 +233,7 @@ def sequence_complexity(
     >>> res["complexity"].round(3).to_list()
     [0.731, 0.644, 0.399, 0.399, 0.36]
     """
+    nthreads = _nthreads(nthreads)
     if method not in _COMPLEXITY_METHODS:
         raise ValueError(f"method must be one of {', '.join(_COMPLEXITY_METHODS)}")
     names, seqs = _sequence_pairs(sequences)
@@ -277,7 +282,7 @@ def get_bkg(
     window_size: float = 0.1,
     window_overlap: float = 0,
     to_meme: str | os.PathLike[str] | IO[str] | None = None,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> pl.DataFrame | None:
     """k-mer counts and frequencies of sequences.
 
@@ -306,6 +311,9 @@ def get_bkg(
         returning the counts. This needs ``k`` to run from 1 upwards, merged
         counts without windows, and no frequencies of exactly 0 or 1, which
         a pseudocount avoids.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
     -------
@@ -327,6 +335,7 @@ def get_bkg(
     >>> um.get_bkg(seqs, k=[1, 2]).shape
     (20, 3)
     """
+    nthreads = _nthreads(nthreads)
     names, seqs = _sequence_pairs(sequences)
     ks = [int(k)] if isinstance(k, (int, np.integer)) else [int(x) for x in k]
     if any(x < 1 for x in ks):
@@ -359,18 +368,22 @@ _SHUFFLE_METHODS = ("euler", "markov", "linear")
 
 def shuffle_sequences(
     sequences: str | Sequence[str] | Mapping[str, str],
-    k: int = 1,
+    k: int = 2,
     method: str = "euler",
     seed: int | None = None,
     window: bool = False,
     window_size: float = 0.1,
     window_overlap: float = 0.01,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ):
     """Shuffle sequences while preserving their k-mer composition.
 
-    The default ``method``, ``"euler"``, keeps k-mer counts exactly, along
-    with the first and last k-1 letters. ``"linear"`` shuffles
+    By default ``k`` is 2, keeping dinucleotide counts, since the
+    dinucleotide make-up of DNA, CpG depletion above all, changes how often
+    motifs match, and shuffled sequences mostly serve as backgrounds for
+    them. Each sequence must be at least ``k`` letters long. The default
+    ``method``, ``"euler"``, keeps k-mer counts exactly, along with the
+    first and last k-1 letters. ``"linear"`` shuffles
     non-overlapping blocks of k letters, keeping only those blocks' counts,
     and ``"markov"`` draws a new sequence from the k-mer frequencies,
     keeping them only approximately. With ``window``, each
@@ -378,7 +391,8 @@ def shuffle_sequences(
     ``window_overlap`` between 0 and 1 are fractions of each sequence's
     length.
 
-    Results depend on ``seed`` but not on ``nthreads``.
+    Results depend on ``seed`` but not on ``nthreads``, which defaults to
+    the package setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns new sequences in the same form as the input, whether a string, a
     list or a dict with the same keys.
@@ -387,12 +401,13 @@ def shuffle_sequences(
     --------
     >>> import universalmotif as um
     >>> seq = "AACCGGTTACGTACGT"
-    >>> shuffled = um.shuffle_sequences(seq, k=2, seed=1)
+    >>> shuffled = um.shuffle_sequences(seq, seed=1)
     >>> shuffled
     'ACCGTACGGTAACGTT'
     >>> um.count_kmers(shuffled, k=2).equals(um.count_kmers(seq, k=2))
     True
     """
+    nthreads = _nthreads(nthreads)
     if method not in _SHUFFLE_METHODS:
         raise ValueError("method must be 'euler', 'markov' or 'linear'")
     if k < 1:
@@ -409,7 +424,7 @@ def create_sequences(
     seqlen: int = 100,
     freqs: Sequence[float] | Mapping[str, float] | None = None,
     seed: int | None = None,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> list[str]:
     """Random sequences.
 
@@ -419,6 +434,9 @@ def create_sequences(
     [`get_kmers()`][universalmotif.get_kmers] gives; their number sets k, and
     sequences are drawn from the Markov model of order k-1 they define. Letters
     are uniform by default.
+
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
 
     Examples
     --------
@@ -432,6 +450,7 @@ def create_sequences(
     >>> um.create_sequences(seqnum=2, seqlen=12, freqs=freqs, seed=1)
     ['TTTTGAAATAGA', 'TGGTATCAATTA']
     """
+    nthreads = _nthreads(nthreads)
     letters = _ALPHABETS.get(alphabet, None) or _letters(alphabet)
     if len(letters) < 1:
         raise ValueError("the alphabet cannot be empty")
@@ -599,11 +618,11 @@ def motif_finder(
     stop_pvalue: float = 1e-3,
     qvalue: float = 0.05,
     dedup_overlap: float = 0.5,
-    rc: bool = True,
+    rc: bool | None = None,
     shuffle_k: int = 2,
     seed: int | None = None,
     pseudocount: int = 1,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> pl.DataFrame:
     """Discover motifs enriched in DNA or RNA sequences.
 
@@ -617,7 +636,10 @@ def motif_finder(
     Motifs from different widths sharing more than ``dedup_overlap`` of their
     sites are deduplicated, Benjamini-Hochberg q-values are computed,
     low-information flanks are trimmed, and motifs with q-values above
-    ``qvalue`` are dropped.
+    ``qvalue`` are dropped. Both strands are searched with ``rc``, which by
+    default is on for DNA and off for RNA, recognized by a ``U`` in any
+    sequence; motifs found on one strand have the ``strand`` ``"+"``, so
+    that they are scanned on that strand alone.
 
     Each motif is the best of many candidate words, so its P-value, from
     Fisher's exact test on the sequences with hits, is multiplied by the
@@ -642,6 +664,9 @@ def motif_finder(
     E-values. ``seqs_pos`` and ``seqs_neg`` count sequences with a hit, and
     ``sites_pos`` and ``sites_neg`` count hits.
 
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
+
     Examples
     --------
     A site planted in each of 20 random sequences is found again, here as
@@ -655,6 +680,7 @@ def motif_finder(
     >>> res.select("consensus", "seqs_pos", "seqs_neg").rows()
     [('TGGTCAA', 20, 0)]
     """
+    nthreads = _nthreads(nthreads)
     if min_width < 3 or max_width > 30 or min_width > max_width:
         raise ValueError("widths must satisfy 3 <= min_width <= max_width <= 30")
     if shuffle_k < 1:
@@ -663,6 +689,8 @@ def motif_finder(
         raise ValueError("pseudocount must be non-negative")
     _, seqs = _sequence_pairs(sequences)
     neg = None if bkg_sequences is None else _sequence_pairs(bkg_sequences)[1]
+    if rc is None:
+        rc = not any("U" in s or "u" in s for s in seqs)
     motifs, cols = _core._motif_finder(
         seqs,
         neg,

@@ -121,9 +121,9 @@ def plot_enrichment(
     target hits have an enrichment of zero, and are drawn as triangles at
     the left edge.
 
-    Since [`enrich_motifs()`][universalmotif.enrich_motifs] keeps only
-    motifs with q-values up to 0.1 by default, run it with ``qvalue=1`` to
-    see all of them.
+    [`enrich_motifs()`][universalmotif.enrich_motifs] returns every motif
+    by default, so the plot shows those that fall short of ``cutoff`` too,
+    unless the table was filtered with its ``qvalue``.
 
     Parameters
     ----------
@@ -162,7 +162,7 @@ def plot_enrichment(
     >>> motifs = um.example_motifs()
     >>> targets = um.example_sequences("targets")
     >>> controls = um.example_sequences("controls")
-    >>> res = um.enrich_motifs(motifs, targets, controls, qvalue=1, nthreads=1)
+    >>> res = um.enrich_motifs(motifs, targets, controls, nthreads=1)
     >>> fig = um.plot_enrichment(res, labels=3, motifs=motifs)
     >>> sorted(t.get_text() for t in fig.axes[0].texts)
     ['G-box', 'W-box', 'q = 0.1']
@@ -352,7 +352,7 @@ def _coocc_matrix(results: pl.DataFrame, value: str) -> tuple[list[str], np.ndar
 def plot_coocc(
     results: pl.DataFrame,
     value: str = "odds_ratio",
-    cutoff: float = 0.05,
+    cutoff: float = 0.1,
     order: str | Sequence[str] = "cluster",
     cmap: str | None = None,
     text_size: float = 9,

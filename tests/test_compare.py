@@ -89,6 +89,8 @@ def test_merge_motifs_reference():
         assert_motif_matches(got, case["motif"], f"merge case {i}")
 
 
+# Some reference cases join many of the motifs, as single linkage does.
+@pytest.mark.filterwarnings("ignore:cluster .* holds:UserWarning")
 def test_merge_similar_reference():
     motifs = _set("dna")
     for i, case in enumerate(load_reference("compare.json", "similar")):

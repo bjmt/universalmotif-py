@@ -9,7 +9,7 @@ use universalmotif::Strand;
 use universalmotif::cluster::{self, Linkage, Tree, TreeOptions};
 use universalmotif::compare::{self, CompareOptions, NullModel, Overhang};
 use universalmotif::dedup::{Interval, dedup};
-use universalmotif::merge::{self, MergeOptions, MergeSimilarOptions};
+use universalmotif::merge::{self, MergeLinkage, MergeOptions, MergeSimilarOptions};
 use universalmotif::metrics::ColumnMetric;
 use universalmotif::packed::EncodedSequences;
 use universalmotif::pvalue::{self, PvalueOptions};
@@ -223,7 +223,7 @@ type Matches<'py> = (
 );
 
 #[pyfunction]
-#[pyo3(signature = (motifs, sequences, packed, pvalue, rc, no_overlaps, nthreads, use_gaps, value))]
+#[pyo3(signature = (motifs, sequences, packed, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, value))]
 #[allow(clippy::too_many_arguments)]
 fn _motif_matches<'py>(
     py: Python<'py>,
@@ -235,12 +235,21 @@ fn _motif_matches<'py>(
     no_overlaps: Option<(String, bool, bool)>,
     nthreads: usize,
     use_gaps: bool,
+    correct_gaps: bool,
     value: &str,
 ) -> PyResult<Matches<'py>> {
     use numpy::IntoPyArray;
 
     let motifs = unwrap(&motifs);
-    let opts = scan_options(pvalue, rc, no_overlaps, nthreads, use_gaps, false, false)?;
+    let opts = scan_options(
+        pvalue,
+        rc,
+        no_overlaps,
+        nthreads,
+        use_gaps,
+        correct_gaps,
+        false,
+    )?;
     let value = value.parse::<MatchValue>().map_err(err)?;
     let m = match (&packed, sequences) {
         (Some(p), _) => {
@@ -302,7 +311,7 @@ fn _scan_packed<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, path, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, first_hit, motif_names))]
+#[pyo3(signature = (motifs, path, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, first_hit, motif_names, trim_names))]
 #[allow(clippy::too_many_arguments)]
 fn _scan_fasta<'py>(
     py: Python<'py>,
@@ -316,6 +325,7 @@ fn _scan_fasta<'py>(
     correct_gaps: bool,
     first_hit: bool,
     motif_names: Vec<String>,
+    trim_names: bool,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
     let opts = scan_options(
@@ -328,7 +338,7 @@ fn _scan_fasta<'py>(
         first_hit,
     )?;
     let mut f = py
-        .detach(|| scan_fasta(&motifs, &path, &opts))
+        .detach(|| scan_fasta(&motifs, &path, &opts, trim_names))
         .map_err(err)?;
     let letters = matched_column(f.len(), |i, buf| {
         buf.clear();
@@ -563,7 +573,7 @@ fn _merge_motifs(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, qvalue, null, min_overlap, rc, bkg, weighted, nthreads))]
+#[pyo3(signature = (motifs, qvalue, null, min_overlap, rc, bkg, weighted, linkage, nthreads))]
 #[allow(clippy::too_many_arguments)]
 fn _merge_similar(
     py: Python<'_>,
@@ -574,8 +584,9 @@ fn _merge_similar(
     rc: bool,
     bkg: Option<Vec<f64>>,
     weighted: bool,
+    linkage: &str,
     nthreads: usize,
-) -> PyResult<(Vec<usize>, Vec<PyMotif>)> {
+) -> PyResult<(Vec<usize>, Vec<PyMotif>, Vec<String>)> {
     let motifs = unwrap(&motifs);
     let opts = MergeSimilarOptions {
         qvalue,
@@ -584,6 +595,7 @@ fn _merge_similar(
         rc,
         bkg: bkg4(bkg)?,
         weighted,
+        linkage: linkage.parse::<MergeLinkage>().map_err(err)?,
         nthreads,
     };
     let res = py
@@ -592,6 +604,7 @@ fn _merge_similar(
     Ok((
         res.clusters,
         res.motifs.into_iter().map(PyMotif::from).collect(),
+        res.warnings,
     ))
 }
 

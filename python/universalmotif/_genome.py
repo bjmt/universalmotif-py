@@ -11,6 +11,7 @@ import polars as pl
 
 from . import _core
 from ._analysis import _make_unique
+from ._threads import _nthreads
 
 _COMPLEMENT = str.maketrans(
     "ACGTUNRYKMSWBDHVacgtunrykmswbdhv",
@@ -84,14 +85,15 @@ class Genome(Mapping[str, str]):
             raise IndexError("start must be at least 0")
         return self._inner.fetch(i, start, end)
 
-    def extract(self, ranges, nthreads: int = 1) -> dict[str, str]:
+    def extract(self, ranges, nthreads: int | None = None) -> dict[str, str]:
         """The sequences of genomic ranges; see
         [`extract_ranges()`][universalmotif.extract_ranges]."""
         return extract_ranges(self, ranges, nthreads=nthreads)
 
     def _fetch(self, chroms: list[str], starts: list[int], ends: list[int],
-               nthreads: int = 1) -> list[str]:
+               nthreads: int | None = None) -> list[str]:
         """Many ranges, with 0-based, half-open positions, read in parallel."""
+        nthreads = _nthreads(nthreads)
         index = {c: self._index(c) for c in set(chroms)}
         return self._inner.fetch_many(
             [(index[c], s, e) for c, s, e in zip(chroms, starts, ends)], nthreads
@@ -110,7 +112,7 @@ def _reverse_complement(seq: str) -> str:
 def extract_ranges(
     genome: Mapping[str, str],
     ranges,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ) -> dict[str, str]:
     """The sequences of genomic ranges, such as peaks, from a genome.
 
@@ -124,7 +126,7 @@ def extract_ranges(
     Each sequence is named ``chrom:start-end`` in the same positions, with
     ``(-)`` added on the minus strand, and repeated ranges get ``.1``,
     ``.2`` and so on. A genome on disk reads the ranges with ``nthreads``
-    threads.
+    threads, by default the package setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Examples
     --------
@@ -133,6 +135,7 @@ def extract_ranges(
     >>> um.extract_ranges(genome, [("chr1", 1, 5), ("chr1", 1, 5, "-")])
     {'chr1:1-5': 'ACCG', 'chr1:1-5(-)': 'CGGT'}
     """
+    nthreads = _nthreads(nthreads)
     from ._genomic import _range_table
 
     df = _range_table(ranges, "ranges")
@@ -169,9 +172,10 @@ def _check_ranges(genome: Mapping[str, str], df: pl.DataFrame) -> None:
         raise ValueError(f"the range {c}:{s}-{e} does not fit in {c} (length {known[c]})")
 
 
-def _fetch_ranges(genome: Mapping[str, str], df: pl.DataFrame, nthreads: int = 1) -> list[str]:
+def _fetch_ranges(genome: Mapping[str, str], df: pl.DataFrame, nthreads: int | None = None) -> list[str]:
     """The sequences of a checked range table, in order, with ranges on the
     minus strand reverse complemented."""
+    nthreads = _nthreads(nthreads)
     from ._packed import PackedSequences
 
     chroms, starts, ends = df["chrom"].to_list(), df["start"].to_list(), df["end"].to_list()

@@ -14,6 +14,7 @@ from . import _core
 from ._analysis import _sequence_pairs
 from ._api import _check_motif, convert_type, create_motif
 from ._core import Motif
+from ._threads import _nthreads
 
 _ALPHABETS = {"ACGT": "DNA", "ACGU": "RNA", "ACDEFGHIKLMNPQRSTVWY": "AA"}
 
@@ -997,7 +998,7 @@ def one_hot_batches(
     width: int | None = None,
     alphabet: str = "ACGT",
     dtype: Any = np.float32,
-    nthreads: int = 1,
+    nthreads: int | None = None,
 ):
     """Genomic ranges as one-hot batches for a model, read a batch at a time.
 
@@ -1019,6 +1020,9 @@ def one_hot_batches(
     at a time, so large sets of regions can be fed to a model, for example
     as ``model(torch.from_numpy(x))`` for each batch ``x``.
 
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
+
     Examples
     --------
     >>> import universalmotif as um
@@ -1030,6 +1034,7 @@ def one_hot_batches(
     >>> [um.from_one_hot(x) for x in batches]
     [['CCGG'], ['GTAC']]
     """
+    nthreads = _nthreads(nthreads)
     from ._genome import _check_ranges
     from ._genomic import _range_table
 

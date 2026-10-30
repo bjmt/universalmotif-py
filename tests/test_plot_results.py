@@ -361,6 +361,8 @@ def test_coocc_significance_marks():
     assert marks == want
     assert len(want) == 8
     assert ax.get_legend().get_texts()[0].get_text() == "q ≤ 0.001"
+    ax, _, _ = _heatmap(plot_coocc(res))
+    assert ax.get_legend().get_texts()[0].get_text() == "q ≤ 0.1"
 
 
 def test_coocc_clustered_order():

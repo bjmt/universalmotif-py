@@ -28,7 +28,13 @@ The functions are grouped by what they do:
   TF-MoDISco results.
 - [Example data](data.md): synthetic motifs, sequences and files for trying things out.
 
-Most functions that do a lot of work take an `nthreads` argument, which is
-1 by default or 0 to use every core. Functions that use random numbers take a
-`seed`, and the same seed gives the same results again; without one they
-draw a fresh seed each time.
+Most functions that do a lot of work take an `nthreads` argument, where 0
+uses every core. Left out, it takes the package setting, which is 1 unless
+changed with [`set_nthreads()`][universalmotif.set_nthreads] or set with the
+`UNIVERSALMOTIF_NTHREADS` environment variable before the package is
+imported. Functions that use random numbers take a `seed`, and the same seed
+gives the same results again; without one they draw a fresh seed each time.
+
+::: universalmotif.set_nthreads
+
+::: universalmotif.get_nthreads
