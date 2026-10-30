@@ -42,6 +42,9 @@ New:
 - `match_motifs(correct_gaps=)`, `motif_coocc(no_overlaps_by_strand=)` and
   `scan_sequences(trim_names=)`, and the `--no-correct-gaps` and
   `--no-across-strands` options of the command line.
+- `plot_comparison(cut=)` and `plot_comparison(cut_height=)` draw where
+  the tree would be cut across the dendrogram, and box each group of
+  motifs on the heatmap.
 
 Fixes:
 

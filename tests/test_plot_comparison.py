@@ -195,6 +195,68 @@ def test_dendrogram_geometry(motifs):
     assert {"dendrogram left", "dendrogram top"}.isdisjoint(_axes(plot_comparison(ms, dendrogram="none")))
 
 
+def _boxes(fig):
+    from matplotlib.patches import Rectangle
+
+    return sorted((round(r.get_x() + 0.5), round(r.get_width())) for r in _axes(fig)["heatmap"].patches
+                  if isinstance(r, Rectangle))
+
+
+def _blocks(tree, h):
+    groups = tree.cutree(h=h)
+    ranked = [groups[i] for i in tree.order]
+    out, start = [], 0
+    for k in range(1, len(ranked) + 1):
+        if k == len(ranked) or ranked[k] != ranked[start]:
+            if k - start > 1:
+                out.append((start, k - start))
+            start = k
+    return out, len(set(groups.tolist()))
+
+
+def test_cut_marks_the_groups(motifs):
+    tree = um.motif_tree(motifs, min_overlap=6)
+    want, n_groups = _blocks(tree, 0.2)
+    assert want
+    fig = plot_comparison(motifs, cut=0.6, dendrogram="both")
+    assert _boxes(fig) == want
+    left = _axes(fig)["dendrogram left"]
+    assert [tuple(line.get_xdata()) for line in left.lines] == [(0.2, 0.2)]
+    assert [t.get_text() for t in left.texts] == [f"score 0.6, {n_groups} groups"]
+    assert [tuple(line.get_ydata()) for line in _axes(fig)["dendrogram top"].lines] == [(0.2, 0.2)]
+    # A tree given as cluster is cut at a height, or at a score for trees of scores.
+    for kwargs in ({"cut_height": 0.2}, {"cut": 0.6}):
+        assert _boxes(plot_comparison(motifs, cluster=tree, **kwargs)) == want
+    assert _axes(plot_comparison(motifs, cluster=tree, cut_height=0.2)).get("dendrogram left").texts[0] \
+        .get_text() == f"height 0.2, {n_groups} groups"
+    # Without a dendrogram the groups are still boxed.
+    assert _boxes(plot_comparison(motifs, cut=0.6, dendrogram="none")) == want
+    assert _boxes(plot_comparison(motifs, cut=1.0)) == []
+
+
+def test_cut_is_in_the_units_clustered_on(motifs):
+    from universalmotif._plot_comparison import _distances
+
+    ms = motifs[:8]
+    tree = um.motif_tree(ms, min_overlap=6)
+    want, _ = _blocks(tree, 0.25)
+    # Motifs are clustered on their scores, whatever is drawn.
+    fig = plot_comparison(ms, value="pvalue", cut=0.5)
+    assert _boxes(fig) == want
+    assert _axes(fig)["dendrogram left"].texts[0].get_text().startswith("score 0.5,")
+    # A matrix of P-values alone is clustered on them, and cut at a P-value.
+    p = um.compare_motifs(ms, min_overlap=6, matrix_out="pvalue")
+    dist = _distances(p, None)
+    i, j = np.unravel_index(np.argmin(dist + np.eye(len(ms))), dist.shape)
+    sym = (-np.log10(p[i, j]) - np.log10(p[j, i])) / 2
+    fig = plot_comparison(matrix=p, value="pvalue", cut=10 ** -sym * 1.0001)
+    left = _axes(fig)["dendrogram left"]
+    assert left.lines[0].get_xdata()[0] == pytest.approx(dist[i, j], abs=1e-4)
+    assert left.texts[0].get_text().startswith("P-value ")
+    # Cut just above the closest pair, so that it is grouped.
+    assert _boxes(fig)
+
+
 def test_figsize_and_annotate(motifs):
     fig = plot_comparison(motifs[:6], figsize=(9, 5), annotate=False)
     assert tuple(fig.get_size_inches()) == (9, 5)
@@ -227,5 +289,11 @@ def test_errors(motifs):
         plot_comparison(motifs[:4], method="ward")
     with pytest.raises(ValueError, match="min_overlap"):
         plot_comparison(motifs[:4], min_overlap=0)
+    with pytest.raises(ValueError, match="cut or cut_height, not both"):
+        plot_comparison(motifs[:4], cut=0.5, cut_height=0.2)
+    with pytest.raises(ValueError, match="cutting needs a tree"):
+        plot_comparison(motifs[:4], cluster=False, cut=0.5)
+    with pytest.raises(ValueError, match="above 0 and at most 1"):
+        plot_comparison(matrix=np.full((3, 3), 0.5), value="pvalue", cut=0)
     with pytest.raises(ValueError, match="figsize is too small"):
         plot_comparison(motifs, figsize=(2, 2))

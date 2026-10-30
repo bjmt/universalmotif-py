@@ -20,6 +20,7 @@ from ._threads import _nthreads
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
+_CUT_COLOUR = "#C0392B"
 _VALUE_LABELS = {"score": "Similarity score", "pvalue": "-log10(P-value)", "qvalue": "-log10(q-value)"}
 _MAX_LOGOS = 60
 _MAX_ANNOTATED = 20
@@ -96,6 +97,21 @@ def _neg_log10(p: np.ndarray) -> np.ndarray:
         return 0.0 - np.log10(np.clip(p, np.finfo(float).tiny, None))
 
 
+def _cut_height(cut: float, vals: np.ndarray, unit: str) -> float:
+    """The tree height of a cutoff given in the units drawn, as _distances()
+    turns values into distances."""
+    if unit == "score":
+        return (1 - cut) / 2
+    if not 0 < cut <= 1:
+        raise ValueError(f"a {unit} cutoff must be above 0 and at most 1")
+    logs = _neg_log10(vals)
+    sym = (logs + logs.T) / 2
+    np.fill_diagonal(sym, np.nan)
+    finite = sym[np.isfinite(sym)]
+    top = float(finite.max()) if finite.size else 0.0
+    return float(np.clip(1 - float(_neg_log10(np.array(cut))) / top, 0.0, 1.0)) if top > 0 else 1.0
+
+
 def _dendrogram_segments(tree: MotifTree, pos: np.ndarray) -> tuple[list, float]:
     """Line segments of a dendrogram as (position, height) pairs, with the
     leaves at height 0, and the largest height."""
@@ -137,6 +153,8 @@ def plot_comparison(
     cluster: bool | MotifTree = True,
     method: str = "complete",
     dendrogram: str = "left",
+    cut: float | None = None,
+    cut_height: float | None = None,
     cmap: Any = "Blues",
     vmin: float | None = None,
     vmax: float | None = None,
@@ -193,6 +211,17 @@ def plot_comparison(
     dendrogram
         Where to draw the tree: ``"left"``, ``"top"``, ``"both"`` or
         ``"none"``.
+    cut, cut_height
+        Show where cutting the tree would split the motifs into groups, as a
+        dashed line across the dendrogram and a box around each group of two
+        or more motifs on the heatmap. ``cut`` is in the units clustered on,
+        a score such as 0.8 (or a P- or q-value for such a matrix given
+        without motifs), and with complete linkage every motif in a group is
+        at least that similar to every other. A tree given as ``cluster`` is
+        taken to be one of scores, as from
+        [`motif_tree()`][universalmotif.motif_tree]; ``cut_height`` instead
+        cuts at a height of the tree itself, as
+        [`MotifTree.cutree()`][universalmotif.MotifTree.cutree] does.
     cmap, vmin, vmax
         The colour map and its range, which by default spans the values
         drawn, from 0 for P- and q-values.
@@ -252,6 +281,17 @@ def plot_comparison(
         dist = _distances(vals, scores)
         tree = _tree(_core._hclust(dist.tolist(), method, labs), labs, method)
     order = list(tree.order) if tree is not None else list(range(n))
+    cut_at = None
+    if cut is not None and cut_height is not None:
+        raise ValueError("give cut or cut_height, not both")
+    if cut is not None or cut_height is not None:
+        if tree is None:
+            raise ValueError("cutting needs a tree, so cluster cannot be False")
+        # The cutoff is in the units clustered on, which are scores unless
+        # only a matrix of P- or q-values was given.
+        cut_unit = "score" if scores is not None or isinstance(cluster, MotifTree) else value
+        cut_at = float(cut_height) if cut_height is not None else _cut_height(float(cut), vals, cut_unit)
+        groups = tree.cutree(h=cut_at)
 
     shown = vals if value == "score" else _neg_log10(vals)
     shown = shown[np.ix_(order, order)]
@@ -359,6 +399,23 @@ def plot_comparison(
                 ax.text(j, i, digits.format(v), ha="center", va="center", fontsize=size,
                         color="white" if dark else "black")
 
+    if cut_at is not None:
+        from matplotlib.patches import Rectangle
+
+        n_groups = len(set(groups.tolist()))
+        unit = {"score": "score", "pvalue": "P-value", "qvalue": "q-value"}[cut_unit]
+        what = f"{unit} {cut:g}" if cut is not None else f"height {cut_at:g}"
+        cut_label = f"{what}, {n_groups} group{'s' if n_groups != 1 else ''}"
+        # Groups take consecutive rows, since the order is the tree's.
+        ranked = [groups[i] for i in order]
+        start = 0
+        for k in range(1, n + 1):
+            if k == n or ranked[k] != ranked[start]:
+                if k - start > 1:
+                    ax.add_patch(Rectangle((start - 0.5, start - 0.5), k - start, k - start, fill=False,
+                                           edgecolor=_CUT_COLOUR, linewidth=1.2, zorder=3))
+                start = k
+
     if left_tree or top_tree:
         pos = np.empty(n)
         pos[order] = np.arange(n)
@@ -367,15 +424,26 @@ def plot_comparison(
             tax = fig.add_subplot(gs[hrow, col_of["dendrogram left"]], label="dendrogram left")
             tax.add_collection(LineCollection([[(h, p) for p, h in s] for s in segs], colors="black",
                                               linewidths=0.8))
-            tax.set_xlim(top * 1.02, 0)
+            tax.set_xlim(max(top, cut_at or 0) * 1.02, 0)
             tax.set_ylim(n - 0.5, -0.5)
             tax.set_axis_off()
+            if cut_at is not None:
+                tax.axvline(cut_at, color=_CUT_COLOUR, linewidth=1.0, linestyle="--")
+                tax.annotate(cut_label, (cut_at, -0.5), xytext=(0, 3), textcoords="offset points",
+                             ha="center", va="bottom", fontsize=0.75 * text_size, color=_CUT_COLOUR,
+                             annotation_clip=False)
         if top_tree:
             tax = fig.add_subplot(gs[row_of["dendrogram top"], col_of["heatmap"]], label="dendrogram top")
             tax.add_collection(LineCollection(segs, colors="black", linewidths=0.8))
             tax.set_xlim(-0.5, n - 0.5)
-            tax.set_ylim(0, top * 1.02)
+            tax.set_ylim(0, max(top, cut_at or 0) * 1.02)
             tax.set_axis_off()
+            if cut_at is not None:
+                tax.axhline(cut_at, color=_CUT_COLOUR, linewidth=1.0, linestyle="--")
+                if not left_tree:
+                    tax.annotate(cut_label, (n - 0.5, cut_at), xytext=(4, 0), textcoords="offset points",
+                                 ha="left", va="center", fontsize=0.75 * text_size, color=_CUT_COLOUR,
+                                 annotation_clip=False)
 
     if logos:
         lax = fig.add_subplot(gs[hrow, col_of["logos"]], label="logos")

@@ -196,6 +196,10 @@ def _comparison():
     return um.plot_comparison(_motifs())
 
 
+def _comparison_cut():
+    return um.plot_comparison(_motifs(), cut=0.6, logos=False)
+
+
 def _comparison_pvalues():
     return um.plot_comparison(_motifs()[:8], value="pvalue", dendrogram="both", logos=False)
 
@@ -279,6 +283,8 @@ EXAMPLES = {
     "plot_comparison": [
         Example("All twelve example motifs compared and clustered, with the dendrogram on the "
                 "left and logos beside the row labels.", _comparison),
+        Example("The same comparison with the tree cut at a score of 0.6, which draws a dashed "
+                "line across the dendrogram and boxes the motifs grouped together.", _comparison_cut),
         Example("The P-values of comparing eight example motifs, drawn as -log10 with dendrograms "
                 "on both sides.", _comparison_pvalues),
         Example("The example motifs in input order without clustering, logos or values in the "
