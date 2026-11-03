@@ -28,6 +28,8 @@ Random sequences, shuffling, k-mer counts and backgrounds, sequence complexity, 
 
 ::: universalmotif.mask_ranges
 
+::: universalmotif.mask_complexity
+
 ::: universalmotif.sample_sites
 
 ::: universalmotif.implant_motifs

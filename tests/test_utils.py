@@ -314,6 +314,46 @@ def test_score_helpers_agree():
         um.prob_match_bkg({"AA": 1.0}, "A")
 
 
+
+_DUST_A = ("ACGTACGTAAAAAAAAAAAAAAAAAAAAAAAAACGTTGCAGTCGATCGATGCATGCATCAGTCAGCTAGCTAGCATCGACTAGCTAG"
+           "CATGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGTTGACCAGT")
+_DUST_B = ("GGTTGTACTGTACAGGAACTTATAGAATAATTCTGGATGTATATATATATATATATATATATATATATATTCCAAACGAGCCTCCC"
+           "GATAGTATCGAAATGGGGGGGGGGGGGATTTCCGTAGTTATACGTCTGCCAA")
+
+
+def _regions(seq, **kwargs):
+    r = um.mask_complexity({"s": seq}, return_ranges=True, **kwargs)
+    return list(zip(r["start"].to_list(), r["end"].to_list()))
+
+
+def test_mask_complexity():
+    # Reference regions from dustmasker 1.0.0 (BLAST 2.16.0), whose inclusive
+    # ends are one less than these.
+    assert _regions(_DUST_A) == [(8, 33), (50, 127)]
+    assert _regions(_DUST_B) == [(39, 70), (100, 113)]
+    assert _regions(_DUST_A, window=32, threshold=10) == [(8, 33), (63, 127)]
+    assert _regions(_DUST_B.lower().replace("t", "u")) == [(39, 70), (100, 113)]
+    # The halves either side of Ns are scored apart.
+    split = _DUST_B[:55] + "NNN" + _DUST_B[55:]
+    assert _regions(split) == [(39, 55), (58, 73), (103, 116)]
+    # Lowercase runs are added and merged with the DUST regions.
+    soft = "acgt" + _DUST_B[4:120] + "gattaca"
+    assert _regions(soft, lowercase=True) == [(0, 4), (39, 70), (100, 113), (120, 127)]
+    # The sequences come back in the form given, and the regions work with
+    # mask_ranges().
+    assert um.mask_complexity(_DUST_B)[36:73] == "ATG" + "-" * 31 + "TCC"
+    masked = um.mask_complexity([_DUST_A, "ACGT"], letter="N", nthreads=2)
+    assert masked[1] == "ACGT" and masked[0][8:33] == "N" * 25
+    seqs = {"a": _DUST_A, "b": _DUST_B}
+    ranges = um.mask_complexity(seqs, return_ranges=True)
+    assert ranges["sequence"].to_list() == ["a", "a", "b", "b"]
+    assert um.mask_ranges(seqs, ranges) == um.mask_complexity(seqs)
+    assert um.mask_complexity(["ACGT"], return_ranges=True).height == 0
+    for bad in ({"window": 3}, {"threshold": 0}, {"letter": "--"}, {"window": 2.5}):
+        with pytest.raises(ValueError):
+            um.mask_complexity(_DUST_A, **bad)
+
+
 def test_mask_and_slide_checks():
     with pytest.raises(ValueError, match="single character"):
         um.mask_seqs("ACGT", "AC", letter="--")

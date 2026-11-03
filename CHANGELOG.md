@@ -39,6 +39,10 @@ New:
 - `merge_similar(linkage="complete")` joins only motifs that are all
   similar to each other, and `merge_similar()` warns when one cluster holds
   more than a quarter of the motifs; the `merge` command takes `--linkage`.
+- `mask_complexity()` masks low-complexity regions of DNA and RNA with
+  symmetric DUST, giving the same regions as dustmasker, and lowercase
+  letters too with `lowercase=True`; `return_ranges=True` gives the
+  regions instead.
 - `match_motifs(correct_gaps=)`, `motif_coocc(no_overlaps_by_strand=)` and
   `scan_sequences(trim_names=)`, and the `--no-correct-gaps` and
   `--no-across-strands` options of the command line.

@@ -170,6 +170,54 @@ fn _mask_ranges(seq: PyBackedStr, ranges: Vec<(i64, i64)>, letter: char) -> PyRe
     mask::mask_ranges(&seq, &ranges, letter).map_err(err)
 }
 
+fn dust_options(
+    window: usize,
+    threshold: u32,
+    lowercase: bool,
+    letter: char,
+    nthreads: usize,
+) -> mask::DustOptions {
+    mask::DustOptions {
+        window,
+        threshold,
+        lowercase,
+        letter,
+        nthreads,
+    }
+}
+
+#[pyfunction]
+fn _mask_complexity(
+    py: Python<'_>,
+    seqs: Vec<PyBackedStr>,
+    window: usize,
+    threshold: u32,
+    lowercase: bool,
+    letter: char,
+    nthreads: usize,
+) -> PyResult<Vec<String>> {
+    let opts = dust_options(window, threshold, lowercase, letter, nthreads);
+    py.detach(|| mask::mask_complexity(&seqs, &opts))
+        .map_err(err)
+}
+
+#[pyfunction]
+fn _dust_intervals(
+    py: Python<'_>,
+    seqs: Vec<PyBackedStr>,
+    window: usize,
+    threshold: u32,
+    lowercase: bool,
+) -> PyResult<Vec<Vec<(usize, usize)>>> {
+    let opts = dust_options(window, threshold, lowercase, '-', 1);
+    py.detach(|| {
+        seqs.iter()
+            .map(|s| mask::dust_intervals(s, &opts))
+            .collect::<universalmotif::Result<Vec<_>>>()
+    })
+    .map_err(err)
+}
+
 #[pyfunction]
 #[pyo3(signature = (core, complements, ambiguity, like, name, letter_names, colours))]
 fn _meme_alph(
@@ -219,6 +267,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_switch_alph, m)?)?;
     m.add_function(wrap_pyfunction!(_mask_seqs, m)?)?;
     m.add_function(wrap_pyfunction!(_mask_ranges, m)?)?;
+    m.add_function(wrap_pyfunction!(_mask_complexity, m)?)?;
+    m.add_function(wrap_pyfunction!(_dust_intervals, m)?)?;
     m.add_function(wrap_pyfunction!(_meme_alph, m)?)?;
     m.add_function(wrap_pyfunction!(_log_string_pval, m)?)?;
     Ok(())

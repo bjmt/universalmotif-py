@@ -517,6 +517,97 @@ def mask_ranges(sequences: Mapping[str, str], ranges, letter: str = "-") -> dict
             for name, seq in sequences.items()}
 
 
+
+def mask_complexity(
+    sequences,
+    window: int = 64,
+    threshold: int = 20,
+    lowercase: bool = False,
+    letter: str = "-",
+    return_ranges: bool = False,
+    nthreads: int | None = None,
+):
+    """Mask the low-complexity regions of DNA or RNA sequences, such as
+    homopolymers, microsatellites and other short repeats, which otherwise
+    give many overlapping hits to motifs rich in the same letters.
+
+    Regions are found with the symmetric DUST algorithm (Morgulis et al.
+    2006) as sdust implements it, and match those of NCBI's dustmasker with
+    the same ``window`` and ``threshold``, 64 and 20 by default. A higher
+    threshold masks less. Letters other than A, C, G, T and U, in either
+    case, split a sequence into parts scored on their own, so that an N gap
+    or an earlier mask does not join the sequence either side of it.
+    dustmasker instead scores across them, and caps the window at 64. With
+    ``lowercase``, lowercase letters are masked as well, as soft-masked
+    genomes mark their repeats.
+
+    When masking sequences before an enrichment test, mask the targets and
+    the background in the same way, and if the background is made by
+    shuffling the targets, mask after shuffling.
+
+    Parameters
+    ----------
+    sequences
+        A string, a list of strings or a dict of names to strings.
+    window, threshold
+        The DUST window in bases and the score above which a region is
+        masked.
+    lowercase
+        Also mask lowercase letters.
+    letter
+        The masking letter.
+    return_ranges
+        Return the regions instead of the masked sequences, as a DataFrame
+        with ``sequence``, ``start`` and ``end`` columns counted from 0 with
+        the end left out, which
+        [`mask_ranges()`][universalmotif.mask_ranges] takes. Sequences
+        given as a string or a list are named ``seq1``, ``seq2`` and so on.
+    nthreads
+        Threads used to mask, by default the package setting from
+        [`set_nthreads()`][universalmotif.set_nthreads].
+
+    Returns
+    -------
+    str, list, dict or polars.DataFrame
+        The masked sequences in the form they were given, or the regions.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> seq = "GGTTGTACTGTACAGGAACTTATAGAATAATTCTGGATGTATATATATATATATATATATATATATATATTCCAAACG"
+    >>> um.mask_complexity(seq)
+    'GGTTGTACTGTACAGGAACTTATAGAATAATTCTGGATG-------------------------------TCCAAACG'
+    >>> um.mask_complexity({"s1": seq}, return_ranges=True)
+    shape: (1, 3)
+    ┌──────────┬───────┬─────┐
+    │ sequence ┆ start ┆ end │
+    │ ---      ┆ ---   ┆ --- │
+    │ str      ┆ i64   ┆ i64 │
+    ╞══════════╪═══════╪═════╡
+    │ s1       ┆ 39    ┆ 70  │
+    └──────────┴───────┴─────┘
+    """
+    if len(letter) != 1:
+        raise ValueError("letter must be a single character")
+    if isinstance(window, bool) or not isinstance(window, int) or window <= 3:
+        raise ValueError("window must be a whole number above 3")
+    if isinstance(threshold, bool) or not isinstance(threshold, int) or threshold < 1:
+        raise ValueError("threshold must be a whole number above 0")
+    from ._analysis import _sequence_pairs
+    from ._threads import _nthreads
+
+    names, seqs = _sequence_pairs(sequences)
+    if return_ranges:
+        import polars as pl
+
+        found = _core._dust_intervals(seqs, window, threshold, lowercase)
+        rows = [(n, s, e) for n, r in zip(names, found) for s, e in r]
+        return pl.DataFrame(rows, schema={"sequence": pl.String, "start": pl.Int64, "end": pl.Int64},
+                            orient="row")
+    masked = _core._mask_complexity(seqs, window, threshold, lowercase, letter, _nthreads(nthreads))
+    return _reshape(sequences, masked)
+
+
 def shuffle_string(string: str, k: int = 2, method: str = "euler", seed: int | None = None) -> str:
     """Shuffle one string while keeping its k-mer counts, dinucleotides by
     default, as [`shuffle_sequences()`][universalmotif.shuffle_sequences]
