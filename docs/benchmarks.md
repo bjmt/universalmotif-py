@@ -1,3 +1,8 @@
+---
+hide:
+  - toc
+---
+
 # Benchmarks
 
 The speed and memory use of this package compared with the
@@ -11,6 +16,8 @@ package, and every result was checked to agree between the two.
 This package was 4 to 98 times faster, and usually needed less memory.
 Times are medians of five runs, and memory is the peak a task added beyond
 its loaded inputs.
+
+<div class="bench-table" markdown>
 
 | Task | Size | Threads | R | Python | Speed-up | R memory | Python memory |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -40,6 +47,8 @@ its loaded inputs.
 | Count 1-, 2- and 3-mers | 100,000 500 bp sequences | 2 | 12.3 s | 0.425 s | 29x | 805 MB | 168 MB |
 | Sequence complexity | 100,000 500 bp sequences | 1 | 25 s | 0.769 s | 32x | 2,653 MB | 591 MB |
 | Sequence complexity | 100,000 500 bp sequences | 2 | 22.4 s | 0.561 s | 40x | 2,782 MB | 654 MB |
+
+</div>
 
 ## Tasks and inputs
 

@@ -25,3 +25,14 @@
 .plot-examples figure br {
   display: none;
 }
+
+/* The benchmark table: tighter cells, with numbers kept on one line, so
+   that all eight columns fit beside the navigation. */
+.bench-table table th,
+.bench-table table td {
+  padding: 0.6em 0.75em;
+}
+.bench-table table th:not(:first-child),
+.bench-table table td:not(:first-child) {
+  white-space: nowrap;
+}
