@@ -96,7 +96,7 @@ from ._enrich import enrich_motifs, motif_coocc, motif_peaks
 from ._genome import Genome, extract_ranges, signal_stats, signal_values
 from ._genomic import match_bkg, motif_proximity
 from ._interactions import interaction_effects, pair_mutagenesis, plot_interactions
-from ._intervals import genomic_hits, to_polars_bio, to_pyranges
+from ._intervals import genomic_hits, read_bed, to_polars_bio, to_pyranges
 from ._plot_comparison import plot_comparison
 from ._plot_hits import plot_hits
 from ._plot_modisco import plot_modisco
@@ -237,6 +237,7 @@ __all__ = [
     "prob_match",
     "prob_match_bkg",
     "pwm_to_ppm",
+    "read_bed",
     "read_cisbp",
     "read_contributions",
     "read_fasta",

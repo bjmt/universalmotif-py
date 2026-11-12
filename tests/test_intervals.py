@@ -211,3 +211,68 @@ def test_polars_bio_one_based_round_trip():
     assert list(um.extract_ranges(genome, width)) == ["chr1:10-20"]
     assert pb.get_metadata(um.to_polars_bio(one))["coordinate_system_zero_based"] is True
     assert um.to_polars_bio(one)["start"].to_list() == [10]
+
+
+def test_read_bed_formats(tmp_path):
+    bed = tmp_path / "x.bed"
+    bed.write_text("track name=peaks\n# a comment\nbrowser position chr1:1-100\n\n"
+                   "chr1\t10\t20\tp1\t5\t+\n2\t30\t45\t.\t.\t.\n")
+    df = um.read_bed(bed)
+    assert df.columns == ["chrom", "start", "end", "name", "score", "strand"]
+    assert df["chrom"].to_list() == ["chr1", "2"]
+    assert df["score"].dtype == pl.Int64 and df["score"].to_list() == [5, None]
+    # Three columns, and twelve and more, by position.
+    (tmp_path / "x3.bed").write_text("chr1\t0\t5\n")
+    assert um.read_bed(tmp_path / "x3.bed").columns == ["chrom", "start", "end"]
+    row = "chr1\t0\t100\tg\t960.5\t-\t10\t90\t0,0,255\t2\t10,20,\t0,80,\tx"
+    (tmp_path / "x13.bed").write_text(row + "\n")
+    df = um.read_bed(tmp_path / "x13.bed")
+    assert df.columns[6:] == ["thick_start", "thick_end", "item_rgb", "block_count", "block_sizes",
+                              "block_starts", "column_13"]
+    assert df["score"].to_list() == [960.5] and df["block_count"].to_list() == [2]
+    # narrowPeak and broadPeak, gzipped, with -1 read as missing.
+    import gzip
+
+    peaks = tmp_path / "x.narrowPeak.gz"
+    peaks.write_bytes(gzip.compress(b"chr1\t100\t300\tp\t500\t.\t8.2\t12.5\t-1\t95\n"
+                                    b"chr1\t400\t600\tq\t300\t.\t3.0\t-1\t-1\t-1\n"))
+    df = um.read_bed(peaks)
+    assert df.columns[6:] == ["signal", "neg_log10_pvalue", "neg_log10_qvalue", "peak"]
+    assert df["neg_log10_pvalue"].to_list() == [12.5, None]
+    assert df["peak"].to_list() == [95, None]
+    (tmp_path / "x.broadPeak").write_text("chr1\t1\t9\tb\t0\t.\t2.5\t3.1\t1.2\n")
+    assert um.read_bed(tmp_path / "x.broadPeak").columns[-1] == "neg_log10_qvalue"
+    (tmp_path / "x.bg").write_text("chr1\t0\t10\t1.5\nchr1\t10\t20\t0\n")
+    assert um.read_bed(tmp_path / "x.bg")["value"].to_list() == [1.5, 0.0]
+    # The format can be given whatever the extension.
+    (tmp_path / "peaks.txt").write_text("chr1\t100\t300\tp\t500\t.\t8.2\t12.5\t9.1\t95\n")
+    assert um.read_bed(tmp_path / "peaks.txt", format="narrowPeak")["peak"].to_list() == [95]
+    # Read as BED, columns that do not fit whole numbers are decimals.
+    as_bed = um.read_bed(tmp_path / "peaks.txt")
+    assert as_bed.columns[-1] == "block_count"
+    assert as_bed["thick_start"].to_list() == [8.2]
+
+
+def test_read_bed_ranges_work_downstream(tmp_path):
+    genome = _genome()
+    (tmp_path / "r.bed").write_text("chr1\t10\t20\tr1\t0\t-\nchr2\t0\t5\tr2\t0\t.\n")
+    ranges = um.read_bed(tmp_path / "r.bed")
+    seqs = um.extract_ranges(genome, ranges)
+    assert len(seqs) == 2
+    assert list(seqs.values())[1] == genome["chr2"][:5]
+    masked = um.mask_ranges(genome, ranges)
+    assert masked["chr1"][10:20] == "-" * 10
+
+
+def test_read_bed_errors(tmp_path):
+    (tmp_path / "empty.bed").write_text("# nothing\n\n")
+    with pytest.raises(ValueError, match="no ranges"):
+        um.read_bed(tmp_path / "empty.bed")
+    (tmp_path / "two.bed").write_text("chr1\t5\n")
+    with pytest.raises(ValueError, match="fewer than 3"):
+        um.read_bed(tmp_path / "two.bed")
+    (tmp_path / "short.narrowPeak").write_text("chr1\t1\t9\tb\t0\t.\n")
+    with pytest.raises(ValueError, match="has 10 columns"):
+        um.read_bed(tmp_path / "short.narrowPeak")
+    with pytest.raises(ValueError, match="format must be"):
+        um.read_bed(tmp_path / "two.bed", format="gff")

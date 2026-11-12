@@ -35,7 +35,6 @@ _EXTENSIONS = {
 }
 _FORMAT_LIST = ", ".join(_MOTIF_FORMATS)
 _BED_SUFFIXES = (".bed", ".narrowpeak", ".broadpeak", ".bedgraph")
-_BED_COLUMNS = ["chrom", "start", "end", "name", "score", "strand"]
 
 
 class CliError(Exception):
@@ -190,12 +189,13 @@ def read_ranges(path: str) -> pl.DataFrame:
         len(first) >= 3 and first[1].isdigit() and first[2].isdigit()
     )
     if bed:
-        width = max(len(ln.split("\t")) for ln in lines)
-        names = _BED_COLUMNS[:width] + [f"V{i + 1}" for i in range(len(_BED_COLUMNS), width)]
-        df = pl.read_csv(io.StringIO("\n".join(lines)), separator="\t", has_header=False,
-                         new_columns=names, schema_overrides={"chrom": pl.String},
-                         infer_schema_length=10000)
-        return df
+        from ._intervals import _bed_format, _bed_frame
+
+        fmt = "bed" if path == "-" else _bed_format(path, None)
+        try:
+            return _bed_frame("\n".join(lines), fmt, path)
+        except ValueError as e:
+            raise CliError(str(e)) from None
     return pl.read_csv(io.StringIO("\n".join(lines)), separator="\t", null_values="NA",
                        infer_schema_length=10000)
 

@@ -39,6 +39,9 @@ New:
 - `merge_similar(linkage="complete")` joins only motifs that are all
   similar to each other, and `merge_similar()` warns when one cluster holds
   more than a quarter of the motifs; the `merge` command takes `--linkage`.
+- `read_bed()` reads BED, narrowPeak, broadPeak and bedGraph files,
+  gzipped or not, into DataFrames with columns named after the format, as
+  the command line already did for its ranges.
 - `mask_complexity()` masks low-complexity regions of DNA and RNA with
   symmetric DUST, giving the same regions as dustmasker, and lowercase
   letters too with `lowercase=True`; `return_ranges=True` gives the

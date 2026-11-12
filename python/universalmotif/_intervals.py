@@ -1,14 +1,138 @@
-"""Hits in genomic coordinates, and ranges handed to PyRanges and polars-bio."""
+"""Reading BED files, hits in genomic coordinates, and ranges handed to
+PyRanges and polars-bio."""
 
 from __future__ import annotations
 
+import gzip
+import io
+import os
 import re
+from pathlib import Path
 
 import polars as pl
 
 from ._genomic import _CHROM_COLUMNS, _range_table, _ranges_frame
 
 _REGION = re.compile(r"^(.+):(\d+)-(\d+)(\(-\))?(?:\.\d+)?$")
+
+
+_BED_FORMATS = {
+    "bed": ["chrom", "start", "end", "name", "score", "strand", "thick_start", "thick_end",
+            "item_rgb", "block_count", "block_sizes", "block_starts"],
+    "narrowpeak": ["chrom", "start", "end", "name", "score", "strand", "signal",
+                   "neg_log10_pvalue", "neg_log10_qvalue", "peak"],
+    "broadpeak": ["chrom", "start", "end", "name", "score", "strand", "signal",
+                  "neg_log10_pvalue", "neg_log10_qvalue"],
+    "bedgraph": ["chrom", "start", "end", "value"],
+}
+_BED_EXTENSIONS = {".bed": "bed", ".narrowpeak": "narrowpeak", ".broadpeak": "broadpeak",
+                   ".bedgraph": "bedgraph", ".bg": "bedgraph"}
+# Columns where narrowPeak and broadPeak files write -1 for a value not given.
+_PEAK_MISSING = ("neg_log10_pvalue", "neg_log10_qvalue", "peak")
+
+
+def _bed_format(file, format: str | None) -> str:
+    if format is not None:
+        key = format.lower()
+        if key not in _BED_FORMATS:
+            raise ValueError("format must be 'bed', 'narrowPeak', 'broadPeak' or 'bedGraph'")
+        return key
+    name = Path(file).name.lower().removesuffix(".gz")
+    return _BED_EXTENSIONS.get(Path(name).suffix, "bed")
+
+
+def read_bed(file: str | os.PathLike, format: str | None = None) -> pl.DataFrame:
+    r"""Read a BED file, or a narrowPeak, broadPeak or bedGraph file, into a
+    DataFrame of ranges that the functions taking ranges accept, such as
+    [`extract_ranges()`][universalmotif.extract_ranges],
+    [`mask_ranges()`][universalmotif.mask_ranges] and
+    [`match_bkg()`][universalmotif.match_bkg].
+
+    Positions are kept as they are in the file, counted from 0 with the end
+    left out. Columns are named after the format: ``chrom``, ``start`` and
+    ``end``, then for BED files as many of ``name``, ``score``, ``strand``,
+    ``thick_start``, ``thick_end``, ``item_rgb``, ``block_count``,
+    ``block_sizes`` and ``block_starts`` as there are, with any further
+    columns named ``column_13`` and so on. narrowPeak and broadPeak files
+    have ``name``, ``score``, ``strand``, ``signal``, ``neg_log10_pvalue``
+    and ``neg_log10_qvalue``, and narrowPeak files the summit as ``peak``,
+    counted from ``start``; the -1 these formats write for a value not given
+    is read as null. bedGraph files have ``value``.
+
+    Parameters
+    ----------
+    file
+        The file, which may be gzipped. Blank lines, comments and ``track``
+        and ``browser`` lines are skipped.
+    format
+        ``"bed"``, ``"narrowPeak"``, ``"broadPeak"`` or ``"bedGraph"``; by
+        default from the file's extension (``.narrowPeak``, ``.broadPeak``,
+        ``.bedGraph`` or ``.bg``, with or without ``.gz``), and otherwise
+        BED.
+
+    Examples
+    --------
+    >>> import tempfile, pathlib
+    >>> import universalmotif as um
+    >>> path = pathlib.Path(tempfile.mkdtemp()) / "peaks.narrowPeak"
+    >>> _ = path.write_text("chr1\t100\t300\tpeak1\t500\t.\t8.2\t12.5\t9.8\t95\n"
+    ...                     "chr2\t40\t240\tpeak2\t310\t.\t4.1\t-1\t-1\t110\n")
+    >>> peaks = um.read_bed(path)
+    >>> peaks.select("chrom", "start", "end", "neg_log10_qvalue", "peak")
+    shape: (2, 5)
+    ┌───────┬───────┬─────┬──────────────────┬──────┐
+    │ chrom ┆ start ┆ end ┆ neg_log10_qvalue ┆ peak │
+    │ ---   ┆ ---   ┆ --- ┆ ---              ┆ ---  │
+    │ str   ┆ i64   ┆ i64 ┆ f64              ┆ i64  │
+    ╞═══════╪═══════╪═════╪══════════════════╪══════╡
+    │ chr1  ┆ 100   ┆ 300 ┆ 9.8              ┆ 95   │
+    │ chr2  ┆ 40    ┆ 240 ┆ null             ┆ 110  │
+    └───────┴───────┴─────┴──────────────────┴──────┘
+    """
+    raw = Path(file).read_bytes()
+    if raw[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw)
+    return _bed_frame(raw.decode(), _bed_format(file, format), file)
+
+
+def _bed_frame(text: str, fmt: str, file) -> pl.DataFrame:
+    """The ranges in the text of a BED-like file of format ``fmt``."""
+    lines = [ln for ln in text.splitlines()
+             if ln.strip() and not ln.startswith(("#", "track", "browser"))]
+    if not lines:
+        raise ValueError(f"no ranges in {file}")
+    width = max(ln.count("\t") for ln in lines) + 1
+    names = _BED_FORMATS[fmt]
+    if fmt == "bed":
+        if width < 3:
+            raise ValueError(f"{file} has fewer than 3 tab-separated columns")
+        names = names[:width] + [f"column_{i + 1}" for i in range(len(names), width)]
+    elif width != len(names):
+        raise ValueError(f"a {fmt} file has {len(names)} columns, but {file} has {width}")
+    df = pl.read_csv(io.StringIO("\n".join(lines)), separator="\t", has_header=False,
+                     new_columns=names, infer_schema=False, quote_char=None)
+    for n in ("start", "end"):
+        try:
+            df = df.with_columns(pl.col(n).cast(pl.Int64))
+        except pl.exceptions.InvalidOperationError:
+            raise ValueError(f"the {n} positions in {file} must be whole numbers") from None
+    # Other columns are whole numbers, decimals or text, as they fit.
+    for n in df.columns[3:]:
+        if n in ("name", "strand", "item_rgb", "block_sizes", "block_starts"):
+            continue
+        for dtype in (pl.Int64, pl.Float64):
+            try:
+                df = df.with_columns(pl.col(n).replace(".", None).cast(dtype))
+                break
+            except pl.exceptions.InvalidOperationError:
+                pass
+    for n in ("signal", "neg_log10_pvalue", "neg_log10_qvalue", "value"):
+        if n in df.columns and df[n].dtype == pl.Int64:
+            df = df.with_columns(pl.col(n).cast(pl.Float64))
+    if fmt in ("narrowpeak", "broadpeak"):
+        df = df.with_columns(pl.when(pl.col(c) == -1).then(None).otherwise(pl.col(c)).alias(c)
+                             for c in _PEAK_MISSING if c in df.columns)
+    return df
 
 
 def genomic_hits(hits: pl.DataFrame, ranges=None) -> pl.DataFrame:
@@ -201,4 +325,4 @@ def to_polars_bio(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
-__all__ = ["genomic_hits", "to_polars_bio", "to_pyranges"]
+__all__ = ["genomic_hits", "read_bed", "to_polars_bio", "to_pyranges"]
