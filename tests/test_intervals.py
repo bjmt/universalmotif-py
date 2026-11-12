@@ -276,3 +276,76 @@ def test_read_bed_errors(tmp_path):
         um.read_bed(tmp_path / "short.narrowPeak")
     with pytest.raises(ValueError, match="format must be"):
         um.read_bed(tmp_path / "two.bed", format="gff")
+
+
+def test_resize_ranges():
+    peaks = pl.DataFrame({"chrom": ["chr1", "chr1", "chr2", "chr2"], "start": [100, 20, 300, 10],
+                          "end": [300, 41, 341, 20], "strand": ["+", "-", "*", "-"],
+                          "name": ["a", "b", "c", "d"]})
+    lengths = {"chr1": 1000, "chr2": 350}
+    # Centres round up when the range and the width differ by an odd number.
+    out = um.resize_ranges(peaks, 100)
+    assert out["start"].to_list() == [150, -19, 271, -35]
+    assert (out["end"] - out["start"]).to_list() == [100] * 4
+    assert out.columns == peaks.columns and out["name"].to_list() == ["a", "b", "c", "d"]
+    # Starts and ends follow the strand.
+    assert um.resize_ranges(peaks, 10, anchor="start")["start", "end"].rows() == \
+        [(100, 110), (31, 41), (300, 310), (10, 20)]
+    assert um.resize_ranges(peaks, 10, anchor="end")["start", "end"].rows() == \
+        [(290, 300), (20, 30), (331, 341), (10, 20)]
+    # Windows off a chromosome are dropped, trimmed or kept.
+    assert um.resize_ranges(peaks, 100, genome=lengths)["name"].to_list() == ["a"]
+    trimmed = um.resize_ranges(peaks, 100, genome=lengths, out_of_bounds="trim")
+    assert trimmed["start", "end"].rows() == [(150, 250), (0, 81), (271, 350), (0, 65)]
+    assert um.resize_ranges(peaks, 100, genome=lengths, out_of_bounds="keep").height == 4
+    genome = {"chr1": "A" * 1000, "chr2": "C" * 350}
+    assert um.resize_ranges(peaks, 100, genome=genome).equals(um.resize_ranges(peaks, 100, genome=lengths))
+
+
+def test_resize_ranges_summits(tmp_path):
+    (tmp_path / "p.narrowPeak").write_text("chr1\t100\t300\tp\t500\t.\t8.2\t12.5\t9.1\t20\n"
+                                          "chr1\t400\t600\tq\t300\t.\t3.0\t4.2\t1.1\t-1\n")
+    peaks = um.read_bed(tmp_path / "p.narrowPeak")
+    out = um.resize_ranges(peaks, 50, anchor="summit")
+    # Around the summit at 120, and centred where the summit is missing.
+    assert out["start", "end"].rows() == [(95, 145), (475, 525)]
+    assert out["peak"].to_list() == [25, None]
+    # Other anchors keep the summit where it is, or null outside the window.
+    assert um.resize_ranges(peaks, 50)["peak"].to_list() == [None, None]
+    assert um.resize_ranges(peaks, 300)["peak"].to_list() == [70, None]
+    trimmed = um.resize_ranges(peaks, 300, anchor="summit", genome={"chr1": 700}, out_of_bounds="trim")
+    assert trimmed["start", "end"].rows() == [(0, 270), (350, 650)] and trimmed["peak"].to_list() == [120, None]
+
+
+def test_resize_ranges_errors():
+    peaks = pl.DataFrame({"chrom": ["chr1"], "start": [10], "end": [20]})
+    for bad in ({"width": 0}, {"width": 2.5}, {"width": 10, "anchor": "middle"},
+                {"width": 10, "out_of_bounds": "clip"}, {"width": 10, "anchor": "summit"}):
+        with pytest.raises(ValueError):
+            um.resize_ranges(peaks, **bad)
+    with pytest.raises(ValueError, match="not in genome: chr1"):
+        um.resize_ranges(peaks, 10, genome={"chr2": 100})
+
+
+def test_write_bed(tmp_path):
+    plain = pl.DataFrame({"chrom": ["chr1", "chr2"], "start": [0, 5], "end": [10, 9]})
+    um.write_bed(plain, tmp_path / "a.bed")
+    assert (tmp_path / "a.bed").read_text() == "chr1\t0\t10\nchr2\t5\t9\n"
+    with pytest.raises(FileExistsError):
+        um.write_bed(plain, tmp_path / "a.bed")
+    # Hits are named by motif, with scores and strands, and read back.
+    hits = pl.DataFrame({"chrom": ["chr1", "chr1"], "start": [3, 8], "end": [10, 15],
+                         "strand": ["+", "-"], "motif": ["AP-1", "CRE"], "score": [9.5, None]})
+    um.write_bed(hits, tmp_path / "h.bed.gz")
+    back = um.read_bed(tmp_path / "h.bed.gz")
+    assert back["name"].to_list() == ["AP-1", "CRE"]
+    assert back["score"].to_list() == [9.5, None]
+    assert back["strand"].to_list() == ["+", "-"]
+    um.write_bed(hits, tmp_path / "h.bed", score="", name="motif")
+    assert (tmp_path / "h.bed").read_text().splitlines()[0] == "chr1\t3\t10\tAP-1\t.\t+"
+    # Unstranded ranges with names get the strand ".".
+    named = plain.with_columns(name=pl.Series(["x", "y"]))
+    um.write_bed(named, tmp_path / "n.bed")
+    assert (tmp_path / "n.bed").read_text().splitlines()[1] == "chr2\t5\t9\ty\t.\t."
+    with pytest.raises(ValueError, match="no gene column"):
+        um.write_bed(plain, tmp_path / "x.bed", name="gene")

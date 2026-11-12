@@ -14,7 +14,7 @@ import polars as pl
 
 from . import _core
 from ._analysis import _sequence_pairs
-from ._api import _check_motif
+from ._api import _bkg_table, _check_motif
 from ._core import Motif
 from ._threads import _nthreads
 
@@ -324,7 +324,9 @@ def get_bkg(
         alphabetically, and per-sequence counts list every sequence in turn
         under each k-mer. With windows, k-mers are sorted alphabetically
         whatever their size and each k-mer's windows follow one another,
-        with per-sequence counts grouped by sequence first.
+        with per-sequence counts grouped by sequence first. Merged counts
+        can be given as they are as the background of a motif, or wherever
+        else a background is taken, where the single letters are used.
 
     Examples
     --------
@@ -430,7 +432,8 @@ def create_sequences(
 
     ``alphabet`` is ``"DNA"``, ``"RNA"``, ``"AA"`` or a string of letters.
     ``freqs`` gives the frequency of every k-mer of the alphabet, either as a
-    mapping from k-mers or in the sorted order that
+    mapping from k-mers, as a table from [`get_bkg()`][universalmotif.get_bkg]
+    (whose largest k-mers are used), or in the sorted order that
     [`get_kmers()`][universalmotif.get_kmers] gives; their number sets k, and
     sequences are drawn from the Markov model of order k-1 they define. Letters
     are uniform by default.
@@ -458,6 +461,10 @@ def create_sequences(
         raise ValueError("seqnum must be non-negative and seqlen positive")
     f = None
     if freqs is not None:
+        table = _bkg_table(freqs)
+        if table is not freqs and table:
+            k_max = max(len(x) for x in table)
+            freqs = {x: v for x, v in table.items() if len(x) == k_max}
         if isinstance(freqs, Mapping):
             k = len(next(iter(freqs)))
             kl = _core._kmers(letters, k)

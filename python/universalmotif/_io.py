@@ -13,7 +13,7 @@ from typing import Literal
 import polars as pl
 
 from . import _core
-from ._api import MotifType, _check_motif
+from ._api import MotifType, _bkg_letters, _check_motif
 from ._core import Motif
 from ._packed import PackedSequences
 
@@ -324,7 +324,7 @@ def write_meme(
     _warn_gaps(ms, "MEME")
     header = not (append and Path(file).exists())
     text = _core._write_meme(
-        ms, version, None if bkg is None else [float(b) for b in bkg], strand, cwm, header
+        ms, version, None if bkg is None else _bkg_letters(bkg), strand, cwm, header
     )
     _write_text(file, text, overwrite, append)
 

@@ -96,7 +96,7 @@ from ._enrich import enrich_motifs, motif_coocc, motif_peaks
 from ._genome import Genome, extract_ranges, signal_stats, signal_values
 from ._genomic import match_bkg, motif_proximity
 from ._interactions import interaction_effects, pair_mutagenesis, plot_interactions
-from ._intervals import genomic_hits, read_bed, to_polars_bio, to_pyranges
+from ._intervals import genomic_hits, read_bed, resize_ranges, to_polars_bio, to_pyranges, write_bed
 from ._plot_comparison import plot_comparison
 from ._plot_hits import plot_hits
 from ._plot_modisco import plot_modisco
@@ -249,6 +249,7 @@ __all__ = [
     "read_seqlets",
     "read_transfac",
     "read_uniprobe",
+    "resize_ranges",
     "round_motif",
     "sample_sites",
     "scan_sequences",
@@ -279,6 +280,7 @@ __all__ = [
     "view_motifs",
     "view_variant",
     "window_string",
+    "write_bed",
     "write_cisbp",
     "write_fasta",
     "write_homer",

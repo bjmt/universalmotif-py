@@ -4,6 +4,7 @@ filtering, masking and small helpers against the R package."""
 import math
 
 import numpy as np
+import polars as pl
 import pytest
 
 import universalmotif as um
@@ -382,3 +383,40 @@ def test_mask_and_slide_checks():
     assert um.slide_fun("ACGT", lambda w: w, window=10) == ["ACGT"]
     assert um.slide_fun("ACGTA", lambda w: w, window=2) == ["AC", "GT", "A"]
     assert um.slide_fun("ACGTA", lambda w: w, window=2, return_incomp=False) == ["AC", "GT"]
+
+
+def test_get_bkg_tables_are_backgrounds():
+    seqs = um.example_sequences("targets")
+    table = um.get_bkg(seqs, k=[1, 2])
+    letters = um.get_bkg(seqs, k=1)
+    as_dict = dict(zip(letters["kmer"], letters["probability"]))
+    m = um.example_motifs()[0]
+    col = [0.1, 0.2, 0.3, 0.4]
+    for bkg in (table, letters, table.to_pandas() if _has_pandas() else table):
+        assert m.replace(bkg=bkg).bkg == m.replace(bkg=as_dict).bkg
+        assert um.create_motif("TGACTCA", bkg=bkg).bkg == pytest.approx(as_dict)
+        assert um.motif_pvalue(m, score=5, bkg_probs=bkg) == um.motif_pvalue(m, score=5, bkg_probs=as_dict)
+        assert um.motif_pvalue([m, m], score=[5, 5], bkg_probs=[bkg, bkg]).tolist() == \
+            um.motif_pvalue([m, m], score=[5, 5], bkg_probs=as_dict).tolist()
+        assert um.ppm_to_pwm(col, bkg=bkg).tolist() == um.ppm_to_pwm(col, bkg=list(as_dict.values())).tolist()
+        assert um.position_icscore(col, bkg=bkg) == um.position_icscore(col, bkg=list(as_dict.values()))
+        assert um.compare_columns(col, col[::-1], "KL", bkg1=bkg, bkg2=bkg) == \
+            um.compare_columns(col, col[::-1], "KL", bkg1=as_dict, bkg2=as_dict)
+        assert um.prob_match_bkg(bkg, "ACG") == um.prob_match_bkg(as_dict, "ACG")
+        ms = um.example_motifs()[:3]
+        assert um.compare_motifs(ms, bkg=bkg).tolist() == um.compare_motifs(ms, bkg=as_dict).tolist()
+    # create_sequences() takes the largest k-mers of a table.
+    pairs = table.filter(pl.col("kmer").str.len_chars() == 2)
+    assert um.create_sequences(seqnum=3, seqlen=50, freqs=table, seed=1) == \
+        um.create_sequences(seqnum=3, seqlen=50, freqs=dict(zip(pairs["kmer"], pairs["probability"])), seed=1)
+    assert um.create_sequences(seqnum=3, seqlen=50, freqs=letters, seed=1) == \
+        um.create_sequences(seqnum=3, seqlen=50, freqs=as_dict, seed=1)
+
+
+def _has_pandas():
+    try:
+        import pandas  # noqa: F401
+        import pyarrow  # noqa: F401
+    except ImportError:
+        return False
+    return True

@@ -11,7 +11,7 @@ import numpy as np
 import numpy.typing as npt
 
 from . import _core
-from ._api import _apply, _check_motif
+from ._api import _apply, _bkg_letters, _bkg_table, _check_motif
 from ._core import Motif
 
 _COMPARE_METRICS = ("PCC", "EUCL", "SW", "KL", "WEUCL", "ALLR", "BHAT", "HELL", "WPCC", "SEUCL",
@@ -22,8 +22,8 @@ def _floats(x: Iterable[float]) -> list[float]:
     return [float(v) for v in x]
 
 
-def _bkg(bkg: Sequence[float] | None) -> list[float]:
-    return [] if bkg is None else _floats(bkg)
+def _bkg(bkg) -> list[float]:
+    return _bkg_letters(bkg)
 
 
 # Column conversions ---------------------------------------------------------
@@ -269,7 +269,11 @@ def prob_match_bkg(bkg: Mapping[str, float], match: str | Sequence[str]) -> floa
     >>> um.prob_match_bkg(bkg, ["AAA", "GCG"]).round(4).tolist()
     [0.027, 0.008]
     """
-    pairs = [(str(k), float(v)) for k, v in bkg.items()]
+    table = _bkg_table(bkg)
+    if table is not bkg:
+        # A get_bkg() table may hold longer k-mers as well.
+        table = {k: v for k, v in table.items() if len(k) == 1}
+    pairs = [(str(k), float(v)) for k, v in table.items()]
     if any(len(k) != 1 for k, _ in pairs):
         raise ValueError("bkg keys must be single letters")
     words = [match] if isinstance(match, str) else list(match)
@@ -308,8 +312,8 @@ def compare_columns(
     if method not in _COMPARE_METRICS:
         raise ValueError(f"method must be one of {', '.join(_COMPARE_METRICS)}")
     xs, ys = _floats(x), _floats(y)
-    b1 = [1 / len(xs)] * len(xs) if bkg1 is None else _floats(bkg1)
-    b2 = [1 / len(ys)] * len(ys) if bkg2 is None else _floats(bkg2)
+    b1 = [1 / len(xs)] * len(xs) if bkg1 is None else _bkg_letters(bkg1)
+    b2 = [1 / len(ys)] * len(ys) if bkg2 is None else _bkg_letters(bkg2)
     return _core._compare_columns(xs, ys, method, b1, b2, nsites1, nsites2)
 
 

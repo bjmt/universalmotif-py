@@ -53,8 +53,9 @@ def motif_pvalue(
         list of sequences with either one per motif or a single one for all.
     bkg_probs
         Background frequencies, either one set for all motifs or a list with
-        one per motif, where a set is a sequence in alphabet order or a
-        mapping from letters. Each motif's own background by default.
+        one per motif, where a set is a sequence in alphabet order, a
+        mapping from letters or a [`get_bkg()`][universalmotif.get_bkg]
+        table. Each motif's own background by default.
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].

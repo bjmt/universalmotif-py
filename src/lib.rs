@@ -49,11 +49,36 @@ fn one_char(s: &str, what: &str) -> PyResult<char> {
     }
 }
 
-/// Read background frequencies given either as a sequence (one value per
-/// letter, in alphabet order) or as a mapping from letters to values.
-/// Mapping keys longer than one letter (higher-order backgrounds) are
-/// ignored.
+/// A table with `kmer` and `probability` columns, as `get_bkg()` returns,
+/// as a dict from k-mers to probabilities.
+fn bkg_table<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyDict>>> {
+    if obj.cast::<PyDict>().is_ok() || !obj.hasattr("columns")? {
+        return Ok(None);
+    }
+    let cols = obj.getattr("columns")?;
+    if !(cols.contains("kmer")? && cols.contains("probability")?) {
+        return Ok(None);
+    }
+    let kmers: Vec<String> = obj.get_item("kmer")?.call_method0("to_list")?.extract()?;
+    let probs: Vec<f64> = obj
+        .get_item("probability")?
+        .call_method0("to_list")?
+        .extract()?;
+    let d = PyDict::new(obj.py());
+    for (k, v) in kmers.into_iter().zip(probs) {
+        d.set_item(k, v)?;
+    }
+    Ok(Some(d))
+}
+
+/// Read background frequencies given as a sequence (one value per letter,
+/// in alphabet order), as a mapping from letters to values, or as a table
+/// from `get_bkg()`. Keys longer than one letter (higher-order backgrounds)
+/// are ignored.
 pub(crate) fn parse_bkg(obj: &Bound<'_, PyAny>, alphabet: &Alphabet) -> PyResult<Vec<f64>> {
+    if let Some(d) = bkg_table(obj)? {
+        return parse_bkg(d.as_any(), alphabet);
+    }
     if let Ok(d) = obj.cast::<PyDict>() {
         let mut out = vec![None; alphabet.len()];
         for (k, v) in d.iter() {

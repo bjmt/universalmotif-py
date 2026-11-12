@@ -11,7 +11,7 @@ import numpy as np
 import polars as pl
 
 from ._analysis import _is_number, _make_unique, motif_pvalue
-from ._api import _check_motif, convert_type
+from ._api import _bkg_table, _check_motif, convert_type
 from ._core import Motif
 from ._plot import _pyplot
 from ._utils import motif_range
@@ -28,6 +28,7 @@ _HITS = "#255C99"
 
 def _motif_bkgs(bkg, n: int) -> list:
     """One background per motif from the forms motif_pvalue() takes."""
+    bkg = _bkg_table(bkg)
     if bkg is None or isinstance(bkg, Mapping):
         return [bkg] * n
     bkg = list(bkg)

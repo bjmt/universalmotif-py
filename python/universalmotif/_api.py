@@ -38,6 +38,28 @@ def _apply(motifs, f):
     return [f(_check_motif(m)) for m in motifs]
 
 
+def _bkg_table(bkg):
+    """A table with ``kmer`` and ``probability`` columns, as
+    [`get_bkg()`][universalmotif.get_bkg] returns, as a dict from k-mers to
+    probabilities; anything else as it is."""
+    cols = getattr(bkg, "columns", None)
+    if cols is not None and "kmer" in cols and "probability" in cols:
+        return dict(zip((str(k) for k in bkg["kmer"]), (float(p) for p in bkg["probability"])))
+    return bkg
+
+
+def _bkg_letters(bkg) -> list[float]:
+    """Background values in alphabet order from a sequence, a mapping or a
+    get_bkg() table, where the letters of a mapping are taken in sorted
+    order, which is the order of the package's alphabets."""
+    bkg = _bkg_table(bkg)
+    if bkg is None:
+        return []
+    if isinstance(bkg, Mapping):
+        return [float(bkg[k]) for k in sorted(k for k in bkg if len(k) == 1)]
+    return [float(x) for x in bkg]
+
+
 def create_motif(
     input: object = None,
     alphabet: str | None = None,
@@ -91,8 +113,9 @@ def create_motif(
     pseudocount
         Pseudocount used when converting between types.
     bkg
-        Background frequencies, either one value per letter in alphabet
-        order or a mapping from letters to values. Uniform by default.
+        Background frequencies: one value per letter in alphabet order, a
+        mapping from letters to values, or the table that
+        [`get_bkg()`][universalmotif.get_bkg] returns. Uniform by default.
     seed
         Random seed, for random motifs only.
 
@@ -386,7 +409,7 @@ def position_icscore(
     """
     return _core._position_icscore(
         [float(x) for x in position],
-        [] if bkg is None else [float(x) for x in bkg],
+        _bkg_letters(bkg),
         type,
         pseudocount,
         nsites,

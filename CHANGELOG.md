@@ -42,6 +42,12 @@ New:
 - `read_bed()` reads BED, narrowPeak, broadPeak and bedGraph files,
   gzipped or not, into DataFrames with columns named after the format, as
   the command line already did for its ranges.
+- `write_bed()` writes ranges and genomic hits as BED, and
+  `resize_ranges()` gives ranges one width around their centre, start, end
+  or narrowPeak summit, dropping or trimming windows that run off a
+  chromosome.
+- Backgrounds can be given as the table `get_bkg()` returns, wherever a
+  background is taken, and so can `create_sequences(freqs=)`.
 - `mask_complexity()` masks low-complexity regions of DNA and RNA with
   symmetric DUST, giving the same regions as dustmasker, and lowercase
   letters too with `lowercase=True`; `return_ranges=True` gives the
