@@ -32,6 +32,7 @@ hooks:
   - hooks/notebooks.py
   - hooks/cli_help.py
   - hooks/plot_examples.py
+  - hooks/cli_examples.py
 
 plugins:
   - search

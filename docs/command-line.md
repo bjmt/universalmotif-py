@@ -127,6 +127,10 @@ umotif find -s peaks.fa -b bkg.fa --seed 1 --table found.tsv -o found.meme
 The recipes below show the other commands on their own. The file names are
 placeholders: `motifs.meme` stands for any motif file, `peaks.bed` for a
 BED file of ranges and `genome.fa.gz` for a genome compressed with `bgzip`.
+Where an output is shown, it comes from running the commands on small
+made-up files when this page is built: the package's example motifs and
+sequences, and a 100 kb random genome with AP-1 sites planted in its peaks,
+and G-box and CRE sites together in half of them.
 
 ### Converting and inspecting motifs
 
@@ -148,6 +152,8 @@ umotif convert motifs.meme --type PCM -o counts.jaspar
 umotif convert motifs.meme --rc -o motifs_rc.meme
 umotif summary motifs.meme
 ```
+
+<!-- output -->
 
 ### Curating a collection
 
@@ -185,15 +191,21 @@ umotif create TGASTCA CACGTG --name AP-1 --name G-box --pseudocount 1 -o seeds.m
 umotif create --sites sites.fa -o from_sites.meme
 ```
 
+<!-- output: seeds.meme 16 -->
+
 It also reads the table of hits that `scan` writes, making one motif for
 each motif scanned from the sites it matched, so that a rough consensus
 motif can be refined from its matches in a set of sequences. The
 pseudocount above lets near matches score, and since short motifs cannot
-reach very small P-values, the cutoff is loosened:
+reach very small P-values, the cutoff is loosened. The refined motifs come
+from the sites found, and show how much they vary:
 
 ```sh
 umotif scan seeds.meme -s peaks.fa -P 1e-3 | umotif create --sites - -o refined.meme
+umotif summary seeds.meme refined.meme
 ```
+
+<!-- output -->
 
 ### Comparing and clustering
 
@@ -205,16 +217,25 @@ compared with each other, and `--matrix` writes every score at once:
 
 ```sh
 umotif compare found.meme --db jaspar.meme --complete -q 0.05 -o matches.tsv
+```
+
+```sh
 umotif compare motifs.meme --matrix score -o scores.tsv
 ```
+
+<!-- output: scores.tsv 5 7 -->
 
 `tree` clusters motifs and writes the tree in Newick format, drawn with
 logos at its tips with `--plot`, or with `-k` the cluster of each motif:
 
 ```sh
-umotif tree motifs.meme --plot tree.pdf --logos -o tree.nwk
+umotif tree motifs.meme --plot tree.png --logos -o tree.nwk
 umotif tree motifs.meme -k 5 -o clusters.tsv
 ```
+
+<!-- image: tree.png -->
+
+<!-- output: clusters.tsv 13 -->
 
 ### Scanning
 
@@ -230,6 +251,8 @@ umotif scan motifs.meme -s seqs.fa --first-hit -o first_hits.tsv
 umotif scan motifs.meme -s seqs.fa --no-overlaps -o best_hits.tsv
 ```
 
+<!-- output: hits.tsv 5 -->
+
 A genome can be scanned whole, or only in ranges, whose hits are reported
 on the genome, or within each range with `--local`. `--bed` writes the hits
 as BED, named by motif, ready for a genome browser:
@@ -239,6 +262,8 @@ umotif scan motifs.meme -g genome.fa.gz -P 1e-5 -p 4 -o genome_hits.tsv
 umotif scan motifs.meme -g genome.fa.gz -r peaks.bed --bed -o peak_hits.bed
 umotif scan motifs.meme -g genome.fa.gz -r peaks.bed --local -o peak_hits.tsv
 ```
+
+<!-- output: peak_hits.bed 4 -->
 
 ### Sequences and backgrounds
 
@@ -259,6 +284,8 @@ records which matched which:
 umotif bkg -g genome.fa.gz -r peaks.bed -n 2 --seed 1 --table matched.tsv -o bkg.fa
 ```
 
+<!-- output: matched.tsv 5 -->
+
 `enrich` and `find` compare the targets with background sequences given
 with `-b`, or without them with shuffled targets, here keeping
 trinucleotides with `--shuffle-k 3`:
@@ -267,6 +294,8 @@ trinucleotides with `--shuffle-k 3`:
 umotif enrich motifs.meme -s peaks.fa --shuffle-k 3 --seed 1 -o enriched.tsv
 umotif find -s peaks.fa --shuffle-k 3 --seed 1 -o found.meme
 ```
+
+<!-- output: enriched.tsv 5 9 -->
 
 ### Peaks and their surroundings
 
@@ -278,6 +307,8 @@ genome given with `-g`:
 umotif proximity motifs.meme -a tss.bed -g genome.fa.gz -o near_tss.tsv
 ```
 
+<!-- output: near_tss.tsv 4 9 -->
+
 `coocc` tests which pairs of motifs share peaks more often than chance,
 `posenr` which motifs gather at particular positions within the peaks, by
 default around their centres, and `matrix` writes a peak by motif table of
@@ -288,6 +319,12 @@ umotif coocc motifs.meme -g genome.fa.gz -r peaks.bed -o pairs.tsv
 umotif posenr motifs.meme -g genome.fa.gz -r peaks.bed -o positions.tsv
 umotif matrix motifs.meme -g genome.fa.gz -r peaks.bed -o peak_by_motif.tsv
 ```
+
+<!-- output: pairs.tsv 4 9 -->
+
+<!-- output: positions.tsv 4 8 -->
+
+<!-- output: peak_by_motif.tsv 5 -->
 
 ## Reference
 
