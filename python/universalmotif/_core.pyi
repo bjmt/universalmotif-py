@@ -337,6 +337,37 @@ def _compare_table(
     method: str = ...,
     overhang: str = ...,
 ) -> ArrowTable: ...
+def _compare_cwms(
+    motifs: list[Motif],
+    queries: list[int],
+    metric: str,
+    ignore_sign: bool,
+    min_overlap: int,
+    rc: bool,
+    nthreads: int,
+    names: list[str],
+) -> ArrowTable: ...
+def _cwm_matrix(
+    motifs: list[Motif], metric: str, ignore_sign: bool, min_overlap: int, rc: bool, nthreads: int
+) -> list[list[float]]: ...
+def _scan_contributions(
+    motifs: list[Motif],
+    scores: npt.NDArray[np.float32],
+    lengths: list[int],
+    min_similarity: list[float],
+    min_importance: list[float],
+    rc: bool,
+    nthreads: int,
+) -> tuple[
+    npt.NDArray[np.uint32],
+    npt.NDArray[np.uint32],
+    npt.NDArray[np.int64],
+    npt.NDArray[np.int64],
+    npt.NDArray[np.bool_],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+]: ...
 def _merge_motifs(
     motifs: list[Motif],
     min_overlap: int,
@@ -355,6 +386,9 @@ def _merge_similar(
     weighted: bool,
     linkage: str,
     nthreads: int,
+    cwm_metric: str = ...,
+    ignore_sign: bool = ...,
+    min_score: float | None = ...,
 ) -> tuple[list[int], list[Motif], list[str]]: ...
 def _hclust(dist: list[list[float]], method: str, labels: list[str]) -> dict[str, Any]: ...
 def _motif_tree(
@@ -472,7 +506,13 @@ def _peaks(
 def _cutree(merge: list[tuple[int, int]], height: list[float], k: int | None, h: float | None) -> list[int]: ...
 def _display_matrix(motif: Motif, use_type: str, relative_entropy: bool) -> list[list[float]]: ...
 def _anchor_layout(
-    motifs: list[Motif], anchor: int, min_overlap: int, rc: bool, nthreads: int
+    motifs: list[Motif],
+    anchor: int,
+    min_overlap: int,
+    rc: bool,
+    nthreads: int,
+    metric: str | None = ...,
+    ignore_sign: bool = ...,
 ) -> tuple[list[tuple[int, bool]], int]: ...
 def _proximity(
     hits: tuple[list[int], list[int], list[int], list[str]],

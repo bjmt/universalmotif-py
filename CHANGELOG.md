@@ -77,6 +77,12 @@ New:
   values, and `merge_similar(min_score=)` sets the similarity at which CWMs
   are merged; `motif_tree()` and `plot_comparison()` take `metric` and
   `sign`.
+- `scan_contributions()` finds motif hits in contribution scores by
+  matching CWMs against them, giving a hits table like that of
+  `scan_sequences()`, with thresholds for each TF-MoDISco pattern from its
+  seqlets by `modisco_thresholds()` and `normalize=True` to raise weak
+  sequences.
+- `hit_contributions()` takes the scores of a single sequence on their own.
 - `plot_comparison(cut=)` and `plot_comparison(cut_height=)` draw where
   the tree would be cut across the dendrogram, and box each group of
   motifs on the heatmap.

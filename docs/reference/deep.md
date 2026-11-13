@@ -37,6 +37,17 @@ these together on the outputs of a published model.
 
 ::: universalmotif.HitContributions
 
+## Finding motifs in contribution scores
+
+[`scan_contributions()`][universalmotif.scan_contributions] finds where a
+model relied on each TF-MoDISco pattern, by matching CWMs against the
+contribution scores of every input, with thresholds for each pattern from
+its own seqlets by [`modisco_thresholds()`][universalmotif.modisco_thresholds].
+
+::: universalmotif.scan_contributions
+
+::: universalmotif.modisco_thresholds
+
 ## Sequences and filters
 
 ::: universalmotif.one_hot

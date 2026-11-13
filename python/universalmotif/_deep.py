@@ -294,6 +294,98 @@ def _modisco_motif(pattern, name: str, dataset: str, kind: str,
     )
 
 
+def modisco_thresholds(
+    path: str | os.PathLike[str],
+    quantile: float = 0.05,
+    trim_threshold: float | None = 0.3,
+    subpatterns: bool = False,
+):
+    """Thresholds for [`scan_contributions()`][universalmotif.scan_contributions]
+    from the seqlets of each pattern of a TF-MoDISco results file.
+
+    Each pattern's seqlets are scored as ``scan_contributions()`` scores a
+    window, on their projected contribution scores and over the columns of
+    the CWM that [`read_modisco()`][universalmotif.read_modisco] reads with
+    the same ``trim_threshold``: their similarity, the cosine with the CWM,
+    and their importance, the sum of their absolute scores as a fraction of
+    the CWM's. The thresholds are the ``quantile`` of each, so that with the
+    default of 0.05 about 95% of a pattern's seqlets would pass either one.
+    Patterns differ a great deal in how alike their seqlets are, and these
+    thresholds follow each pattern, where a single cutoff would be too
+    strict for some and too loose for others.
+
+    Needs the ``h5py`` extra.
+
+    Returns
+    -------
+    polars.DataFrame
+        One row per pattern, named as ``read_modisco()`` names it, with the
+        columns ``motif``, ``min_similarity``, ``min_importance`` and
+        ``seqlets``, their number.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> path = "modisco_results.h5"
+    >>> cwms = um.read_modisco(path)  # doctest: +SKIP
+    >>> thresholds = um.modisco_thresholds(path)  # doctest: +SKIP
+    >>> hits = um.scan_contributions(cwms, "shap.npz", sequences="ohe.npz",
+    ...                              thresholds=thresholds)  # doctest: +SKIP
+    """
+    import polars as pl
+
+    try:
+        import h5py
+    except ImportError as e:
+        raise ImportError(
+            "reading TF-MoDISco results needs h5py; install it with `pip install "
+            "universalmotif[h5py]`"
+        ) from e
+    if not 0 <= quantile <= 1:
+        raise ValueError("quantile must be between 0 and 1")
+    rows = []
+    with h5py.File(path, "r") as f:
+        for group in ("pos_patterns", "neg_patterns"):
+            if group not in f:
+                continue
+            for name in sorted(f[group], key=_pattern_order):
+                pattern = f[group][name]
+                rows.append(_seqlet_thresholds(pattern, f"{group}.{name}", quantile, trim_threshold))
+                if subpatterns:
+                    for sub in sorted((k for k in pattern if k.startswith("subpattern")), key=_pattern_order):
+                        rows.append(_seqlet_thresholds(pattern[sub], f"{group}.{name}.{sub}", quantile,
+                                                       trim_threshold))
+    return pl.DataFrame(rows, schema={"motif": pl.String, "min_similarity": pl.Float64,
+                                      "min_importance": pl.Float64, "seqlets": pl.Int64}, orient="row")
+
+
+def _seqlet_thresholds(pattern, name: str, quantile: float, trim_threshold: float | None):
+    cwm = np.asarray(pattern["contrib_scores"][()], dtype=float).T
+    full = cwm.shape[1]
+    lo, hi = 0, full
+    if trim_threshold is not None:
+        total = np.abs(cwm).sum(axis=0)
+        keep = np.flatnonzero(total >= trim_threshold * total.max())
+        if keep.size:
+            lo, hi = int(keep[0]), int(keep[-1]) + 1
+    cwm = cwm[:, lo:hi]
+    seqlets = pattern.get("seqlets")
+    if seqlets is None or "contrib_scores" not in seqlets:
+        raise ValueError(f"{name} has no seqlet scores to set thresholds from")
+    # Seqlets are stored in the pattern's orientation, one row per position.
+    x = np.asarray(seqlets["contrib_scores"][()], dtype=float)
+    if x.ndim != 3 or x.shape[1] != full:
+        raise ValueError(f"the seqlets of {name} are not as wide as its pattern")
+    x = x[:, lo:hi, :].transpose(0, 2, 1)
+    if not len(x):
+        return (name, float("nan"), float("nan"), 0)
+    unit = cwm / max(float(np.sqrt((cwm ** 2).sum())), 1e-300)
+    norm = np.sqrt((x ** 2).sum(axis=(1, 2)))
+    similarity = np.where(norm > 0, np.einsum("nal,al->n", x, unit) / np.maximum(norm, 1e-300), 0.0)
+    importance = np.abs(x).sum(axis=(1, 2)) / max(float(np.abs(cwm).sum()), 1e-300)
+    return (name, float(np.quantile(similarity, quantile)), float(np.quantile(importance, quantile)), len(x))
+
+
 _SEQLET_SCORES = {"projected": "contrib_scores", "hypothetical": "hypothetical_contribs"}
 _SEQLET_DATASETS = ("example_idx", "start", "end", "is_revcomp", "sequence", "contrib_scores")
 
@@ -1058,6 +1150,7 @@ __all__ = [
     "from_filters",
     "from_one_hot",
     "insert_sites",
+    "modisco_thresholds",
     "mutagenesis",
     "mutagenesis_effects",
     "one_hot",

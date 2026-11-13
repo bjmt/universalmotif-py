@@ -732,10 +732,99 @@ fn _motif_tree<'py>(
     tree_dict(py, &tree, &labels)
 }
 
+/// Hits of contribution scores, as numpy columns: motif, sequence, start,
+/// end, whether on the minus strand, score, similarity and importance.
+type ContribColumns<'py> = (
+    Bound<'py, numpy::PyArray1<u32>>,
+    Bound<'py, numpy::PyArray1<u32>>,
+    Bound<'py, numpy::PyArray1<i64>>,
+    Bound<'py, numpy::PyArray1<i64>>,
+    Bound<'py, numpy::PyArray1<bool>>,
+    Bound<'py, numpy::PyArray1<f64>>,
+    Bound<'py, numpy::PyArray1<f64>>,
+    Bound<'py, numpy::PyArray1<f64>>,
+);
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn _scan_contributions<'py>(
+    py: Python<'py>,
+    motifs: Vec<PyRef<'py, PyMotif>>,
+    scores: numpy::PyReadonlyArray3<'py, f32>,
+    lengths: Vec<usize>,
+    min_similarity: Vec<f64>,
+    min_importance: Vec<f64>,
+    rc: bool,
+    nthreads: usize,
+) -> PyResult<ContribColumns<'py>> {
+    use numpy::{IntoPyArray, PyUntypedArrayMethods};
+    use universalmotif::contributions::{ContribScanOptions, ContribThreshold, scan_contributions};
+
+    let motifs = unwrap(&motifs);
+    let shape = scores.shape();
+    if shape[1] != 4 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "scores must have shape (sequences, 4, length)",
+        ));
+    }
+    let width = shape[2];
+    let values = scores
+        .as_slice()
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let thresholds: Vec<ContribThreshold> = min_similarity
+        .iter()
+        .zip(&min_importance)
+        .map(|(&s, &i)| ContribThreshold {
+            min_similarity: s,
+            min_importance: i,
+        })
+        .collect();
+    let mut opts = ContribScanOptions::default();
+    opts.rc = rc;
+    opts.nthreads = nthreads;
+    let hits = py
+        .detach(|| scan_contributions(&motifs, values, &lengths, width, &thresholds, &opts))
+        .map_err(err)?;
+    let col = |f: &dyn Fn(&universalmotif::contributions::ContribHit) -> f64| -> Vec<f64> {
+        hits.iter().map(f).collect()
+    };
+    let (score, similarity, importance) = (
+        col(&|h| h.score),
+        col(&|h| h.similarity),
+        col(&|h| h.importance),
+    );
+    Ok((
+        hits.iter()
+            .map(|h| h.motif as u32)
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+        hits.iter()
+            .map(|h| h.sequence as u32)
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+        hits.iter()
+            .map(|h| h.start as i64)
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+        hits.iter()
+            .map(|h| h.end as i64)
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+        hits.iter()
+            .map(|h| h.strand == Strand::Minus)
+            .collect::<Vec<_>>()
+            .into_pyarray(py),
+        score.into_pyarray(py),
+        similarity.into_pyarray(py),
+        importance.into_pyarray(py),
+    ))
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_compare_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(_compare_table, m)?)?;
     m.add_function(wrap_pyfunction!(_compare_cwms, m)?)?;
+    m.add_function(wrap_pyfunction!(_scan_contributions, m)?)?;
     m.add_function(wrap_pyfunction!(_cwm_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(_merge_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_merge_similar, m)?)?;

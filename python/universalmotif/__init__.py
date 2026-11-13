@@ -14,6 +14,7 @@ from ._deep import (
     from_filters,
     from_one_hot,
     insert_sites,
+    modisco_thresholds,
     mutagenesis,
     mutagenesis_effects,
     one_hot,
@@ -101,7 +102,13 @@ from ._plot_comparison import plot_comparison
 from ._plot_hits import plot_hits
 from ._plot_modisco import plot_modisco
 from ._plot_seqlets import plot_seqlets
-from ._hit_contrib import HitContributions, hit_contributions, plot_hit_contributions, plot_hit_profile
+from ._hit_contrib import (
+    HitContributions,
+    hit_contributions,
+    plot_hit_contributions,
+    plot_hit_profile,
+    scan_contributions,
+)
 from ._plot_pairs import pair_spacings, plot_pair_spacing
 from ._plot_variants import plot_variant_effects, variant_motif_effects
 from ._plot_response import plot_marginalization, plot_spacing
@@ -195,6 +202,7 @@ __all__ = [
     "meme_alph",
     "merge_motifs",
     "merge_similar",
+    "modisco_thresholds",
     "motif_coocc",
     "motif_finder",
     "motif_peaks",
@@ -252,6 +260,7 @@ __all__ = [
     "resize_ranges",
     "round_motif",
     "sample_sites",
+    "scan_contributions",
     "scan_sequences",
     "score_match",
     "sequence_complexity",

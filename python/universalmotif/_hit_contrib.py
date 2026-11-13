@@ -11,10 +11,13 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import polars as pl
 
-from ._analysis import _sequence_pairs
+from . import _core
+from ._analysis import _sequence_pairs, dedup_hits
+from ._core import Motif
 from ._deep import ContributionScores, _letters_first, _seqlet_regions, _to_numpy
 from ._plot import _pyplot
 from ._plot_seqlets import _logo_panel
+from ._threads import _nthreads
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -187,6 +190,10 @@ def _gather_scores(contributions: Any, sequences: Any, ranges: Any) -> _Scores:
         items = None
     if items is None:
         values = _to_numpy(contributions, dtype=None)
+        # The scores of one sequence: one per position, or one per letter at
+        # each position when its sequence is given as a single string.
+        if values.ndim == 1 or (values.ndim == 2 and isinstance(sequences, str)):
+            values = values[None]
         if values.ndim == 3:
             values = _letters_first(values, len(_LETTERS), "the scores")
         elif values.ndim != 2:
@@ -256,6 +263,230 @@ def _hit_sequences(hits: pl.DataFrame, scores: _Scores) -> np.ndarray:
     return idx
 
 
+def _per_motif(value: Any, names: list[str], what: str) -> list[float]:
+    """One value of a threshold for each motif, from one for all, a value per
+    motif or a mapping from motif names."""
+    if isinstance(value, Mapping):
+        missing = [n for n in names if n not in value]
+        if missing:
+            raise ValueError(f"{what} has no value for {', '.join(missing[:5])}")
+        return [float(value[n]) for n in names]
+    if isinstance(value, (int, float, np.number)):
+        return [float(value)] * len(names)
+    out = [float(v) for v in value]
+    if len(out) != len(names):
+        raise ValueError(f"{what} has {len(out)} values for {len(names)} motifs")
+    return out
+
+
+def _window_letters(codes: np.ndarray | None, projected: np.ndarray, seq: np.ndarray, start: np.ndarray,
+                    end: np.ndarray, minus: np.ndarray) -> np.ndarray:
+    """The letters of each window, read along its strand, from the codes of
+    the sequences or, without them, from the letters carrying the projected
+    scores, which only the windows need."""
+    out = np.empty(len(seq), dtype=object)
+    widths = end - start
+    letters = np.frombuffer(b"ACGTN", dtype=np.uint8)
+    for w in np.unique(widths):
+        sel = np.flatnonzero(widths == w)
+        pos = start[sel, None] + np.arange(w)
+        if codes is not None:
+            c = codes[seq[sel, None], pos]
+        else:
+            win = projected[seq[sel, None], :, pos]
+            c = np.where((win != 0).any(axis=2), np.abs(win).argmax(axis=2), 4).astype(np.uint8)
+        flip = minus[sel]
+        c[flip] = np.where(c[flip] == 4, 4, 3 - c[flip])[:, ::-1]
+        out[sel] = np.ascontiguousarray(letters[c]).view(f"S{w}").ravel().astype(str)
+    return out
+
+
+def scan_contributions(
+    motifs: Motif | Sequence[Motif],
+    contributions: Any,
+    sequences: Any = None,
+    min_similarity: Any = 0.7,
+    min_importance: Any = 0.5,
+    thresholds: Any = None,
+    rc: bool = True,
+    normalize: bool = False,
+    no_overlaps: bool = True,
+    no_overlaps_by: str = "score",
+    no_overlaps_by_strand: bool = True,
+    no_overlaps_by_motif: bool = False,
+    nthreads: int | None = None,
+) -> pl.DataFrame:
+    """Find motif hits in the contribution scores a sequence model gives its
+    inputs, by matching CWMs against the scores.
+
+    This is the usual step after TF-MoDISco: where
+    [`scan_sequences()`][universalmotif.scan_sequences] finds the sites that
+    look like a motif, this finds those the model relied on, by comparing
+    each CWM, such as the patterns of
+    [`read_modisco()`][universalmotif.read_modisco], with every window of
+    the scores of the letters present. A window is a hit when two measures
+    reach the motif's thresholds: its similarity, the cosine between its
+    scores and the CWM, which says whether the scores have the shape of the
+    pattern, and its importance, the sum of its absolute scores, which says
+    whether the model gave the window much weight at all. Every motif is
+    matched on its own, so motifs that share a site all have hits there.
+
+    Thresholds are given for every motif at once or one per motif, as a
+    list or a mapping from motif names, and
+    [`modisco_thresholds()`][universalmotif.modisco_thresholds] sets them
+    from the seqlets each TF-MoDISco pattern was built from, so that they
+    follow how alike each pattern's seqlets are. That is the better choice
+    for TF-MoDISco patterns, whose seqlets differ widely in this; the
+    defaults suit patterns whose seqlets are fairly alike.
+
+    The hits have the columns of ``scan_sequences()`` results, so that
+    [`dedup_hits()`][universalmotif.dedup_hits],
+    [`motif_coocc()`][universalmotif.motif_coocc],
+    [`motif_peaks()`][universalmotif.motif_peaks],
+    [`plot_hits()`][universalmotif.plot_hits] and the other functions taking
+    hits work on them. [`genomic_hits()`][universalmotif.genomic_hits] moves
+    them to the genome, given the regions the scores came from.
+
+    Parameters
+    ----------
+    motifs
+        DNA CWMs, the contributions of a typical site of each motif.
+    contributions, sequences
+        The scores, in any form
+        [`hit_contributions()`][universalmotif.hit_contributions] takes,
+        such as a [`ContributionScores`][universalmotif.ContributionScores]
+        or an array of shape (sequences, 4, length). Hypothetical scores of
+        every letter, or observed scores of one per position, need the
+        ``sequences`` to pick the letters present; scores of every letter
+        given without them are taken to be projected already.
+    min_similarity
+        The least cosine between a window's scores and the CWM, from -1 to
+        1.
+    min_importance
+        The least importance of a window, as a fraction of the sum of the
+        CWM's absolute values. A CWM from TF-MoDISco is the average of its
+        seqlets, so 1 is about the importance of a typical seqlet.
+    thresholds
+        Per-motif thresholds as a table with ``motif``, ``min_similarity``
+        and ``min_importance`` columns, such as ``modisco_thresholds()``
+        returns, matched to the motifs by name. They replace
+        ``min_similarity`` and ``min_importance``.
+    rc
+        Also match the reverse complement of each CWM.
+    normalize
+        Scale up the scores of each sequence whose root mean square score,
+        per position, is below the median of all the sequences given, to
+        that median, before matching. The similarity of a window does not
+        depend on scale, but its importance does, so this lets sites in
+        sequences the model gave little weight overall reach the importance
+        threshold, much as FiNeMo scales each region. Sequences at or above
+        the median keep their scale, so thresholds from
+        ``modisco_thresholds()`` still apply to them; scaling them down too
+        would lose many of the seqlets in the strongest sequences. ``score``
+        and ``importance`` are those of the scaled scores. A single sequence
+        is its own median, so it needs others alongside it.
+    no_overlaps, no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif
+        Remove overlapping hits of each motif in each sequence, keeping
+        those with the highest ``no_overlaps_by``, the ``score``,
+        ``similarity`` or ``importance``, as ``dedup_hits()`` does. Hits on
+        opposite strands are compared, unless ``no_overlaps_by_strand`` is
+        False, and with ``no_overlaps_by_motif``, hits of different motifs
+        are compared too, so that each site keeps only its best motif.
+    nthreads
+        Threads to use, by default the package setting from
+        [`set_nthreads()`][universalmotif.set_nthreads].
+
+    Returns
+    -------
+    polars.DataFrame
+        One row per hit, ordered by motif, sequence and start, with the
+        columns ``motif``, ``motif_i``, ``sequence``, ``sequence_i``,
+        ``start``, ``end``, ``strand``, ``score``, ``similarity``,
+        ``importance`` and ``match``. Positions are counted from 0 with the
+        end left out. ``score`` is the dot product of the window's scores
+        with the CWM scaled to unit norm, the similarity times the size of
+        the scores, which ranks hits that are both well shaped and strong
+        first. ``match`` holds the window's letters along its strand.
+        Sequences are named as the scores are, or ``seq1``, ``seq2`` and so
+        on.
+
+    Examples
+    --------
+    A CWM of GAT matched against the scores of two sequences, of which only
+    the first gives GAT much weight:
+
+    >>> import numpy as np
+    >>> import universalmotif as um
+    >>> gat = um.create_motif(np.array([[0, .8, 0], [0, 0, 0], [.9, 0, 0], [0, 0, .7]]),
+    ...                       type="CWM", alphabet="DNA", name="GAT")
+    >>> weights = np.array([[.1, .1, .9, .8, .7, .1, .1, .1],
+    ...                     [.1, .1, .1, .1, .1, .2, .1, .1]], dtype=np.float32)
+    >>> scores = um.one_hot(["CCGATGCA", "TTGATCCA"]) * weights[:, None, :]
+    >>> um.scan_contributions(gat, scores).select("sequence", "start", "end", "strand",
+    ...                                           "match").rows()
+    [('seq1', 2, 5, '+', 'GAT')]
+    """
+    ms = [motifs] if isinstance(motifs, Motif) else list(motifs)
+    if not ms:
+        raise ValueError("no motifs given")
+    names = [m.name for m in ms]
+    if no_overlaps_by not in ("score", "similarity", "importance"):
+        raise ValueError("no_overlaps_by must be 'score', 'similarity' or 'importance'")
+    if thresholds is not None:
+        table = thresholds if isinstance(thresholds, pl.DataFrame) else pl.DataFrame(thresholds)
+        need = {"motif", "min_similarity", "min_importance"}
+        if not need <= set(table.columns):
+            raise ValueError("thresholds needs the columns motif, min_similarity and min_importance")
+        if table["motif"].is_duplicated().any():
+            raise ValueError("thresholds names a motif more than once")
+        min_similarity = dict(zip(table["motif"], table["min_similarity"]))
+        min_importance = dict(zip(table["motif"], table["min_importance"]))
+    smin = _per_motif(min_similarity, names, "min_similarity")
+    imin = _per_motif(min_importance, names, "min_importance")
+    if any(np.isnan(v) for v in smin + imin):
+        raise ValueError("thresholds cannot be NaN, as they are for patterns without seqlets")
+
+    scores = _gather_scores(contributions, sequences, None)
+    values, codes = scores.values, scores.codes
+    if values.ndim == 2:
+        if codes is None:
+            raise ValueError("observed scores of one value per position need the sequences, to "
+                             "place each score on its letter")
+        values = values[:, None, :]
+    if codes is not None:
+        onehot = codes[:, None, :] == np.arange(4, dtype=np.uint8)[None, :, None]
+        values = values * onehot
+    projected = np.ascontiguousarray(values, dtype=np.float32)
+    if normalize:
+        lengths = np.maximum(scores.lengths, 1)
+        rms = np.sqrt(np.einsum("nal,nal->n", projected, projected, dtype=np.float64) / lengths)
+        target = np.median(rms[rms > 0]) if (rms > 0).any() else 1.0
+        factor = np.where(rms > 0, np.maximum(1.0, target / np.where(rms > 0, rms, 1.0)), 1.0)
+        projected = (projected * factor[:, None, None].astype(np.float32)).astype(np.float32, copy=False)
+    motif_i, seq_i, start, end, minus, score, similarity, importance = _core._scan_contributions(
+        ms, projected, scores.lengths.tolist(), smin, imin, rc, _nthreads(nthreads))
+    seq_names = scores.names or [f"seq{i + 1}" for i in range(projected.shape[0])]
+    hits = pl.DataFrame({
+        "motif": pl.Series(np.asarray(names, dtype=object)[motif_i] if len(motif_i) else [], dtype=pl.String),
+        "motif_i": motif_i,
+        "sequence": pl.Series(np.asarray(seq_names, dtype=object)[seq_i] if len(seq_i) else [],
+                              dtype=pl.String),
+        "sequence_i": seq_i,
+        "start": start,
+        "end": end,
+        "strand": pl.Series(np.where(minus, "-", "+") if len(minus) else [], dtype=pl.String),
+        "score": score,
+        "similarity": similarity,
+        "importance": importance,
+        "match": pl.Series(_window_letters(codes, projected, seq_i.astype(np.int64), start, end, minus)
+                           if len(seq_i) else [], dtype=pl.String),
+    })
+    if no_overlaps and hits.height:
+        hits = dedup_hits(hits, by=no_overlaps_by, ignore_strand=no_overlaps_by_strand,
+                          ignore_motif=no_overlaps_by_motif)
+    return hits
+
+
 def hit_contributions(
     hits: pl.DataFrame,
     contributions: Any,
@@ -306,7 +537,8 @@ def hit_contributions(
         scores such as those read from a bigWig file with
         [`signal_values()`][universalmotif.signal_values], or a list or
         mapping of such arrays, one per sequence, which may differ in
-        length.
+        length. The scores of a single sequence can be given on their own,
+        with that sequence as a string.
     sequences
         The sequences the scores are for, as text or one-hot encoded, to
         pick the letters present from scores of every letter. Without them,
@@ -1036,4 +1268,5 @@ def plot_hit_contributions(
     return fig if own_figure else ax
 
 
-__all__ = ["HitContributions", "hit_contributions", "plot_hit_contributions", "plot_hit_profile"]
+__all__ = ["HitContributions", "hit_contributions", "plot_hit_contributions", "plot_hit_profile",
+           "scan_contributions"]
