@@ -50,7 +50,7 @@ def test_from_filters():
     for b, m in zip(back, motifs):
         assert b.width == m.width and b.type == "PWM"
         np.testing.assert_allclose(b.matrix, um.convert_type(m, "PWM").matrix, rtol=1e-6)
-    # Mappings of (letters, width) matrices, such as tangermeme keeps motifs in.
+    # Mappings of (letters, width) matrices, as some libraries keep motifs.
     ppms = {m.name: um.convert_type(m, "PPM").matrix for m in motifs}
     from_dict = um.from_filters(ppms, type="PPM")
     assert [m.name for m in from_dict] == list(ppms)

@@ -22,6 +22,7 @@ from ._deep import (
     read_contributions,
     read_modisco,
     read_seqlets,
+    shuffled_references,
     site_spacings,
     to_filters,
 )
@@ -268,6 +269,7 @@ __all__ = [
     "shuffle_motifs",
     "shuffle_sequences",
     "shuffle_string",
+    "shuffled_references",
     "signal_stats",
     "signal_values",
     "site_spacings",

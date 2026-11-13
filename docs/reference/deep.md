@@ -56,6 +56,8 @@ its own seqlets by [`modisco_thresholds()`][universalmotif.modisco_thresholds].
 
 ::: universalmotif.one_hot_batches
 
+::: universalmotif.shuffled_references
+
 ::: universalmotif.to_filters
 
 ::: universalmotif.from_filters

@@ -84,8 +84,8 @@ def from_filters(
 
     ``filters`` is an array of shape (motifs, letters, width), such as the
     weights of a convolution layer, or a mapping from names to (letters,
-    width) matrices, as tangermeme and memelite keep motifs. Tensors are
-    turned into numpy arrays first, so PyTorch tensors can be passed as they
+    width) matrices, as some deep-learning libraries keep motifs. Tensors
+    are turned into numpy arrays first, so PyTorch tensors can be passed as they
     are, once on the CPU. ``type`` says what the values are, and ``alphabet``
     gives the letters in row order. With ``trim``, all-zero columns at
     either end, such as the padding of [`to_filters()`][universalmotif.to_filters],
@@ -1083,6 +1083,104 @@ class _OneHotBatches:
         return f"<{len(self)} batches of up to {self._batch_size} sequences>"
 
 
+def shuffled_references(
+    x: Any,
+    n: int = 20,
+    k: int = 2,
+    seed: int = 1,
+    method: str = "euler",
+    offset: int = 0,
+    nthreads: int | None = None,
+) -> Any:
+    """Shuffles of one-hot sequences, as references for attribution.
+
+    DeepLIFT, DeepSHAP and similar methods measure each input's
+    contributions against references, and shuffles of the input that keep
+    its dinucleotides are the usual choice, since they hold the same letters
+    and local make-up but have lost the arrangement of letters that the
+    model might respond to. This makes ``n`` shuffles of each sequence,
+    keeping every k-mer count exactly with the default ``method="euler"``,
+    as [`shuffle_sequences()`][universalmotif.shuffle_sequences] does. Each
+    shuffle is drawn uniformly from all the sequences with the same k-mer
+    counts and the same first ``k - 1`` letters and last letter, so that no
+    position keeps its letter more often than chance would have it.
+    Positions holding no letter, such as N, stay where they are, and each
+    stretch of letters between them is shuffled on its own, which keeps the
+    k-mers touching them too.
+
+    ``x`` is a one-hot array of shape (sequences, 4, length) or (sequences,
+    length, 4), or one sequence of shape (4, length) or (length, 4), with
+    the letters in the order ACGT, such as from
+    [`one_hot()`][universalmotif.one_hot]; a PyTorch tensor is accepted too.
+    Shuffle ``j`` of sequence ``i`` depends only on ``seed``, ``offset + i``
+    and ``j``, so that shuffling a large set in batches with ``offset`` set
+    to each batch's first index gives the same references as shuffling it at
+    once, and asking for more shuffles adds to those made before.
+    ``nthreads`` defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
+
+    Returns
+    -------
+    numpy.ndarray | torch.Tensor
+        The shuffles, of shape (sequences, n, 4, length), or (sequences, n,
+        length, 4) for sequences given letters last, or without the first
+        dimension for a single sequence, with the dtype of ``x`` and as a
+        tensor (on the CPU) when ``x`` is one. They take ``n`` times the
+        memory of ``x``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import universalmotif as um
+    >>> x = um.one_hot(["ACGTTGCAAGGCTTAC", "TTGACNNGACTCATCA"])
+    >>> refs = um.shuffled_references(x, n=5)
+    >>> refs.shape
+    (2, 5, 4, 16)
+    >>> shuffled = um.from_one_hot(refs[0])
+    >>> shuffled[0] != "ACGTTGCAAGGCTTAC" and sorted(shuffled[0]) == sorted("ACGTTGCAAGGCTTAC")
+    True
+    >>> [s[5:7] for s in um.from_one_hot(refs[1])]
+    ['NN', 'NN', 'NN', 'NN', 'NN']
+    """
+    if n < 0:
+        raise ValueError("n must be 0 or more")
+    if k < 1:
+        raise ValueError("k must be 1 or more")
+    if offset < 0:
+        raise ValueError("offset must be 0 or more")
+    tensor = hasattr(x, "detach")
+    arr = _to_numpy(x, dtype=None)
+    single = arr.ndim == 2
+    a = arr[None] if single else arr
+    if a.ndim != 3:
+        raise ValueError("x must have shape (sequences, 4, length) or (sequences, length, 4)")
+    last = a.shape[1] != 4 and a.shape[2] == 4
+    letters = a.transpose(0, 2, 1) if last else a
+    if letters.shape[1] != 4:
+        raise ValueError(f"x must have shape (sequences, 4, length) or (sequences, length, 4), not {arr.shape}")
+    present = letters != 0
+    count = present.sum(axis=1)
+    if (count > 1).any():
+        raise ValueError("x must be one-hot, with at most one letter at each position")
+    codes = np.where(count == 1, present.argmax(axis=1), 4).astype(np.uint8)
+    shuffled = _core._shuffle_codes(np.ascontiguousarray(codes), int(n), int(k), method, int(seed),
+                                    int(offset), _nthreads(nthreads))
+    out = np.zeros(shuffled.shape[:2] + ((shuffled.shape[2], 4) if last else (4, shuffled.shape[2])),
+                   dtype=arr.dtype)
+    for letter in range(4):
+        if last:
+            out[..., letter] = shuffled == letter
+        else:
+            out[:, :, letter, :] = shuffled == letter
+    if single:
+        out = out[0]
+    if tensor:
+        import torch
+
+        return torch.from_numpy(out)
+    return out
+
+
 def one_hot_batches(
     genome: Any,
     ranges: Any,
@@ -1158,6 +1256,7 @@ __all__ = [
     "read_contributions",
     "read_modisco",
     "read_seqlets",
+    "shuffled_references",
     "site_spacings",
     "to_filters",
 ]

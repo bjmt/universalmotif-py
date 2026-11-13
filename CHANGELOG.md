@@ -83,6 +83,9 @@ New:
   seqlets by `modisco_thresholds()` and `normalize=True` to raise weak
   sequences.
 - `hit_contributions()` takes the scores of a single sequence on their own.
+- `shuffled_references()` makes dinucleotide shuffles of one-hot sequences,
+  drawn uniformly and with Ns kept in place, as references for
+  attribution, reproducible across batches with `offset`.
 - `view_attributions(motifs=)` draws each hit's motif above it, such as
   the CWMs `scan_contributions()` matched, and a `label` column in the
   hits sets the text shown for each.

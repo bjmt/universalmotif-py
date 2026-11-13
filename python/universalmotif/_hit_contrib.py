@@ -379,10 +379,10 @@ def scan_contributions(
         that median, before matching. The similarity of a window does not
         depend on scale, but its importance does, so this lets sites in
         sequences the model gave little weight overall reach the importance
-        threshold, much as FiNeMo scales each region. Sequences at or above
-        the median keep their scale, so thresholds from
-        ``modisco_thresholds()`` still apply to them; scaling them down too
-        would lose many of the seqlets in the strongest sequences. ``score``
+        threshold, much as hit callers that rescale each region allow.
+        Sequences at or above the median keep their scale, so thresholds
+        from ``modisco_thresholds()`` still apply to them; scaling them down
+        too would lose many of the seqlets in the strongest sequences. ``score``
         and ``importance`` are those of the scaled scores. A single sequence
         is its own median, so it needs others alongside it.
     no_overlaps, no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif

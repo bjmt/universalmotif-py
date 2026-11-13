@@ -187,6 +187,40 @@ fn _shuffle_sequences(
         .map_err(err)
 }
 
+/// `n` shuffles of each row of `codes`, letters 0 to 3 with 4 for N kept in
+/// place, as an array of shape (sequences, n, length).
+#[pyfunction]
+#[pyo3(signature = (codes, n, k, method, seed, offset, nthreads))]
+#[allow(clippy::too_many_arguments)]
+fn _shuffle_codes<'py>(
+    py: Python<'py>,
+    codes: numpy::PyReadonlyArray2<'py, u8>,
+    n: usize,
+    k: usize,
+    method: &str,
+    seed: u64,
+    offset: u64,
+    nthreads: usize,
+) -> PyResult<Bound<'py, numpy::PyArray3<u8>>> {
+    use numpy::{PyArrayMethods, PyUntypedArrayMethods};
+
+    let (rows, length) = (codes.shape()[0], codes.shape()[1]);
+    let values = codes
+        .as_slice()
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let mut opts = shuffle::CodeShuffleOptions::default();
+    opts.k = k;
+    opts.method = method.parse::<ShuffleMethod>().map_err(err)?;
+    opts.seed = seed;
+    opts.offset = offset;
+    opts.unknown = Some(4);
+    opts.nthreads = nthreads;
+    let out = py
+        .detach(|| shuffle::shuffle_codes(values, length, n, &opts))
+        .map_err(err)?;
+    out.into_pyarray(py).reshape([rows, n, length])
+}
+
 #[pyfunction]
 #[pyo3(signature = (alphabet, n, len, freqs, seed, nthreads))]
 fn _create_sequences(
@@ -360,6 +394,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_sequence_complexity, m)?)?;
     m.add_function(wrap_pyfunction!(_get_bkg, m)?)?;
     m.add_function(wrap_pyfunction!(_shuffle_sequences, m)?)?;
+    m.add_function(wrap_pyfunction!(_shuffle_codes, m)?)?;
     m.add_function(wrap_pyfunction!(_create_sequences, m)?)?;
     m.add_function(wrap_pyfunction!(_shuffle_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_sample_sites, m)?)?;
