@@ -35,6 +35,9 @@ Changes in behaviour:
   contributions when every motif is one, and `merge_motifs()` merges them
   as CWMs, where they were compared and merged as probabilities of their
   absolute values before.
+- `to_filters()` gives CWMs as their own contributions by default rather
+  than as log2 odds, which failed on contributions of exactly zero, and
+  warns that it leaves out the gaps of gapped motifs.
 - `plot_comparison()` aligns its logos to one another, within each group
   when the tree is cut, and marks flipped ones with `rc_text`;
   `align_logos=False` draws them as they are. `view_motifs()` and tree tip
@@ -78,10 +81,10 @@ New:
   are merged; `motif_tree()` and `plot_comparison()` take `metric` and
   `sign`.
 - `scan_contributions()` finds motif hits in contribution scores by
-  matching CWMs against them, giving a hits table like that of
-  `scan_sequences()`, with thresholds for each TF-MoDISco pattern from its
-  seqlets by `modisco_thresholds()` and `normalize=True` to raise weak
-  sequences.
+  matching CWMs against them, gapped CWMs included, giving a hits table
+  like that of `scan_sequences()`, with thresholds for each TF-MoDISco
+  pattern from its seqlets by `modisco_thresholds()` and `normalize=True`
+  to raise weak sequences.
 - `hit_contributions()` takes the scores of a single sequence on their own.
 - `shuffled_references()` makes dinucleotide shuffles of one-hot sequences,
   drawn uniformly and with Ns kept in place, as references for

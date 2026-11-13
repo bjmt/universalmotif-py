@@ -21,7 +21,7 @@ _ALPHABETS = {"ACGT": "DNA", "ACGU": "RNA", "ACDEFGHIKLMNPQRSTVWY": "AA"}
 
 def to_filters(
     motifs: Motif | Iterable[Motif],
-    use_type: str = "PWM",
+    use_type: str | None = None,
     align: str = "left",
     rc: bool = False,
 ) -> np.ndarray:
@@ -33,10 +33,15 @@ def to_filters(
     ``torch.from_numpy(um.to_filters(motifs))`` can be set as a layer's
     weights, or used to scan one-hot sequences from
     [`one_hot()`][universalmotif.one_hot]. Filters hold the motifs as
-    ``use_type``, log2 odds by default, and motifs narrower than the widest
+    ``use_type``: by default their own contributions when every motif is a
+    CWM, such as the patterns of
+    [`read_modisco()`][universalmotif.read_modisco], and log2 odds
+    otherwise. Motifs narrower than the widest
     are padded with zeros, on the right with ``align="left"`` or on both
     sides with ``"centre"``. With ``rc``, each motif's reverse complement
     follows it, for DNA and RNA motifs. All motifs must share an alphabet.
+    A filter has a fixed width, so the gaps of gapped motifs are left out,
+    with a warning, and their columns run together.
 
     Examples
     --------
@@ -54,7 +59,16 @@ def to_filters(
         raise ValueError("all motifs must share an alphabet")
     if align not in ("left", "centre", "center"):
         raise ValueError('align must be "left" or "centre"')
-    mats = [np.asarray(convert_type(m, use_type).matrix, dtype=float) for m in ms]
+    if use_type is None:
+        use_type = "CWM" if all(m.type == "CWM" for m in ms) else "PWM"
+    if use_type == "CWM" and any(m.type != "CWM" for m in ms):
+        raise ValueError('use_type="CWM" needs every motif to be a CWM')
+    if any(m.isgapped for m in ms):
+        import warnings
+
+        warnings.warn("filters have a fixed width, so the gaps of gapped motifs are left out", stacklevel=2)
+    mats = [np.asarray(m.matrix if use_type == "CWM" else convert_type(m, use_type).matrix, dtype=float)
+            for m in ms]
     if rc:
         if ms[0].alphabet not in ("DNA", "RNA"):
             raise ValueError("only DNA and RNA motifs have reverse complements")

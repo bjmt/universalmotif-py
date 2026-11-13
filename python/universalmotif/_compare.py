@@ -99,6 +99,10 @@ def compare_motifs(
     Either way, ``score`` is the mean column correlation or distance over
     the overlap, as it is whenever overhangs are ignored.
 
+    The gaps of gapped motifs are not used: their columns are compared as if
+    they followed one another, so a gapped motif scores as its ungapped
+    columns would.
+
     To search a database with a query motif, such as to name a motif from
     [`motif_finder()`][universalmotif.motif_finder] or a TF-MoDISco pattern,
     ``complete=True`` is the better choice, as it picks the same best match
@@ -303,6 +307,9 @@ def merge_motifs(
     the one with the largest total contribution by cosine similarity,
     keeping their sign, and their aligned contributions are averaged, with
     positions covered by no motif left at 0.
+
+    Gaps are not used: gapped motifs are aligned with their columns running
+    together, and the merged motif has no gaps.
 
     The default name joins the merged motifs' names.
 

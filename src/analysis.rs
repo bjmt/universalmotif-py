@@ -733,7 +733,8 @@ fn _motif_tree<'py>(
 }
 
 /// Hits of contribution scores, as numpy columns: motif, sequence, start,
-/// end, whether on the minus strand, score, similarity and importance.
+/// end, whether on the minus strand, score, similarity and importance, and
+/// the gap sizes of each hit of a gapped motif, by row.
 type ContribColumns<'py> = (
     Bound<'py, numpy::PyArray1<u32>>,
     Bound<'py, numpy::PyArray1<u32>>,
@@ -743,6 +744,7 @@ type ContribColumns<'py> = (
     Bound<'py, numpy::PyArray1<f64>>,
     Bound<'py, numpy::PyArray1<f64>>,
     Bound<'py, numpy::PyArray1<f64>>,
+    Vec<(usize, Vec<usize>)>,
 );
 
 #[pyfunction]
@@ -755,6 +757,7 @@ fn _scan_contributions<'py>(
     min_similarity: Vec<f64>,
     min_importance: Vec<f64>,
     rc: bool,
+    use_gaps: bool,
     nthreads: usize,
 ) -> PyResult<ContribColumns<'py>> {
     use numpy::{IntoPyArray, PyUntypedArrayMethods};
@@ -779,7 +782,11 @@ fn _scan_contributions<'py>(
             min_importance: i,
         })
         .collect();
-    let opts = ContribScanOptions { rc, nthreads };
+    let opts = ContribScanOptions {
+        rc,
+        use_gaps,
+        nthreads,
+    };
     let hits = py
         .detach(|| scan_contributions(&motifs, values, &lengths, width, &thresholds, &opts))
         .map_err(err)?;
@@ -815,6 +822,11 @@ fn _scan_contributions<'py>(
         score.into_pyarray(py),
         similarity.into_pyarray(py),
         importance.into_pyarray(py),
+        hits.iter()
+            .enumerate()
+            .filter(|(_, h)| !h.gaps.is_empty())
+            .map(|(i, h)| (i, h.gaps.clone()))
+            .collect(),
     ))
 }
 

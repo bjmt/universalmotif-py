@@ -44,6 +44,20 @@ def test_filter_options():
         um.to_filters(um.create_motif("MKV", alphabet="AA"), rc=True)
 
 
+def test_filters_of_cwms_and_gapped_motifs():
+    m = np.zeros((4, 6))
+    m[[2, 0, 3, 0, 0, 2], range(6)] = [0.9, -0.2, 0.7, 0.6, 0, 0.4]
+    cwm = um.create_motif(m, type="CWM", alphabet="DNA", name="cwm")
+    # CWMs are kept as their contributions, zeros and negatives included.
+    np.testing.assert_allclose(um.to_filters(cwm)[0], m, rtol=1e-6)
+    assert um.to_filters([cwm, um.example_motifs()[0]], use_type="PPM").shape == (2, 4, 10)
+    with pytest.raises(ValueError, match="CWM"):
+        um.to_filters([cwm, um.example_motifs()[0]], use_type="CWM")
+    with pytest.warns(UserWarning, match="gaps"):
+        gapped = um.to_filters(um.add_gap(cwm, gaploc=3))
+    np.testing.assert_allclose(gapped[0], m, rtol=1e-6)
+
+
 def test_from_filters():
     motifs = um.example_motifs()[:3]
     back = um.from_filters(um.to_filters(motifs, align="centre"), names=[m.name for m in motifs])

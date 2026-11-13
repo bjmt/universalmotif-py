@@ -310,6 +310,7 @@ def scan_contributions(
     thresholds: Any = None,
     rc: bool = True,
     normalize: bool = False,
+    use_gaps: bool = True,
     no_overlaps: bool = True,
     no_overlaps_by: str = "score",
     no_overlaps_by_strand: bool = True,
@@ -385,6 +386,14 @@ def scan_contributions(
         too would lose many of the seqlets in the strongest sequences. ``score``
         and ``importance`` are those of the scaled scores. A single sequence
         is its own median, so it needs others alongside it.
+    use_gaps
+        Match gapped CWMs, such as from
+        [`add_gap()`][universalmotif.add_gap], with their gaps, trying
+        every combination of gap sizes and keeping the best at each start.
+        The letters in a gap belong to no column of the CWM, so they count
+        towards neither the similarity nor the importance, and they are
+        shown as dots in ``match``, as in ``scan_sequences()``. Otherwise the
+        columns are matched as if they followed one another.
     no_overlaps, no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif
         Remove overlapping hits of each motif in each sequence, keeping
         those with the highest ``no_overlaps_by``, the ``score``,
@@ -463,8 +472,18 @@ def scan_contributions(
         target = np.median(rms[rms > 0]) if (rms > 0).any() else 1.0
         factor = np.where(rms > 0, np.maximum(1.0, target / np.where(rms > 0, rms, 1.0)), 1.0)
         projected = (projected * factor[:, None, None].astype(np.float32)).astype(np.float32, copy=False)
-    motif_i, seq_i, start, end, minus, score, similarity, importance = _core._scan_contributions(
-        ms, projected, scores.lengths.tolist(), smin, imin, rc, _nthreads(nthreads))
+    motif_i, seq_i, start, end, minus, score, similarity, importance, gapped = _core._scan_contributions(
+        ms, projected, scores.lengths.tolist(), smin, imin, rc, use_gaps, _nthreads(nthreads))
+    letters = (_window_letters(codes, projected, seq_i.astype(np.int64), start, end, minus)
+               if len(seq_i) else np.empty(0, dtype=object))
+    for row, sizes in gapped:
+        # Gaps sit after the motif's gap locations, read along the motif.
+        site = list(letters[row])
+        at = 0
+        for loc, size in zip(ms[motif_i[row]].gaploc, sizes):
+            site[loc + at:loc + at + size] = "." * size
+            at += size
+        letters[row] = "".join(site)
     seq_names = scores.names or [f"seq{i + 1}" for i in range(projected.shape[0])]
     hits = pl.DataFrame({
         "motif": pl.Series(np.asarray(names, dtype=object)[motif_i] if len(motif_i) else [], dtype=pl.String),
@@ -478,8 +497,7 @@ def scan_contributions(
         "score": score,
         "similarity": similarity,
         "importance": importance,
-        "match": pl.Series(_window_letters(codes, projected, seq_i.astype(np.int64), start, end, minus)
-                           if len(seq_i) else [], dtype=pl.String),
+        "match": pl.Series(letters, dtype=pl.String),
     })
     if no_overlaps and hits.height:
         hits = dedup_hits(hits, by=no_overlaps_by, ignore_strand=no_overlaps_by_strand,

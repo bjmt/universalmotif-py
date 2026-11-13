@@ -357,6 +357,7 @@ def _scan_contributions(
     min_similarity: list[float],
     min_importance: list[float],
     rc: bool,
+    use_gaps: bool,
     nthreads: int,
 ) -> tuple[
     npt.NDArray[np.uint32],
@@ -367,6 +368,7 @@ def _scan_contributions(
     npt.NDArray[np.float64],
     npt.NDArray[np.float64],
     npt.NDArray[np.float64],
+    list[tuple[int, list[int]]],
 ]: ...
 def _merge_motifs(
     motifs: list[Motif],

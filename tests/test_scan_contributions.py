@@ -196,3 +196,24 @@ def test_normalize_raises_weak_sequences():
     np.testing.assert_allclose(scaled["importance"][:2], plain["importance"])
     np.testing.assert_allclose(scaled["importance"][2], plain["importance"][0], rtol=1e-5)
     assert um.scan_contributions(cwm, x[2:], normalize=True).height == 0
+
+
+def test_gapped_cwms():
+    core = np.zeros((4, 10))
+    core[[2, 0, 3, 0, 1, 0, 1, 2, 3, 2], range(10)] = 1.0  # GATA, then CACGTG
+    gapped = um.add_gap(_cwm("gapped", core), gaploc=4, mingap=2, maxgap=6)
+    site = "GATATTTTCACGTG"
+    rc = site[::-1].translate(str.maketrans("ACGT", "TGCA"))
+    seqs = ["TT" + site + "TT", "CC" + rc + "CC", "TTGATACCACGTGTTTTT"]
+    weights = np.full((3, 18), 0.01, dtype=np.float32)
+    weights[:2, 2:16] = 0.5
+    weights[2, 2:13] = 0.5
+    x = um.one_hot(seqs) * weights[:, None, :]
+    hits = um.scan_contributions(gapped, x, min_similarity=0.99, min_importance=0)
+    # The third sequence's gap of one letter is too short.
+    assert hits.select("sequence_i", "start", "end", "strand", "match").rows() == [
+        (0, 2, 16, "+", "GATA....CACGTG"), (1, 2, 16, "-", "GATA....CACGTG")]
+    np.testing.assert_allclose(hits["similarity"], 1.0, atol=1e-6)
+    # The gap's letters count towards neither measure.
+    np.testing.assert_allclose(hits["importance"], 5.0, atol=1e-5)
+    assert um.scan_contributions(gapped, x, min_similarity=0.99, min_importance=0, use_gaps=False).height == 0
