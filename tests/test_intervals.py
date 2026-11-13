@@ -349,3 +349,31 @@ def test_write_bed(tmp_path):
     assert (tmp_path / "n.bed").read_text().splitlines()[1] == "chr2\t5\t9\ty\t.\t."
     with pytest.raises(ValueError, match="no gene column"):
         um.write_bed(plain, tmp_path / "x.bed", name="gene")
+
+
+def test_scan_sequences_in_ranges(tmp_path):
+    ap1 = um.example_motifs()[1]
+    rnd = um.create_sequences(seqnum=2, seqlen=3000, seed=5)
+    genome = {"chr1": rnd[0][:1000] + "TGACTCA" + rnd[0][1007:], "chr2": rnd[1]}
+    ranges = pl.DataFrame({"chrom": ["chr1", "chr1", "chr2", "chr2"], "start": [900, 1003, 0, 2500],
+                           "end": [1004, 1100, 500, 2500], "strand": ["+", "-", "-", "+"]})
+    hits = um.scan_sequences(ap1, genome, ranges=ranges, pvalue=1e-3)
+    # The first two ranges touch and are merged, so the site across them is
+    # found once per strand; the empty range is skipped.
+    assert set(hits["sequence"]) <= {"chr1:900-1100", "chr2:0-500"}
+    assert hits.filter(pl.col("start") == 999)["strand"].sort().to_list() == ["+", "-"]
+    whole = um.genomic_hits(um.scan_sequences(ap1, um.extract_ranges(
+        genome, [("chr1", 0, 3000), ("chr2", 0, 3000)]), pvalue=1e-3))
+    inside = whole.filter(
+        ((pl.col("chrom") == "chr1") & (pl.col("start") >= 900) & (pl.col("end") <= 1100))
+        | ((pl.col("chrom") == "chr2") & (pl.col("end") <= 500)))
+    key = ["chrom", "start", "end", "strand"]
+    assert hits.select(key).sort(key).equals(inside.select(key).sort(key))
+    # Paths, Genomes and packed sequences give the same hits.
+    um.write_fasta(genome, tmp_path / "g.fa")
+    for src in (tmp_path / "g.fa", str(tmp_path / "g.fa"), um.Genome(tmp_path / "g.fa"),
+                um.read_fasta(tmp_path / "g.fa", packed=True)):
+        assert um.scan_sequences(ap1, src, ranges=ranges, pvalue=1e-3).select(key).equals(hits.select(key))
+    assert um.scan_sequences(ap1, genome, ranges=[("chr2", 10, 12)]).height == 0
+    with pytest.raises(TypeError, match="needs a Genome"):
+        um.scan_sequences(ap1, ["ACGT"], ranges=ranges)

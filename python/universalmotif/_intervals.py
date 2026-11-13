@@ -7,6 +7,7 @@ import gzip
 import io
 import os
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 import polars as pl
@@ -320,6 +321,34 @@ def write_bed(
         raise FileExistsError(f"{path} exists; set overwrite=True")
     with (gzip.open(path, "wt", compresslevel=6) if path.suffix == ".gz" else open(path, "w")) as f:
         f.write("".join(ln + "\n" for ln in lines))
+
+
+def _merged_ranges(ranges) -> pl.DataFrame:
+    """Ranges with overlapping and touching ones merged, ignoring strand,
+    sorted by chromosome and start."""
+    df = _range_table(ranges, "ranges").filter(pl.col("end") > pl.col("start")).sort("chrom", "start")
+    out: list[list] = []
+    for chrom, start, end in df.select("chrom", "start", "end").iter_rows():
+        if out and out[-1][0] == chrom and start <= out[-1][2]:
+            out[-1][2] = max(out[-1][2], end)
+        else:
+            out.append([chrom, start, end])
+    return pl.DataFrame(out, schema={"chrom": pl.String, "start": pl.Int64, "end": pl.Int64}, orient="row")
+
+
+def _scan_ranges(motifs, genome, ranges, nthreads, kwargs) -> pl.DataFrame:
+    """scan_sequences(ranges=): scan the merged ranges of a genome and place
+    the hits on it."""
+    from ._analysis import scan_sequences
+    from ._genome import Genome, extract_ranges
+    from ._packed import PackedSequences
+
+    if isinstance(genome, (str, os.PathLike)):
+        genome = Genome(genome)
+    elif not isinstance(genome, (Genome, PackedSequences, Mapping)):
+        raise TypeError("scanning ranges needs a Genome, packed sequences, sequences by name or a FASTA path")
+    seqs = extract_ranges(genome, _merged_ranges(ranges), nthreads=nthreads)
+    return genomic_hits(scan_sequences(motifs, seqs, **kwargs))
 
 
 def genomic_hits(hits: pl.DataFrame, ranges=None) -> pl.DataFrame:

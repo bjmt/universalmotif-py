@@ -48,6 +48,8 @@ New:
   `resize_ranges()` gives ranges one width around their centre, start, end
   or narrowPeak summit, dropping or trimming windows that run off a
   chromosome.
+- `scan_sequences(ranges=)` scans only the given ranges of a genome,
+  merging those that overlap, and returns the hits on the genome.
 - Backgrounds can be given as the table `get_bkg()` returns, wherever a
   background is taken, and so can `create_sequences(freqs=)`.
 - `mask_complexity()` masks low-complexity regions of DNA and RNA with

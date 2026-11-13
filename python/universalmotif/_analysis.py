@@ -275,6 +275,7 @@ def scan_sequences(
     correct_gaps: bool = True,
     first_hit: bool = False,
     trim_names: bool = True,
+    ranges=None,
 ) -> pl.DataFrame:
     """Scan sequences for motif hits.
 
@@ -351,6 +352,19 @@ def scan_sequences(
         first word of its header, as
         [`read_fasta()`][universalmotif.read_fasta] does, which fails if two
         sequences then share a name; otherwise names are whole headers.
+    ranges
+        Scan only these ranges of a genome, given as ``sequences``: a
+        [`Genome`][universalmotif.Genome], packed sequences, sequences by
+        name or the path of a FASTA file. The ranges can be a DataFrame such
+        as [`read_bed()`][universalmotif.read_bed] returns, or any form
+        [`extract_ranges()`][universalmotif.extract_ranges] takes.
+        Overlapping and touching ranges are merged first, so that their
+        union is scanned and each site is reported once, even one spanning
+        two ranges; their strands are ignored, since both strands are
+        scanned as ``rc`` says. A site must lie wholly inside the ranges, so
+        pad them, for example with
+        [`resize_ranges()`][universalmotif.resize_ranges], when sites at
+        their edges matter.
 
     Returns
     -------
@@ -364,7 +378,11 @@ def scan_sequences(
         inputs; ``start`` and ``end`` are positions on the forward strand,
         counted from 0 with the end left out, so a hit's letters are
         ``sequence[start:end]``. Rows are ordered by motif, sequence and
-        start.
+        start. With ``ranges``, hits are placed on the genome as
+        [`genomic_hits()`][universalmotif.genomic_hits] places them: a
+        ``chrom`` column is added, ``start`` and ``end`` are positions on the
+        chromosome, and ``sequence`` names the merged range each hit came
+        from.
 
     Examples
     --------
@@ -392,6 +410,14 @@ def scan_sequences(
     ('target_015', 187, '+')
     """
     nthreads = _nthreads(nthreads)
+    if ranges is not None:
+        from ._intervals import _scan_ranges
+
+        return _scan_ranges(motifs, sequences, ranges, nthreads, {
+            "pvalue": pvalue, "rc": rc, "nthreads": nthreads, "no_overlaps": no_overlaps,
+            "no_overlaps_by": no_overlaps_by, "no_overlaps_by_strand": no_overlaps_by_strand,
+            "no_overlaps_by_motif": no_overlaps_by_motif, "use_gaps": use_gaps,
+            "correct_gaps": correct_gaps, "first_hit": first_hit})
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
     rc = _default_rc(rc, ms)
     if first_hit and no_overlaps:
