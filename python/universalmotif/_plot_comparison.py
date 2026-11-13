@@ -346,6 +346,7 @@ def plot_comparison(
     label_w = _text_inches(fig, ordered, label_size) if show_labels else 0.0
     cbar_text = max(_text_inches(fig, [f"{hi:.2g}", f"{lo:.2g}", "0.00"], 0.8 * text_size), 0.3)
     widest_logo = max(ms[i].width for i in order) if logos else 0
+    cut_text = (0.75 * text_size * 1.3 + 3) / 72
 
     def layout(c: float):
         """Column and row sizes in inches for a cell size of c."""
@@ -360,7 +361,9 @@ def plot_comparison(
         if show_labels:
             cols += [("gap", 0.06), ("labels", label_w)]
         cols += [("gap", 0.25), ("colour bar", 0.12), ("margin", cbar_text + 0.35)]
-        rows = [("margin", 0.1)]
+        # Room above the heatmap for the cut's label, drawn there with a left
+        # dendrogram.
+        rows = [("margin", 0.1 + (cut_text if cut_at is not None and left_tree else 0.0))]
         if top_tree:
             rows += [("dendrogram top", tree_w), ("gap", 0.04)]
         rows += [("heatmap", side), ("margin", label_w + 0.15 if show_labels else 0.1)]
@@ -451,7 +454,7 @@ def plot_comparison(
             if cut_at is not None:
                 tax.axvline(cut_at, color=_CUT_COLOUR, linewidth=1.0, linestyle="--")
                 tax.annotate(cut_label, (cut_at, -0.5), xytext=(0, 3), textcoords="offset points",
-                             ha="center", va="bottom", fontsize=0.75 * text_size, color=_CUT_COLOUR,
+                             ha="left", va="bottom", fontsize=0.75 * text_size, color=_CUT_COLOUR,
                              annotation_clip=False)
         if top_tree:
             tax = fig.add_subplot(gs[row_of["dendrogram top"], col_of["heatmap"]], label="dendrogram top")
