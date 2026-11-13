@@ -301,3 +301,23 @@ def test_coocc_presence_from_first_hits():
     want = um.motif_coocc(motifs, hits=hits, n_sequences=len(seqs))
     got = um.motif_coocc(motifs, seqs, pvalue=1e-3, no_overlaps=True, nthreads=2)
     assert got.equals(want)
+
+
+def test_dedup_hits_and_coocc_take_seqlet_like_tables():
+    # Seqlets have scores but no P-values, and name their patterns.
+    hits = pl.DataFrame({
+        "motif": ["p0", "p0", "p1", "p1", "p0"], "motif_i": [0, 0, 1, 1, 0],
+        "sequence": ["s0", "s0", "s0", "s1", "s2"], "sequence_i": [0, 0, 0, 1, 2],
+        "start": [10, 12, 40, 5, 7], "end": [20, 22, 50, 15, 17], "strand": ["+", "-", "+", "+", "+"],
+        "score": [0.2, 0.9, 0.5, 0.4, 0.3],
+    })
+    kept = um.dedup_hits(hits)
+    assert kept.filter(pl.col("sequence") == "s0", pl.col("motif") == "p0")["score"].to_list() == [0.9]
+    assert kept.height == 4
+    assert um.dedup_hits(hits, by="score").equals(kept)
+    res = um.motif_coocc(hits=hits, n_sequences=3)
+    assert res.select("motif_a", "motif_b", "both").rows() == [("p0", "p1", 1)]
+    named = [um.create_motif("TGACTCA", name="p0"), um.create_motif("CACGTG", name="p1")]
+    assert um.motif_coocc(named, hits=hits, n_sequences=3).equals(res)
+    with pytest.raises(ValueError, match="motifs are needed"):
+        um.motif_coocc(sequences=["ACGT"])

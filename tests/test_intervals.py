@@ -158,11 +158,13 @@ def test_genomic_hits_with_ranges():
         um.genomic_hits(hits, ranges=[("c", 100, 110)])
 
 
-def test_genomic_hits_replaces_a_chrom_column():
-    hits = _hits([("chr1:10-20", 1, 3, "+")]).with_columns(pl.lit("old").alias("chrom"))
-    got = um.genomic_hits(hits)
-    assert got.columns == ["sequence", "chrom", "start", "end", "strand"]
-    assert got.row(0) == ("chr1:10-20", "chr1", 11, 13, "+")
+def test_genomic_hits_refuses_hits_already_on_the_genome():
+    hits = _hits([("chr1:10-20", 1, 3, "+")])
+    on_genome = um.genomic_hits(hits)
+    assert on_genome.row(0)[1:] == ("chr1", 11, 13, "+")
+    # Moving them again would shift them a second time.
+    with pytest.raises(ValueError, match="already on the genome"):
+        um.genomic_hits(on_genome)
 
 
 def test_to_pyranges_conversions(monkeypatch):

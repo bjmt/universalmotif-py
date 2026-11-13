@@ -486,7 +486,10 @@ def dedup_hits(
     [`scan_sequences()`][universalmotif.scan_sequences] does with
     ``no_overlaps``; ``ignore_strand=False`` keeps the strands apart, and
     ``ignore_motif`` compares hits of different motifs too. ``start`` and
-    ``end`` columns are required, with the end left out as in a slice.
+    ``end`` columns are required, with the end left out as in a slice. Hits
+    without a ``pvalue`` column, such as seqlets from
+    [`read_seqlets()`][universalmotif.read_seqlets], are ranked by ``score``
+    instead when ``by`` is left at its default.
 
     Examples
     --------
@@ -502,6 +505,8 @@ def dedup_hits(
     >>> um.dedup_hits(hits, ignore_strand=False).height
     4
     """
+    if by == "pvalue" and "pvalue" not in hits.columns and "score" in hits.columns:
+        by = "score"
     for col in (seq, motif, strand, "start", "end", by):
         if col not in hits.columns:
             raise ValueError(f"hits is missing the column {col!r}")

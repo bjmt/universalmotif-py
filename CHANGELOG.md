@@ -72,6 +72,12 @@ Fixes:
 - `umotif enrich --test` takes `sites`, the name `enrich_motifs()` uses,
   and still accepts `hits`.
 - Command line errors no longer lose a quote at either end of the message.
+- `genomic_hits()` refuses hits that already have a `chrom` column, such as
+  seqlets read with regions, which it moved a second time before.
+- `dedup_hits()` ranks hits by `score` when there is no `pvalue` column,
+  as with seqlets, where it failed before.
+- `motif_coocc()` takes the motifs from a hits table when `motifs` is left
+  out.
 - `logo --each` cuts file names to 100 characters, which merged motifs,
   named after all their members, could overrun.
 - `view_motifs()` signatures show `fit_to_height=<default>` instead of an

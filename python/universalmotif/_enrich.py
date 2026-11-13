@@ -143,6 +143,16 @@ def _outside(values: pl.Series, lo: int, hi: int | None = None) -> bool:
     return hi is not None and bool((values >= hi).any())
 
 
+def _hit_motif_names(hits: pl.DataFrame) -> tuple[list[str], pl.DataFrame]:
+    """The motifs named in a hits table, in the order of motif_i if it has
+    one, and the table with motifs matched by name."""
+    if "motif" not in hits.columns:
+        raise ValueError("without motifs, hits must have a motif column of names")
+    order = hits.sort("motif_i", maintain_order=True) if "motif_i" in hits.columns else hits
+    names = order["motif"].cast(pl.String).fill_null("None").unique(maintain_order=True).to_list()
+    return names, hits.drop("motif_i", strict=False)
+
+
 def _coocc_hits(hits: pl.DataFrame, names: list[str], n_sequences: int, need_start: bool):
     if "sequence_i" not in hits.columns:
         raise ValueError("hits must have a sequence_i column")
@@ -185,7 +195,7 @@ _COOCC_SCHEMA = {
 
 
 def motif_coocc(
-    motifs: Motif | Iterable[Motif],
+    motifs: Motif | Iterable[Motif] | None = None,
     sequences: Sequence[str] | Mapping[str, str] | None = None,
     hits: pl.DataFrame | None = None,
     n_sequences: int | None = None,
@@ -218,7 +228,10 @@ def motif_coocc(
     ``no_overlaps_by_strand`` is false. A
     hits table, which works for any alphabet, needs a 0-based
     ``sequence_i`` column and either a 0-based ``motif_i`` column or a
-    ``motif`` column of names.
+    ``motif`` column of names. With a hits table, ``motifs`` can be left
+    out, and the motifs are then those named in its ``motif`` column, such as
+    the patterns of seqlets from
+    [`read_seqlets()`][universalmotif.read_seqlets].
 
     With ``max_distance``, two descriptive columns that do not affect the
     test are added: ``both_clustered``, the number of shared sequences whose
@@ -251,11 +264,15 @@ def motif_coocc(
         raise ValueError("max_distance must be a non-negative integer")
     if min_coocc < 0 or pseudocount < 0:
         raise ValueError("min_coocc and pseudocount must be non-negative")
-    ms = _motif_list(motifs)
-    if len(ms) < 2 and not self_pairs:
+    if motifs is None:
+        if hits is None:
+            raise ValueError("motifs are needed to scan sequences")
+        names, hits = _hit_motif_names(hits)
+    else:
+        ms = _motif_list(motifs)
+        names = _make_unique([m.name or f"motif_{i + 1}" for i, m in enumerate(ms)])
+    if len(names) < 2 and not self_pairs:
         raise ValueError("need at least 2 motifs (or self_pairs=True)")
-    names = [m.name or f"motif_{i + 1}" for i, m in enumerate(ms)]
-    names = _make_unique(names)
     if hits is None:
         _, seqs = _sequence_pairs(sequences)
         n_sequences = len(seqs)
@@ -273,7 +290,7 @@ def motif_coocc(
             raise ValueError("n_sequences must be a positive integer when hits are given")
         motif, sequence, start = _coocc_hits(hits, names, n_sequences, max_distance is not None)
     pairs = _core._coocc(
-        motif, sequence, start, len(ms), n_sequences, max_distance, min_coocc, pseudocount, self_pairs,
+        motif, sequence, start, len(names), n_sequences, max_distance, min_coocc, pseudocount, self_pairs,
         nthreads, names,
     )
     schema = dict(_COOCC_SCHEMA)

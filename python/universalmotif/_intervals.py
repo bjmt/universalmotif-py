@@ -372,6 +372,11 @@ def genomic_hits(hits: pl.DataFrame, ranges=None) -> pl.DataFrame:
     table or (chrom, start, end[, strand]) tuples, and hits are matched to
     them by ``sequence_i``.
 
+    Hits that already have a ``chrom`` column, such as those of
+    ``scan_sequences(ranges=)`` or of
+    [`read_seqlets()`][universalmotif.read_seqlets] given regions, are on the
+    genome already and are refused.
+
     Hits in overlapping ranges are reported once for each, so the same site
     can appear more than once, and
     ``.unique(["motif", "chrom", "start", "end", "strand"], maintain_order=True)``
@@ -391,6 +396,9 @@ def genomic_hits(hits: pl.DataFrame, ranges=None) -> pl.DataFrame:
     for col in ("sequence", "start", "end", "strand"):
         if col not in hits.columns:
             raise ValueError(f"hits must have a {col!r} column")
+    if "chrom" in hits.columns:
+        raise ValueError("hits with a 'chrom' column are already on the genome, and moving them again "
+                         "would shift them twice")
     if ranges is None:
         names = hits["sequence"].cast(pl.String)
         unique = names.unique(maintain_order=True).to_list()
