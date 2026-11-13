@@ -35,6 +35,10 @@ Changes in behaviour:
   contributions when every motif is one, and `merge_motifs()` merges them
   as CWMs, where they were compared and merged as probabilities of their
   absolute values before.
+- `plot_comparison()` aligns its logos to one another, within each group
+  when the tree is cut, and marks flipped ones with `rc_text`;
+  `align_logos=False` draws them as they are. `view_motifs()` and tree tip
+  logos align CWMs by the cosine of their contributions.
 - Writers gzip `.gz` paths at level 6, as the `gzip` command does, which
   is about four times faster than before for files 3% larger.
 

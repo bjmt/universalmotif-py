@@ -445,7 +445,9 @@ def view_motifs(
     one with the highest information content (for CWMs, that of their
     probabilities) in the same way as
     [`compare_motifs()`][universalmotif.compare_motifs] aligns them, trying
-    reverse complements of DNA and RNA motifs with ``rc``. Motifs that align
+    reverse complements of DNA and RNA motifs with ``rc``, so that CWMs are
+    aligned by the cosine of their contributions, keeping their signs, and
+    other motifs by column correlation. Motifs that align
     better as reverse complements are flipped and get ``rc_text`` added to
     their names, and all of them are padded into a common frame and drawn
     one above the other. With ``align=False`` they are drawn as they are,

@@ -26,7 +26,7 @@ def _axes(fig):
 
 
 def _row_labels(fig):
-    return [t.get_text() for t in _axes(fig)["labels"].texts]
+    return [t.get_text().removesuffix(" [RC]") for t in _axes(fig)["labels"].texts]
 
 
 def _cells(fig):
@@ -311,3 +311,29 @@ def test_cwms_are_drawn_by_cosine():
     order = um.motif_tree(cwms, min_overlap=6, metric="CJACCARD", sign="ignore").order
     fig = plot_comparison(cwms, metric="CJACCARD", sign="ignore")
     np.testing.assert_allclose(_cells(fig), ignored[np.ix_(order, order)], rtol=1e-12)
+
+
+def test_logos_are_aligned_within_groups():
+    rng = np.random.default_rng(4)
+
+    def cwm(name, mat):
+        return um.create_motif(np.asarray(mat, dtype=float), type="CWM", name=name, alphabet="DNA")
+
+    core = np.zeros((4, 6))
+    core[[2, 0, 3, 0, 0, 2], range(6)] = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4]  # GATAAG
+    weak = np.full((4, 3), 0.01)
+    other = rng.normal(0, 0.3, (4, 7))
+    cwms = [cwm("a", core), cwm("b", np.concatenate([weak, core[::-1, ::-1]], axis=1)),
+            cwm("c", np.concatenate([weak, core], axis=1)), cwm("d", other)]
+    fig = plot_comparison(cwms, cut=0.8)
+    labels = [t.get_text() for t in _axes(fig)["labels"].texts]
+    flipped = {lab.removesuffix(" [RC]"): lab.endswith(" [RC]") for lab in labels}
+    # b is the reverse complement of a and c, whichever of them anchors.
+    assert flipped["a"] == flipped["c"] != flipped["b"] and not flipped["d"]
+    ticks = [t.get_text() for t in _axes(fig)["heatmap"].get_xticklabels()]
+    assert sorted(ticks) == ["a", "b", "c", "d"]
+    # The cores line up, with the weak columns of b and c at opposite ends.
+    assert _axes(fig)["logos"].get_xlim() == (0, 12)
+    plain = plot_comparison(cwms, cut=0.8, align_logos=False)
+    assert all("[RC]" not in t.get_text() for t in _axes(plain)["labels"].texts)
+    assert _axes(plain)["logos"].get_xlim() == (0, 9)

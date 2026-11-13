@@ -3,6 +3,7 @@
 use pyo3::prelude::*;
 use universalmotif::compare::{CompareOptions, anchor_layout};
 use universalmotif::convert::{convert_type, ppm_to_icm, ppm_to_pcm, ppm_to_pwm};
+use universalmotif::similarity::{CwmCompareOptions, CwmMetric, cwm_anchor_layout};
 use universalmotif::{Motif, MotifType};
 
 use crate::{PyMotif, err};
@@ -41,8 +42,12 @@ fn _display_matrix(
 }
 
 /// Placements (left padding and whether to reverse complement) of motifs
-/// aligned to `motifs[anchor]`, and the width of the shared frame.
+/// aligned to `motifs[anchor]`, and the width of the shared frame. CWMs are
+/// aligned by their similarity, with `metric` and `ignore_sign` as in
+/// comparisons, and other motifs by column correlation.
 #[pyfunction]
+#[pyo3(signature = (motifs, anchor, min_overlap, rc, nthreads, metric=None, ignore_sign=false))]
+#[allow(clippy::too_many_arguments)]
 fn _anchor_layout(
     py: Python<'_>,
     motifs: Vec<PyRef<'_, PyMotif>>,
@@ -50,17 +55,33 @@ fn _anchor_layout(
     min_overlap: usize,
     rc: bool,
     nthreads: usize,
+    metric: Option<&str>,
+    ignore_sign: bool,
 ) -> PyResult<(Vec<(usize, bool)>, usize)> {
     let motifs: Vec<Motif> = motifs.iter().map(|m| m.inner.clone()).collect();
-    let opts = CompareOptions {
-        min_overlap,
-        rc,
-        nthreads,
-        ..Default::default()
-    };
-    let layout = py
-        .detach(|| anchor_layout(&motifs, anchor, &opts))
-        .map_err(err)?;
+    let cwms = motifs.iter().all(|m| m.motif_type == MotifType::Cwm);
+    let layout = match metric {
+        Some(metric) if cwms => {
+            let opts = CwmCompareOptions {
+                metric: metric.parse::<CwmMetric>().map_err(err)?,
+                ignore_sign,
+                min_overlap,
+                rc,
+                nthreads,
+            };
+            py.detach(|| cwm_anchor_layout(&motifs, anchor, &opts))
+        }
+        _ => {
+            let opts = CompareOptions {
+                min_overlap,
+                rc,
+                nthreads,
+                ..Default::default()
+            };
+            py.detach(|| anchor_layout(&motifs, anchor, &opts))
+        }
+    }
+    .map_err(err)?;
     Ok((
         layout.placements.iter().map(|p| (p.left, p.rc)).collect(),
         layout.width,

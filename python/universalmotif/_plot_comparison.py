@@ -11,10 +11,10 @@ import polars as pl
 
 from . import _core
 from ._analysis import _make_unique
-from ._api import _check_motif
+from ._api import _check_motif, motif_rc
 from ._compare import _CWM_METHODS, MotifTree, _comparison_method, _tree, compare_motifs
 from ._core import Motif
-from ._plot import _pyplot, draw_logo
+from ._plot import _anchor_ic, _pyplot, draw_logo
 from ._threads import _nthreads
 
 if TYPE_CHECKING:
@@ -153,6 +153,27 @@ def _text_inches(fig, texts: Sequence[str], size: float) -> float:
     return widest / fig.dpi
 
 
+def _logo_placements(ms, order, groups, metric, sign, min_overlap, rc, nthreads):
+    """Each motif's left column and whether it is flipped, with the motifs of
+    each group aligned to the most informative of them, and the width of the
+    widest group's frame."""
+    members: dict[Any, list[int]] = {}
+    for i in order:
+        members.setdefault(groups[i] if groups is not None else 0, []).append(i)
+    method = _comparison_method(ms, metric)
+    cwm_metric = method if method in _CWM_METHODS else None
+    placed: dict[int, tuple[int, bool]] = {}
+    frame = 0
+    for idx in members.values():
+        sub = [ms[i] for i in idx]
+        ic = [_anchor_ic(m) for m in sub]
+        anchor = max(range(len(sub)), key=lambda k: ic[k])
+        found, width = _core._anchor_layout(sub, anchor, min_overlap, rc, nthreads, cwm_metric, sign == "ignore")
+        placed.update(zip(idx, found))
+        frame = max(frame, width)
+    return [placed[i] for i in range(len(ms))], frame
+
+
 def plot_comparison(
     motifs: Motif | Sequence[Motif] | None = None,
     matrix: Any = None,
@@ -170,6 +191,8 @@ def plot_comparison(
     vmax: float | None = None,
     annotate: bool | None = None,
     logos: bool | None = None,
+    align_logos: bool = True,
+    rc_text: str = " [RC]",
     text_size: float = 10,
     figsize: tuple[float, float] | None = None,
     nthreads: int | None = None,
@@ -250,6 +273,17 @@ def plot_comparison(
     logos
         Draw each motif's logo beside its row label, by default when motifs
         are given and there are up to 60 of them.
+    align_logos, rc_text
+        Align the logos to one another, as
+        [`view_motifs()`][universalmotif.view_motifs] does, by aligning
+        each to the most informative motif of its group when the tree is
+        cut, and of all the motifs otherwise, so that logos of unrelated
+        groups are not lined up. CWMs are aligned by the similarity used for
+        the heatmap and other motifs by column correlation, both over at
+        least ``min_overlap`` columns. Logos that align better as reverse
+        complements are flipped, and ``rc_text`` is added to their row
+        labels. With ``align_logos=False`` logos are drawn as they are, from
+        the left.
     text_size
         The largest font size of labels, which shrink to fit the cells of
         larger heatmaps and are left out once they would be unreadable.
@@ -334,6 +368,8 @@ def plot_comparison(
         annotate = n <= _MAX_ANNOTATED
     if logos is None:
         logos = ms is not None and n <= _MAX_LOGOS
+    placements = _logo_placements(ms, order, groups if cut_at is not None else None, metric, sign, min_overlap,
+                                  rc, nthreads) if logos and align_logos else None
     left_tree = tree is not None and dendrogram in ("left", "both")
     top_tree = tree is not None and dendrogram in ("top", "both")
 
@@ -343,9 +379,13 @@ def plot_comparison(
 
     fig = plt.figure()
     ordered = [labs[i] for i in order]
-    label_w = _text_inches(fig, ordered, label_size) if show_labels else 0.0
+    # Row labels mark flipped logos; column labels name the motifs as given.
+    row_labels = [labs[i] + rc_text if placements is not None and placements[0][i][1] else labs[i]
+                  for i in order]
+    label_w = _text_inches(fig, row_labels, label_size) if show_labels else 0.0
+    tick_w = _text_inches(fig, ordered, label_size) if show_labels else 0.0
     cbar_text = max(_text_inches(fig, [f"{hi:.2g}", f"{lo:.2g}", "0.00"], 0.8 * text_size), 0.3)
-    widest_logo = max(ms[i].width for i in order) if logos else 0
+    widest_logo = (placements[1] if placements is not None else max(ms[i].width for i in order)) if logos else 0
     cut_text = (0.75 * text_size * 1.3 + 3) / 72
 
     def layout(c: float):
@@ -366,7 +406,7 @@ def plot_comparison(
         rows = [("margin", 0.1 + (cut_text if cut_at is not None and left_tree else 0.0))]
         if top_tree:
             rows += [("dendrogram top", tree_w), ("gap", 0.04)]
-        rows += [("heatmap", side), ("margin", label_w + 0.15 if show_labels else 0.1)]
+        rows += [("heatmap", side), ("margin", tick_w + 0.15 if show_labels else 0.1)]
         return cols, rows
 
     cols, rows = layout(cell)
@@ -473,14 +513,15 @@ def plot_comparison(
         lax = fig.add_subplot(gs[hrow, col_of["logos"]], label="logos")
         # Logos are drawn upright, so this axis counts rows from the bottom.
         for k, i in enumerate(order):
-            draw_logo(lax, ms[i], x=0, y=n - 1 - k - 0.4, height=0.8)
+            left, flip = placements[0][i] if placements is not None else (0, False)
+            draw_logo(lax, motif_rc(ms[i]) if flip else ms[i], x=left, y=n - 1 - k - 0.4, height=0.8)
         lax.set_xlim(0, widest_logo)
         lax.set_ylim(-0.5, n - 0.5)
         lax.set_axis_off()
 
     if show_labels:
         nax = fig.add_subplot(gs[hrow, col_of["labels"]], label="labels")
-        for k, lab in enumerate(ordered):
+        for k, lab in enumerate(row_labels):
             nax.text(0, k, lab, ha="left", va="center", fontsize=label_size)
         nax.set_xlim(0, 1)
         nax.set_ylim(n - 0.5, -0.5)
