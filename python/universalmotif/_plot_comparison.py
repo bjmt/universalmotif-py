@@ -12,7 +12,7 @@ import polars as pl
 from . import _core
 from ._analysis import _make_unique
 from ._api import _check_motif
-from ._compare import MotifTree, _tree
+from ._compare import _CWM_METHODS, MotifTree, _comparison_method, _tree, compare_motifs
 from ._core import Motif
 from ._plot import _pyplot, draw_logo
 from ._threads import _nthreads
@@ -26,7 +26,7 @@ _MAX_LOGOS = 60
 _MAX_ANNOTATED = 20
 
 
-def _comparison_input(motifs, matrix, labels, value, min_overlap, rc, nthreads):
+def _comparison_input(motifs, matrix, labels, value, min_overlap, rc, nthreads, metric=None, sign="match"):
     """The motifs, the matrix of values as given or computed, the score
     matrix to cluster on when there is one, and the labels."""
     ms = None
@@ -50,10 +50,20 @@ def _comparison_input(motifs, matrix, labels, value, min_overlap, rc, nthreads):
             raise ValueError("min_overlap must be at least 1")
         if len(ms) < 2:
             raise ValueError("at least two motifs are needed for a comparison")
-        d = _core._compare_matrix(ms, min_overlap, rc, "empirical", None, value != "score", nthreads,
-                                  False)
-        vals = np.array(d[value], dtype=float)
-        scores = np.array(d["score"], dtype=float)
+        metric = _comparison_method(ms, metric)
+        if metric not in ("PCC", *_CWM_METHODS):
+            raise ValueError("metric must be 'PCC', 'COSINE' or 'CJACCARD'")
+        if metric in _CWM_METHODS:
+            kw = {"min_overlap": min_overlap, "rc": rc, "method": metric, "sign": sign, "nthreads": nthreads}
+            scores = compare_motifs(ms, **kw)
+            vals = scores if value == "score" else compare_motifs(ms, matrix_out=value, **kw)
+        else:
+            if sign != "match":
+                raise ValueError("sign='ignore' applies to COSINE and CJACCARD only")
+            d = _core._compare_matrix(ms, min_overlap, rc, "empirical", None, value != "score", nthreads,
+                                      False)
+            vals = np.array(d[value], dtype=float)
+            scores = np.array(d["score"], dtype=float)
     n = vals.shape[0]
     if n < 2:
         raise ValueError("at least two motifs are needed for a comparison")
@@ -163,6 +173,8 @@ def plot_comparison(
     text_size: float = 10,
     figsize: tuple[float, float] | None = None,
     nthreads: int | None = None,
+    metric: str | None = None,
+    sign: str = "match",
 ) -> Figure:
     """Draw motif similarities as a clustered heatmap.
 
@@ -193,6 +205,14 @@ def plot_comparison(
     value
         What is drawn: ``"score"``, the mean column correlation, or
         ``"pvalue"`` or ``"qvalue"``.
+    metric, sign
+        How motifs are compared: by default the cosine of
+        [`compare_motifs()`][universalmotif.compare_motifs] when every motif
+        is a CWM, keeping the sign of their contributions, and column
+        correlations otherwise, or ``"PCC"``, ``"COSINE"`` or
+        ``"CJACCARD"``. ``sign="ignore"`` compares CWMs by their absolute
+        values. CWM similarities are clustered as correlations are, and
+        ``cut`` is then a similarity such as 0.8.
     min_overlap, rc, nthreads
         Passed to ``compare_motifs()``, with ``nthreads`` by default the
         package setting from [`set_nthreads()`][universalmotif.set_nthreads].
@@ -267,7 +287,8 @@ def plot_comparison(
         raise ValueError("value must be 'score', 'pvalue' or 'qvalue'")
     if dendrogram not in ("left", "top", "both", "none"):
         raise ValueError("dendrogram must be 'left', 'top', 'both' or 'none'")
-    ms, vals, scores, labs = _comparison_input(motifs, matrix, labels, value, min_overlap, rc, nthreads)
+    ms, vals, scores, labs = _comparison_input(motifs, matrix, labels, value, min_overlap, rc, nthreads,
+                                               metric, sign)
     n = len(labs)
     if logos and ms is None:
         raise ValueError("logos need the motifs")

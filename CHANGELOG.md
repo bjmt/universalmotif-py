@@ -30,6 +30,11 @@ Changes in behaviour:
   than 0.05.
 - Functions taking `nthreads` default to the package setting, which is 1
   unless changed.
+- `compare_motifs()`, `merge_similar()`, `motif_tree()` and
+  `plot_comparison()` compare CWMs by the cosine similarity of their
+  contributions when every motif is one, and `merge_motifs()` merges them
+  as CWMs, where they were compared and merged as probabilities of their
+  absolute values before.
 - Writers gzip `.gz` paths at level 6, as the `gzip` command does, which
   is about four times faster than before for files 3% larger.
 
@@ -63,6 +68,11 @@ New:
 - `match_motifs(correct_gaps=)`, `motif_coocc(no_overlaps_by_strand=)` and
   `scan_sequences(trim_names=)`, and the `--no-correct-gaps` and
   `--no-across-strands` options of the command line.
+- `compare_motifs(method="CJACCARD")` compares CWMs by TF-MoDISco's
+  continuous Jaccard similarity, `sign="ignore"` compares their absolute
+  values, and `merge_similar(min_score=)` sets the similarity at which CWMs
+  are merged; `motif_tree()` and `plot_comparison()` take `metric` and
+  `sign`.
 - `plot_comparison(cut=)` and `plot_comparison(cut_height=)` draw where
   the tree would be cut across the dendrogram, and box each group of
   motifs on the heatmap.

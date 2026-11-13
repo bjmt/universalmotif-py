@@ -1,6 +1,7 @@
 """Comparison, merging and trees against the R package's lite functions."""
 
 import numpy as np
+import polars as pl
 import pytest
 
 import universalmotif as um
@@ -430,3 +431,104 @@ def test_euclidean_and_background_pvalues_against_simulation():
             assert low - 4 * se <= tail <= high + 4 * se, (ctx, low, tail, high)
             checked += 1
     assert checked >= 10
+
+
+def _cwm(name, matrix):
+    return um.create_motif(np.asarray(matrix, dtype=float), type="CWM", name=name, alphabet="DNA")
+
+
+def _cwms():
+    rng = np.random.default_rng(3)
+    core = np.zeros((4, 7))
+    core[[3, 2, 0, 1, 3, 1, 0], range(7)] = [0.6, 0.9, 1.2, 0.8, 1.1, 0.7, 0.5]  # TGACTCA
+    core[0, 3] = -0.2
+    other = rng.normal(0, 0.3, (4, 9))
+    shifted = np.concatenate([rng.normal(0, 0.02, (4, 3)), core[:, :5]], axis=1)
+    return [_cwm("ap1", core), _cwm("ap1_rc", core[::-1, ::-1]), _cwm("neg", -core),
+            _cwm("other", other), _cwm("shifted", shifted)]
+
+
+def _cosine(a, b, min_overlap, sign):
+    """Best zero-padded cosine of b against a over offsets and both strands."""
+    if sign == "ignore":
+        a, b = np.abs(a), np.abs(b)
+    norm = np.linalg.norm(a) * np.linalg.norm(b)
+    mo = min(min_overlap, a.shape[1], b.shape[1])
+    best = -np.inf
+    for t in (b, b[::-1, ::-1]):
+        for off in range(-(t.shape[1] - mo), a.shape[1] - mo + 1):
+            lo, hi = max(0, off), min(a.shape[1], off + t.shape[1])
+            best = max(best, np.sum(a[:, lo:hi] * t[:, lo - off:hi - off]) / norm)
+    return best
+
+
+def test_cwms_are_compared_by_cosine():
+    cwms = _cwms()
+    scores = um.compare_motifs(cwms)
+    np.testing.assert_allclose(scores, um.compare_motifs(cwms, method="COSINE"))
+    for sign in ("match", "ignore"):
+        got = um.compare_motifs(cwms, sign=sign)
+        want = [[_cosine(a.matrix, b.matrix, 5, sign) for b in cwms] for a in cwms]
+        np.testing.assert_allclose(got, want, atol=1e-12)
+    assert scores[0, 1] == pytest.approx(1) and scores[0, 2] < 0.3
+    assert um.compare_motifs(cwms, sign="ignore")[0, 2] == pytest.approx(1)
+    assert np.isnan(um.compare_motifs(cwms, matrix_out="pvalue")).sum() == 0
+    # PCC keeps working on CWMs when asked for, through their probabilities.
+    assert um.compare_motifs(cwms, method="PCC")[0, 2] == pytest.approx(1)
+
+
+def test_cwm_searches():
+    cwms = _cwms()
+    hits = um.compare_motifs(cwms, compare_to=0, qvalue=1, rc=True)
+    assert hits["target"][:2].to_list() in (["ap1", "ap1_rc"], ["ap1_rc", "ap1"])
+    assert hits.filter(pl.col("target") == "ap1_rc")["strand"].item() == "-"
+    assert hits["pvalue"].is_finite().all() and hits["pvalue"][0] < 1e-3
+    assert hits["qvalue"].is_sorted()
+    strong = um.compare_motifs(cwms, compare_to="ap1", qvalue=0.05)
+    assert set(strong["target"]) >= {"ap1", "ap1_rc"} and "other" not in strong["target"]
+    jac = um.compare_motifs(cwms, compare_to=0, method="CJACCARD")
+    assert jac.height == len(cwms) and jac["pvalue"].is_nan().all()
+    assert jac["score"].is_sorted(descending=True) and jac["score"][0] == pytest.approx(1)
+    assert um.compare_motifs(cwms, method="CJACCARD")[0, 2] == pytest.approx(0, abs=0.05)
+
+
+def test_cwm_comparison_checks():
+    cwms = _cwms()
+    ppm = um.create_motif("TGACTCA", name="ppm")
+    with pytest.raises(ValueError, match="COSINE compares CWMs"):
+        um.compare_motifs([*cwms, ppm], method="COSINE")
+    for bad in ({"complete": True}, {"overhang": "background"}, {"bkg": [0.25] * 4},
+                {"null": "parametric"}):
+        with pytest.raises(ValueError):
+            um.compare_motifs(cwms, **bad)
+    with pytest.raises(ValueError, match="sign"):
+        um.compare_motifs(cwms, sign="abs")
+    with pytest.raises(ValueError):
+        um.compare_motifs(cwms, method="CJACCARD", matrix_out="pvalue")
+    with pytest.raises(ValueError, match="min_score"):
+        um.merge_similar([ppm, ppm], min_score=0.5)
+
+
+@pytest.mark.filterwarnings("ignore:cluster 0 holds")
+def test_merging_cwms():
+    cwms = _cwms()
+    merged = um.merge_motifs(cwms[:2])
+    assert merged.type == "CWM"
+    np.testing.assert_allclose(merged.matrix, cwms[0].matrix, atol=1e-12)
+    assert um.merge_motifs([cwms[0], cwms[2]]).type == "CWM"
+    clusters = um.merge_similar(cwms, return_clusters=True)
+    groups = clusters.group_by("cluster").agg("name")["name"].to_list()
+    assert sorted(map(sorted, groups)) == [["ap1", "ap1_rc", "shifted"], ["neg"], ["other"]]
+    together = um.merge_similar(cwms, sign="ignore", return_clusters=True)
+    same = together.filter(pl.col("name").is_in(["ap1", "neg"]))["cluster"]
+    assert same.n_unique() == 1
+    strict = um.merge_similar(cwms, min_score=0.99, return_clusters=True)
+    assert strict["cluster"].n_unique() == 4
+    assert all(m.type == "CWM" for m in um.merge_similar(cwms))
+
+
+def test_cwm_trees():
+    cwms = _cwms()
+    tree = um.motif_tree(cwms)
+    assert sorted(tree.labels) == sorted(m.name for m in cwms)
+    assert um.motif_tree(cwms, metric="CJACCARD", sign="ignore") is not None

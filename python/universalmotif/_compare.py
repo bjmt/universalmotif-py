@@ -43,8 +43,9 @@ def compare_motifs(
     matrix_out: str = "score",
     nthreads: int | None = None,
     complete: bool = False,
-    method: str = "PCC",
+    method: str | None = None,
     overhang: str = "ignore",
+    sign: str = "match",
 ):
     """Compare motifs.
 
@@ -106,6 +107,32 @@ def compare_motifs(
     [`motif_tree()`][universalmotif.motif_tree] and
     [`merge_similar()`][universalmotif.merge_similar] keep the default,
     whose scores do not depend on which motif is the query.
+
+    CWMs, such as the patterns of
+    [`read_modisco()`][universalmotif.read_modisco], are compared by default
+    with ``method="COSINE"`` when every motif given is one, which keeps the
+    sign and magnitude of their contributions; comparing them by column
+    correlation turns each column into probabilities of its absolute values,
+    so that a negative pattern looks like a positive one and columns
+    carrying almost no contribution count as much as the core. The cosine of
+    two aligned CWMs is the sum of the products of facing values divided by
+    the product of the two whole matrices' Euclidean norms, as if the
+    columns hanging over either end faced zeros, and ranges from -1 to 1.
+    ``method="CJACCARD"`` uses the continuous Jaccard similarity of
+    TF-MoDISco instead, on matrices scaled to unit L1 norm: the sum of
+    ``min(|a|, |b|)``, signed by whether ``a`` and ``b`` agree, over the sum
+    of ``max(|a|, |b|)``, which is harsher on differences in magnitude. The
+    best alignment is the most similar over both strands and every offset
+    with ``min_overlap`` columns in common. A pattern scores about 0 against
+    its opposite, a negative pattern with the same letters, unless
+    ``sign="ignore"`` compares absolute values. Cosine P-values come from a
+    null of targets with columns drawn from all the CWMs given, in either
+    orientation, Bonferroni-corrected for the alignments tried, as for
+    correlations; continuous Jaccard has scores only, so with ``compare_to``
+    every match is kept, best first. ``null``, ``bkg``, ``complete`` and
+    ``overhang`` do not apply to CWM similarity. To match CWMs against a
+    database of PPMs, compare their PPMs, such as those from
+    ``read_modisco(type="PPM")``, by correlation.
 
     ``nthreads`` defaults to the package setting from
     [`set_nthreads()`][universalmotif.set_nthreads].
@@ -179,11 +206,29 @@ def compare_motifs(
         raise ValueError("qvalue must be in (0, 1]")
     if min_overlap < 1:
         raise ValueError("min_overlap must be at least 1")
-    b = _bkg4(bkg)
+    method = _comparison_method(ms, method)
+    cwm = method in _CWM_METHODS
+    _check_sign(sign, cwm)
+    if cwm:
+        if complete or overhang != "ignore" or null != "empirical" or bkg is not None:
+            raise ValueError("null, bkg, complete and overhang do not apply to COSINE and CJACCARD")
+        if matrix_out != "score" and method == "CJACCARD":
+            raise ValueError("CJACCARD has scores only; use COSINE for P-values")
+    b = None if cwm else _bkg4(bkg)
+
+    def cwm_rows(queries):
+        return pl.DataFrame(_core._compare_cwms(ms, queries, method, sign == "ignore", min_overlap, rc,
+                                                nthreads, names))
 
     if compare_to is None:
         if qvalue != 0.1:
             warnings.warn("qvalue is ignored without compare_to", stacklevel=2)
+        if cwm:
+            if matrix_out == "score":
+                return np.array(_core._cwm_matrix(ms, method, sign == "ignore", min_overlap, rc, nthreads),
+                                dtype=float)
+            rows = cwm_rows(list(range(len(ms))))
+            return rows[matrix_out].to_numpy().reshape(len(ms), len(ms))
         d = _core._compare_matrix(ms, min_overlap, rc, null, b, matrix_out != "score", nthreads,
                                   complete, method, overhang)
         return np.array(d[matrix_out], dtype=float)
@@ -199,12 +244,42 @@ def compare_motifs(
             if not 0 <= int(t) < len(ms):
                 raise ValueError(f"compare_to index {t} is out of range")
             queries.append(int(t))
-    df = pl.DataFrame(
-        _core._compare_table(ms, queries, min_overlap, rc, null, b, nthreads, names, complete,
-                             method, overhang)
-    )
+    if method == "CJACCARD":
+        df = cwm_rows(queries).filter(pl.col("overlap") > 0)
+        return df.sort(["subject_i", "score", "target_i"], descending=[False, True, False],
+                       maintain_order=True)
+    if cwm:
+        df = cwm_rows(queries)
+    else:
+        df = pl.DataFrame(
+            _core._compare_table(ms, queries, min_overlap, rc, null, b, nthreads, names, complete,
+                                 method, overhang)
+        )
     df = df.filter((pl.col("qvalue") <= qvalue) & (pl.col("overlap") > 0))
     return df.sort(["qvalue", "pvalue", "target_i"], maintain_order=True)
+
+
+_CWM_METHODS = ("COSINE", "CJACCARD")
+
+
+def _comparison_method(ms: list[Motif], method: str | None) -> str:
+    """The comparison method: the one given, or by default the cosine when
+    every motif is a CWM and column correlations otherwise."""
+    if method is None:
+        return "COSINE" if ms and all(m.type == "CWM" for m in ms) else "PCC"
+    upper = str(method).upper()
+    if upper in _CWM_METHODS:
+        if not all(m.type == "CWM" for m in ms):
+            raise ValueError(f"{upper} compares CWMs; compare other motifs by PCC or EUCL")
+        return upper
+    return method
+
+
+def _check_sign(sign: str, cwm: bool) -> None:
+    if sign not in ("match", "ignore"):
+        raise ValueError("sign must be 'match' or 'ignore'")
+    if sign == "ignore" and not cwm:
+        raise ValueError("sign='ignore' applies to COSINE and CJACCARD only")
 
 
 def merge_motifs(
@@ -215,7 +290,7 @@ def merge_motifs(
     weighted: bool = False,
     nthreads: int | None = None,
 ) -> Motif:
-    """Merge motifs into one PPM.
+    """Merge motifs into one.
 
     Motifs of any alphabet can be merged. The motif with the highest total
     IC is the anchor. The others are aligned to it, with DNA and RNA motifs
@@ -223,6 +298,12 @@ def merge_motifs(
     probabilities are averaged, weighted by ``nsites`` if ``weighted``. Motifs
     that cannot overlap the anchor by ``min_overlap`` columns are left out,
     with a warning.
+
+    When every motif is a CWM, the result is a CWM too: motifs are aligned to
+    the one with the largest total contribution by cosine similarity,
+    keeping their sign, and their aligned contributions are averaged, with
+    positions covered by no motif left at 0.
+
     The default name joins the merged motifs' names.
 
     ``nthreads`` defaults to the package setting from
@@ -262,6 +343,9 @@ def merge_similar(
     return_clusters: bool = False,
     linkage: str = "single",
     nthreads: int | None = None,
+    method: str | None = None,
+    sign: str = "match",
+    min_score: float | None = None,
 ):
     """Cluster similar motifs and merge each cluster.
 
@@ -279,6 +363,17 @@ def merge_similar(
     depend on chance. A cluster of more than two motifs that holds over a
     quarter of them is named in a warning, as a sign that unlike motifs were
     joined.
+
+    When every motif is a CWM, they are linked instead when their similarity,
+    by ``method``, ``"COSINE"`` by default or ``"CJACCARD"``, and ``sign``,
+    as [`compare_motifs()`][universalmotif.compare_motifs] describes them,
+    reaches ``min_score``, and ``qvalue`` and ``null`` are not used. By
+    default ``min_score`` is 0.8 for the cosine and 0.45 for continuous
+    Jaccard, about where duplicate patterns of one TF-MoDISco run begin:
+    among the 60 patterns of an ENCODE K562 ATAC-seq model, pairs that are
+    clearly the same motif scored 0.82 to 0.95 by cosine, while only 1% of
+    all pairs scored above 0.79. The merged motifs stay CWMs, as
+    [`merge_motifs()`][universalmotif.merge_motifs] makes them.
 
     Returns one motif per cluster, or with ``return_clusters`` a summary
     DataFrame of the input motifs with 0-based ``motif_i`` and ``cluster``
@@ -302,8 +397,16 @@ def merge_similar(
         raise ValueError("linkage must be 'single' or 'complete'")
     nthreads = _nthreads(nthreads)
     ms = _motif_list(motifs)
+    cwm = bool(ms) and all(m.type == "CWM" for m in ms)
+    if method is not None and str(method).upper() not in _CWM_METHODS:
+        raise ValueError("method must be 'COSINE' or 'CJACCARD', for CWMs")
+    metric = _comparison_method(ms, method) if cwm or method is not None else "COSINE"
+    _check_sign(sign, cwm)
+    if min_score is not None and not cwm:
+        raise ValueError("min_score applies to CWMs, which every motif must be")
     clusters, merged, notes = _core._merge_similar(
-        ms, qvalue, null, min_overlap, rc, _bkg4(bkg), weighted, linkage, nthreads
+        ms, qvalue, null, min_overlap, rc, None if cwm else _bkg4(bkg), weighted, linkage, nthreads,
+        metric, sign == "ignore", min_score,
     )
     for note in notes:
         warnings.warn(note, stacklevel=2)
@@ -499,6 +602,8 @@ def motif_tree(
     method: str = "complete",
     labels: str | Sequence[str] = "name",
     nthreads: int | None = None,
+    metric: str | None = None,
+    sign: str = "match",
 ) -> MotifTree:
     """Cluster motifs into a tree.
 
@@ -509,6 +614,12 @@ def motif_tree(
     ``"mcquitty"``, ``"median"`` or ``"centroid"``; ``"ward.D"`` applies
     Ward's criterion to the distances as they are and ``"ward.D2"`` to the
     squared distances.
+
+    CWMs are compared by cosine similarity when every motif is one, and
+    ``metric`` chooses another comparison, ``"PCC"``, ``"COSINE"`` or
+    ``"CJACCARD"``, with ``sign`` as
+    [`compare_motifs()`][universalmotif.compare_motifs] describes them; the
+    similarities become distances in the same way.
 
     ``motifs`` can also be a square distance matrix, of which only the lower
     triangle is used, such as the scores of ``compare_motifs()`` with
@@ -554,6 +665,14 @@ def motif_tree(
         labs = list(labels)
     if len(labs) != len(ms):
         raise ValueError("give one label per motif")
+    metric = _comparison_method(ms, metric)
+    if metric not in ("PCC", *_CWM_METHODS):
+        raise ValueError("metric must be 'PCC', 'COSINE' or 'CJACCARD'")
+    _check_sign(sign, metric in _CWM_METHODS)
+    if metric in _CWM_METHODS:
+        s = np.asarray(_core._cwm_matrix(ms, metric, sign == "ignore", min_overlap, rc, nthreads))
+        dist = np.clip((1 - np.maximum(s, s.T)) / 2, 0.0, 1.0)
+        return _tree(_core._hclust(dist.tolist(), method, labs), labs, method, ms)
     d = _core._motif_tree(ms, min_overlap, rc, method, labs, nthreads)
     return _tree(d, labs, method, ms)
 

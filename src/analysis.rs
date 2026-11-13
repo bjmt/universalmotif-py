@@ -17,6 +17,7 @@ use universalmotif::scan::{
     HitTable, MatchValue, NoOverlaps, OverlapPriority, ScanOptions, motif_matches, scan_encoded,
     scan_fasta, scan_table,
 };
+use universalmotif::similarity::{self, CwmCompareOptions, CwmMetric};
 
 use pyo3_arrow::PyTable;
 
@@ -520,6 +521,10 @@ fn _compare_table(
     let rows = py
         .detach(|| compare::compare_motifs(&motifs, &queries, &opts))
         .map_err(err)?;
+    comparison_table(&rows, &names)
+}
+
+fn comparison_table(rows: &[compare::Comparison], names: &[String]) -> PyResult<PyTable> {
     table(vec![
         (
             "subject",
@@ -548,6 +553,59 @@ fn _compare_table(
     ])
 }
 
+fn cwm_options(
+    metric: &str,
+    ignore_sign: bool,
+    min_overlap: usize,
+    rc: bool,
+    nthreads: usize,
+) -> PyResult<CwmCompareOptions> {
+    Ok(CwmCompareOptions {
+        metric: metric.parse::<CwmMetric>().map_err(err)?,
+        ignore_sign,
+        min_overlap,
+        rc,
+        nthreads,
+    })
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn _compare_cwms(
+    py: Python<'_>,
+    motifs: Vec<PyRef<'_, PyMotif>>,
+    queries: Vec<usize>,
+    metric: &str,
+    ignore_sign: bool,
+    min_overlap: usize,
+    rc: bool,
+    nthreads: usize,
+    names: Vec<String>,
+) -> PyResult<PyTable> {
+    let motifs = unwrap(&motifs);
+    let opts = cwm_options(metric, ignore_sign, min_overlap, rc, nthreads)?;
+    let rows = py
+        .detach(|| similarity::compare_cwms(&motifs, &queries, &opts))
+        .map_err(err)?;
+    comparison_table(&rows, &names)
+}
+
+#[pyfunction]
+fn _cwm_matrix(
+    py: Python<'_>,
+    motifs: Vec<PyRef<'_, PyMotif>>,
+    metric: &str,
+    ignore_sign: bool,
+    min_overlap: usize,
+    rc: bool,
+    nthreads: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let motifs = unwrap(&motifs);
+    let opts = cwm_options(metric, ignore_sign, min_overlap, rc, nthreads)?;
+    py.detach(|| similarity::cwm_similarity_matrix(&motifs, &opts))
+        .map_err(err)
+}
+
 #[pyfunction]
 #[pyo3(signature = (motifs, min_overlap, rc, name, weighted, nthreads))]
 fn _merge_motifs(
@@ -573,7 +631,8 @@ fn _merge_motifs(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, qvalue, null, min_overlap, rc, bkg, weighted, linkage, nthreads))]
+#[pyo3(signature = (motifs, qvalue, null, min_overlap, rc, bkg, weighted, linkage, nthreads,
+                    cwm_metric="COSINE", ignore_sign=false, min_score=None))]
 #[allow(clippy::too_many_arguments)]
 fn _merge_similar(
     py: Python<'_>,
@@ -586,9 +645,15 @@ fn _merge_similar(
     weighted: bool,
     linkage: &str,
     nthreads: usize,
+    cwm_metric: &str,
+    ignore_sign: bool,
+    min_score: Option<f64>,
 ) -> PyResult<(Vec<usize>, Vec<PyMotif>, Vec<String>)> {
     let motifs = unwrap(&motifs);
     let opts = MergeSimilarOptions {
+        cwm_metric: cwm_metric.parse::<CwmMetric>().map_err(err)?,
+        ignore_sign,
+        min_score,
         qvalue,
         null: null_model(null)?,
         min_overlap,
@@ -670,6 +735,8 @@ fn _motif_tree<'py>(
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_compare_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(_compare_table, m)?)?;
+    m.add_function(wrap_pyfunction!(_compare_cwms, m)?)?;
+    m.add_function(wrap_pyfunction!(_cwm_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(_merge_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_merge_similar, m)?)?;
     m.add_function(wrap_pyfunction!(_hclust, m)?)?;

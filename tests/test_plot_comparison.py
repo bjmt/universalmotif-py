@@ -297,3 +297,17 @@ def test_errors(motifs):
         plot_comparison(matrix=np.full((3, 3), 0.5), value="pvalue", cut=0)
     with pytest.raises(ValueError, match="figsize is too small"):
         plot_comparison(motifs, figsize=(2, 2))
+
+
+def test_cwms_are_drawn_by_cosine():
+    rng = np.random.default_rng(2)
+    cwms = [um.create_motif(rng.normal(0, 1, (4, 8)), type="CWM", name=f"c{i}", alphabet="DNA")
+            for i in range(5)]
+    scores = um.compare_motifs(cwms, min_overlap=6)
+    order = um.motif_tree(cwms, min_overlap=6).order
+    fig = plot_comparison(cwms)
+    np.testing.assert_allclose(_cells(fig), scores[np.ix_(order, order)], rtol=1e-12)
+    ignored = um.compare_motifs(cwms, min_overlap=6, method="CJACCARD", sign="ignore")
+    order = um.motif_tree(cwms, min_overlap=6, metric="CJACCARD", sign="ignore").order
+    fig = plot_comparison(cwms, metric="CJACCARD", sign="ignore")
+    np.testing.assert_allclose(_cells(fig), ignored[np.ix_(order, order)], rtol=1e-12)
