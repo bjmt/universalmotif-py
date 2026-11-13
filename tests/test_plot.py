@@ -1135,6 +1135,39 @@ def test_view_attributions_hits_in_a_region():
         um.view_attributions(np.full(len(seq), 0.1), seq, hits=hits.drop("end"))
 
 
+def test_view_attributions_hit_motifs():
+    seq = "CCGATAACCCTTATCGGGATAA"
+    gata = um.create_motif(np.array([[0, .8, 0, .7, .6], [0, 0, 0, 0, 0], [.9, 0, 0, 0, 0], [0, 0, .7, 0, 0]]),
+                           type="CWM", alphabet="DNA", name="gata")
+    hits = pl.DataFrame({"motif": ["gata", "gata", "gata"], "start": [2, 10, 17], "end": [7, 15, 22],
+                         "strand": ["+", "-", "+"], "label": ["GATA1", "GATA1 again", "cut off"]})
+    ax = um.view_attributions(np.full(len(seq), 0.1), seq, hits=hits, motifs=[gata], region=(0, 20))
+    fig = ax.figure
+    logo_ax = next(a for a in fig.axes if a is not ax)
+    # Logos sit over their hits, the one on the - strand reverse complemented,
+    # and the one running past the region is clipped to it.
+    logos = logo_ax.collections
+    assert len(logos) == 3
+    lefts = sorted(c.get_paths()[0].get_extents().x0 for c in logos)
+    assert lefts[0] == pytest.approx(2.5, abs=0.2) and lefts[1] == pytest.approx(10.5, abs=0.2)
+    assert all(c.get_clip_on() and (c.get_clip_box() is not None or c.get_clip_path() is not None) for c in logos)
+    assert [t.get_text() for t in logo_ax.texts] == ["GATA1", "GATA1 again", "cut off"]
+    assert not ax.texts and logo_ax.get_xlim() == ax.get_xlim()
+    # Overlapping hits take a second row, which makes the figure taller.
+    overlapping = hits.with_columns(start=pl.Series([2, 4, 17]), end=pl.Series([7, 9, 22]))
+    tall = um.view_attributions(np.full(len(seq), 0.1), seq, hits=overlapping, motifs={"gata": gata})
+    assert tall.figure.get_figheight() == pytest.approx(fig.get_figheight() + 0.6)
+    # Into given axes, the logos go in a panel above them.
+    _, given = plt.subplots(figsize=(6, 3))
+    um.view_attributions(np.full(len(seq), 0.1), seq, hits=hits, motifs=gata, ax=given)
+    assert len(given.child_axes) == 1 and given.child_axes[0].get_position().y0 >= given.get_position().y1
+    with pytest.raises(ValueError, match="no motif named 'gata'"):
+        um.view_attributions(np.full(len(seq), 0.1), seq, hits=hits, motifs={"other": gata})
+    with pytest.raises(ValueError, match="give hits too"):
+        um.view_attributions(np.full(len(seq), 0.1), seq, motifs=[gata])
+    plt.close("all")
+
+
 def test_view_attributions_position_ticks():
     assert [_nice_step(s) for s in (10, 12, 13, 30, 300, 2500)] == [1, 1, 2, 5, 50, 500]
     n = 300

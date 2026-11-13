@@ -83,6 +83,9 @@ New:
   seqlets by `modisco_thresholds()` and `normalize=True` to raise weak
   sequences.
 - `hit_contributions()` takes the scores of a single sequence on their own.
+- `view_attributions(motifs=)` draws each hit's motif above it, such as
+  the CWMs `scan_contributions()` matched, and a `label` column in the
+  hits sets the text shown for each.
 - `plot_comparison(cut=)` and `plot_comparison(cut_height=)` draw where
   the tree would be cut across the dendrogram, and box each group of
   motifs on the heatmap.

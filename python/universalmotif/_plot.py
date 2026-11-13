@@ -1206,13 +1206,66 @@ def _hit_spans(hits: pl.DataFrame, start: int, a: int, b: int) -> list[tuple[flo
     for col in ("start", "end"):
         if col not in hits.columns:
             raise ValueError(f"hits must have a {col!r} column")
-    names = hits["motif"].to_list() if "motif" in hits.columns else [None] * hits.height
+    label = "label" if "label" in hits.columns else "motif" if "motif" in hits.columns else None
+    names = hits[label].to_list() if label is not None else [None] * hits.height
     spans = []
     for s, e, name in zip(hits["start"].to_list(), hits["end"].to_list(), names):
         s, e = max(s + start, a), min(e + start, b)
         if e > s:
             spans.append((s - a + 0.5, e - a + 0.5, name))
     return spans
+
+
+_LOGO_ROW = 0.6
+
+
+def _hit_logos(hits: pl.DataFrame, motifs: Any, start: int, a: int, b: int) -> list[tuple[float, float, int, Motif]]:
+    """The motif of each hit overlapping positions ``a`` to ``b``, turned to
+    read along the hit, as (left, width, row, motif) in the x coordinates of
+    a panel drawing those positions, with overlapping hits in later rows."""
+    from ._api import motif_rc
+
+    for col in ("motif", "start", "end"):
+        if col not in hits.columns:
+            raise ValueError(f"drawing the motifs of hits needs a {col!r} column")
+    if isinstance(motifs, Motif):
+        motifs = [motifs]
+    lookup = dict(motifs) if isinstance(motifs, Mapping) else {m.name: m for m in motifs}
+    strands = hits["strand"].to_list() if "strand" in hits.columns else ["+"] * hits.height
+    found = []
+    for name, s, e, strand in zip(hits["motif"].to_list(), hits["start"].to_list(), hits["end"].to_list(), strands):
+        if max(s + start, a) >= min(e + start, b):
+            continue
+        if name not in lookup:
+            raise ValueError(f"no motif named {name!r} among motifs")
+        m = _check_motif(lookup[name])
+        found.append((s + start - a + 0.5, float(e - s), motif_rc(m) if strand == "-" else m))
+    rows: list[float] = []
+    placed = []
+    for left, width, m in sorted(found, key=lambda h: h[0]):
+        row = next((r for r, end in enumerate(rows) if end <= left), len(rows))
+        if row == len(rows):
+            rows.append(0.0)
+        rows[row] = left + width
+        placed.append((left, width, row, m))
+    return placed
+
+
+def _draw_hit_logos(ax: Axes, placed: list[tuple[float, float, int, Motif]], colour_scheme: Any,
+                    flip_neg: bool) -> None:
+    """Draw hit motifs in rows from the top of a panel, clipped to it."""
+    n_rows = max((r for _, _, r, _ in placed), default=0) + 1
+    for left, width, row, m in placed:
+        letters = draw_logo(ax, m, x=left, y=n_rows - 1 - row + 0.08, width=width, height=0.84,
+                            colour_scheme=colour_scheme, flip_neg=flip_neg)
+        # draw_logo() leaves logos unclipped; these stop at the panel's edges.
+        letters.set_clip_on(True)
+        letters.set_clip_path(ax.patch)
+    ax.set_ylim(0, n_rows)
+    ax.set_yticks([])
+    for side in ("top", "right", "bottom", "left"):
+        ax.spines[side].set_visible(False)
+    ax.tick_params(axis="x", labelbottom=False, length=0)
 
 
 def _label_hits(ax: Axes, spans: list[tuple[float, float, Any]]) -> None:
@@ -1339,6 +1392,7 @@ def view_attributions(
     start: int = 0,
     region: tuple[int, int] | None = None,
     hits: pl.DataFrame | None = None,
+    motifs: Motif | Sequence[Motif] | Mapping[Any, Motif] | None = None,
     colour_scheme: Mapping[str, str] | None = None,
     flip_neg: bool = True,
     ylabel: str | None = None,
@@ -1373,8 +1427,16 @@ def view_attributions(
     the first letter, and ``region``, a (start, end) pair in the same
     positions with the end left out, draws only part of the sequence.
     ``hits``, such as from [`scan_sequences()`][universalmotif.scan_sequences]
-    run on ``sequence``, shades each hit, labelled with its ``motif`` if the
-    table has one, with positions counted along the sequence from 0.
+    run on ``sequence``, shades each hit, labelled with its ``label`` or
+    ``motif`` column if the table has one, with positions counted along the
+    sequence from 0. Given the ``motifs`` that were scanned, as a list or a
+    mapping from the names in the ``motif`` column, each hit's motif is drawn
+    above it, reverse complemented for hits on the ``-`` strand, so that the
+    motif can be compared with the scores beneath it, such as a CWM matched
+    by [`scan_contributions()`][universalmotif.scan_contributions]. Each
+    logo fills its own row, so logos are not on a common scale, and logos of
+    overlapping hits take further rows. With ``ax``, they are drawn in a
+    panel above it.
     Letters are coloured by ``colour_scheme``, by default the package's
     colours for DNA, RNA and amino acids, and letters below the axis are
     drawn upside down, so that they read outward from zero, unless
@@ -1413,10 +1475,25 @@ def view_attributions(
     seq = None if sequence is None else sequence[a - start:b - start]
     n = m.shape[1]
     plt = _pyplot()
+    if motifs is not None and hits is None:
+        raise ValueError("motifs are drawn over their hits, so give hits too")
+    placed = _hit_logos(hits, motifs, start, a, b) if motifs is not None else None
+    n_rows = max((r for _, _, r, _ in placed), default=0) + 1 if placed else 0
+    logo_ax = None
     own_figure = ax is None
     if own_figure:
         width = min(max(4.0, 0.12 * n + 1.5), 16.0)
-        _, ax = plt.subplots(figsize=figsize or (width, 3.2 if kind == "heatmap" else 2.6))
+        height = 3.2 if kind == "heatmap" else 2.6
+        if n_rows:
+            _, (logo_ax, ax) = plt.subplots(
+                2, 1, figsize=figsize or (width, height + _LOGO_ROW * n_rows), sharex=True,
+                gridspec_kw={"height_ratios": [_LOGO_ROW * n_rows, height - 0.8]})
+        else:
+            _, ax = plt.subplots(figsize=figsize or (width, height))
+    elif n_rows:
+        # A panel above the given axes, as tall as the rows of logos.
+        tall = _LOGO_ROW * n_rows / max(ax.get_position().height * ax.figure.get_figheight(), 1e-9)
+        logo_ax = ax.inset_axes((0.0, 1.02, 1.0, tall), sharex=ax)
     if colour_scheme is None:
         colour_scheme = _default_colours(_ALPHABET_NAMES.get(alphabet, ""), list(alphabet))
     if kind == "heatmap":
@@ -1459,14 +1536,19 @@ def view_attributions(
         ax.spines["left"].set_bounds(lo, hi + pad)
         eps = 1e-9 * ((hi - lo) or 1.0)
         ax.set_yticks([t for t in ax.get_yticks() if lo - eps <= t <= hi + pad + eps])
+    # The axis comes first, so that hit labels are placed on its final range.
+    _position_axis(ax, a, b)
     if hits is not None:
         spans = _hit_spans(hits, start, a, b)
         for x0, x1, _ in spans:
-            ax.axvspan(x0, x1, color=_HIT_COLOUR, alpha=0.1, linewidth=0, zorder=0)
-        _label_hits(ax, spans)
-    _position_axis(ax, a, b)
+            for panel in (ax, logo_ax) if logo_ax is not None else (ax,):
+                panel.axvspan(x0, x1, color=_HIT_COLOUR, alpha=0.1, linewidth=0, zorder=0)
+        if logo_ax is not None:
+            _draw_hit_logos(logo_ax, placed, colour_scheme, flip_neg)
+        _label_hits(logo_ax if logo_ax is not None else ax, spans)
     if own_figure:
-        ax.figure.tight_layout()
+        # Logos sit close above the hits they belong to.
+        ax.figure.tight_layout(h_pad=0.1 if logo_ax is not None else None)
     return ax
 
 
