@@ -148,7 +148,7 @@ def _run(out: Path) -> dict[int, str]:
         _inputs(work)
         for i, m in enumerate(_BLOCK.finditer(markdown)):
             done = subprocess.run(["bash", "-c", _shell(m.group(1))], cwd=work, capture_output=True,
-                                  text=True, timeout=600)
+                                  text=True, timeout=600, check=False)
             if done.returncode != 0:
                 raise RuntimeError(f"command line example {i + 1} failed:\n{m.group(1)}\n{done.stderr}")
             rendered = [_render(k, a, work, done.stdout, out) for k, a in _MARKER.findall(m.group(2))]
