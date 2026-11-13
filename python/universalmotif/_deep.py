@@ -1017,21 +1017,44 @@ def _site_letters(site: Any) -> str:
     return site
 
 
+def _site_columns(site: str, alphabet: str, dtype: Any) -> np.ndarray:
+    """A site as one-hot columns, with an empty column for a letter outside
+    ``alphabet``, such as N."""
+    index = {c: i for i, c in enumerate(alphabet)}
+    column = np.zeros((len(alphabet), len(site)), dtype=dtype)
+    for j, c in enumerate(site):
+        i = index.get(c, index.get(c.upper(), index.get(c.lower())))
+        if i is not None:
+            column[i, j] = 1
+    return column
+
+
 def insert_sites(
     sequences: Any,
     sites: Any,
     positions: int | Sequence[int] | None = None,
     alphabet: str = "ACGT",
+    mode: str = "substitute",
+    keep_length: bool = False,
 ):
     """Write the same sites into every sequence, for measuring a model's
     response to them.
 
     ``sites`` is a site given as a string, a motif, whose most probable
     letter at each position is used, or a list of these to insert together.
-    ``positions`` gives the start of each site, counted from 0; by default a
-    single site is centred in each sequence, rounding down. Sites overwrite
-    the letters where they land, later ones over earlier ones, and must fit
-    within every sequence.
+    ``positions`` gives the start of each site, counted from 0 along the
+    sequences as given; by default a single site is centred in each
+    sequence, rounding down.
+
+    With the default ``mode="substitute"``, sites overwrite the letters
+    where they land, later ones over earlier ones, and must fit within every
+    sequence. With ``mode="insert"``, they go in between the letters
+    instead, before the letter at their position, so that the letters after
+    them move along and the sequences grow by the sites' widths; a position
+    may then run up to the length of the sequence, for a site at the end.
+    Models usually take inputs of one width, and with ``keep_length`` the
+    sequences are cut back to their length by removing letters from both
+    ends equally, which must leave every site whole.
 
     Unlike [`implant_motifs()`][universalmotif.implant_motifs], which draws a
     new site from a motif for every placement, the same letters go into
@@ -1044,10 +1067,10 @@ def insert_sites(
     One-hot sequences, as from [`one_hot()`][universalmotif.one_hot], are
     given as an array of shape (sequences, letters, length) or (sequences,
     length, letters), or a single sequence without the first axis, with the
-    letters in the order of ``alphabet``. The sites are written straight
-    into a copy, which keeps the layout and dtype, and a PyTorch tensor
-    comes back as a tensor. A letter of a site outside ``alphabet``, such as
-    N, leaves its column empty, as it would be after encoding the sequence.
+    letters in the order of ``alphabet``. The sites are written into a copy,
+    which keeps the layout and dtype, and a PyTorch tensor comes back as a
+    tensor. A letter of a site outside ``alphabet``, such as N, leaves its
+    column empty, as it would be after encoding the sequence.
 
     Examples
     --------
@@ -1060,7 +1083,16 @@ def insert_sites(
     >>> x = um.insert_sites(um.one_hot(bkg), "TGACTCA")
     >>> x.shape, um.from_one_hot(x)
     ((2, 4, 10), ['ATGACTCAAA', 'CTGACTCACC'])
+
+    Inserting rather than overwriting, with and without keeping the length:
+
+    >>> um.insert_sites("AAAACCCC", "TT", mode="insert")
+    'AAAATTCCCC'
+    >>> um.insert_sites("AAAACCCC", "TT", mode="insert", keep_length=True)
+    'AAATTCCC'
     """
+    if mode not in ("substitute", "insert"):
+        raise ValueError('mode must be "substitute" or "insert"')
     several = isinstance(sites, (list, tuple))
     letters = [_site_letters(x) for x in sites] if several else [_site_letters(sites)]
     if positions is None:
@@ -1071,37 +1103,131 @@ def insert_sites(
         starts = [int(positions)] if np.ndim(positions) == 0 else [int(p) for p in positions]
         if len(starts) != len(letters):
             raise ValueError(f"{len(starts)} positions for {len(letters)} sites")
+    inserting = mode == "insert"
 
     def place(length: int) -> list[int]:
         out = []
         for k, site in enumerate(letters):
-            p = (length - len(site)) // 2 if starts is None else starts[k]
-            if p < 0 or p + len(site) > length:
+            if starts is not None:
+                p = starts[k]
+            else:
+                p = length // 2 if inserting else (length - len(site)) // 2
+            fits = 0 <= p <= length if inserting else 0 <= p and p + len(site) <= length
+            if not fits:
                 raise ValueError(f"the site {site} at {p} does not fit in a sequence of length {length}")
             out.append(p)
+        return out
+
+    def insert(seq: Any, length: int, cut: Any, site_of: Any, join: Any) -> Any:
+        """``seq`` with the sites inserted, joined from its pieces, taken
+        with ``cut(seq, start, end)``, and the sites."""
+        at = place(length)
+        order = sorted(range(len(letters)), key=lambda k: at[k])
+        parts, prev, starts_new, added = [], 0, {}, 0
+        for k in order:
+            parts.append(cut(seq, prev, at[k]))
+            starts_new[k] = at[k] + added
+            parts.append(site_of(k))
+            added += len(letters[k])
+            prev = at[k]
+        parts.append(cut(seq, prev, length))
+        out = join(parts)
+        if keep_length:
+            left = added // 2
+            for k in order:
+                if starts_new[k] < left or starts_new[k] + len(letters[k]) > length + left:
+                    raise ValueError(f"keeping the length would cut into the site {letters[k]}; "
+                                     "place it further from the ends")
+            out = cut(out, left, left + length)
         return out
 
     from ._onehot import _is_array, _letters_middle, _restore_array
 
     if _is_array(sequences):
         a, form = _letters_middle(sequences, alphabet)
+        columns = [_site_columns(site, alphabet, a.dtype) for site in letters]
+        if inserting:
+            n = a.shape[0]
+            out = insert(a, a.shape[2], lambda x, i, j: x[:, :, i:j],
+                         lambda k: np.broadcast_to(columns[k], (n,) + columns[k].shape),
+                         lambda parts: np.concatenate(parts, axis=2))
+            return _restore_array(np.ascontiguousarray(out), form)
         out = a.copy()
-        index = {c: i for i, c in enumerate(alphabet)}
-        for site, p in zip(letters, place(a.shape[2])):
-            column = np.zeros((len(alphabet), len(site)), dtype=out.dtype)
-            for j, c in enumerate(site):
-                i = index.get(c, index.get(c.upper(), index.get(c.lower())))
-                if i is not None:
-                    column[i, j] = 1
-            out[:, :, p:p + len(site)] = column
+        for column, p in zip(columns, place(a.shape[2])):
+            out[:, :, p:p + column.shape[1]] = column
         return _restore_array(out, form)
     names, seqs = _sequence_pairs(sequences)
     out = []
     for seq in seqs:
+        if inserting:
+            out.append(insert(seq, len(seq), lambda x, i, j: x[i:j], lambda k: letters[k], "".join))
+            continue
         new = list(seq)
         for site, p in zip(letters, place(len(seq))):
             new[p:p + len(site)] = site
         out.append("".join(new))
+    from ._sequences import _restore
+
+    return _restore(sequences, names, out)
+
+
+def delete_region(
+    sequences: Any,
+    start: int,
+    end: int,
+    keep_length: bool = False,
+    alphabet: str = "ACGT",
+):
+    """Delete the letters from ``start`` up to ``end`` of every sequence,
+    for measuring what a model loses without them.
+
+    Positions are counted from 0 with the end left out, and the region must
+    lie within every sequence. The letters after the region move up to close
+    the gap, so the sequences become shorter by its width. Models usually
+    take inputs of one width, and with ``keep_length`` the sequences are
+    padded back to their length with N at both ends equally, which keeps
+    what is left centred; there is no sequence beyond the ends to bring in
+    instead. Sequences are given and returned as for
+    [`insert_sites()`][universalmotif.insert_sites], including as one-hot
+    arrays, where N is an empty column. To take a region apart without
+    changing the length or the letters around it, see
+    [`shuffle_region()`][universalmotif.shuffle_region].
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> um.delete_region("AAAATTCCCC", 4, 6)
+    'AAAACCCC'
+    >>> um.delete_region("AAAATTCCCC", 4, 6, keep_length=True)
+    'NAAAACCCCN'
+    >>> um.from_one_hot(um.delete_region(um.one_hot(["AAAATTCCCC"]), 4, 6))
+    ['AAAACCCC']
+    """
+    start, end = int(start), int(end)
+    if not 0 <= start < end:
+        raise ValueError("the region must start at 0 or later and end after it starts")
+
+    def check(length: int) -> None:
+        if end > length:
+            raise ValueError(f"the region from {start} to {end} does not fit in a sequence of length {length}")
+
+    left = (end - start) // 2
+    right = end - start - left
+    from ._onehot import _is_array, _letters_middle, _restore_array
+
+    if _is_array(sequences):
+        a, form = _letters_middle(sequences, alphabet)
+        check(a.shape[2])
+        out = np.concatenate([a[:, :, :start], a[:, :, end:]], axis=2)
+        if keep_length:
+            out = np.pad(out, ((0, 0), (0, 0), (left, right)))
+        return _restore_array(np.ascontiguousarray(out), form)
+    names, seqs = _sequence_pairs(sequences)
+    out = []
+    for seq in seqs:
+        check(len(seq))
+        new = seq[:start] + seq[end:]
+        out.append("N" * left + new + "N" * right if keep_length else new)
     from ._sequences import _restore
 
     return _restore(sequences, names, out)
@@ -1346,6 +1472,7 @@ def one_hot_batches(
 
 __all__ = [
     "ContributionScores",
+    "delete_region",
     "from_filters",
     "from_one_hot",
     "insert_sites",

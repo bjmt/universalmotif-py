@@ -70,8 +70,10 @@ makes every single-letter substitution of a sequence, and
 [`mutagenesis_effects()`][universalmotif.mutagenesis_effects] turns the
 model's predictions for them into an array that
 [`view_attributions()`][universalmotif.view_attributions] can draw.
-[`insert_sites()`][universalmotif.insert_sites] writes the same sites into
-background sequences, and [`site_spacings()`][universalmotif.site_spacings]
+[`insert_sites()`][universalmotif.insert_sites] writes or inserts the same
+sites into background sequences,
+[`delete_region()`][universalmotif.delete_region] deletes a stretch of
+each, and [`site_spacings()`][universalmotif.site_spacings]
 places two sites at a range of distances apart.
 [`view_variant()`][universalmotif.view_variant] compares the scores of a
 sequence with those of a variant of it.
@@ -90,5 +92,7 @@ draws as a map.
 ::: universalmotif.interaction_effects
 
 ::: universalmotif.insert_sites
+
+::: universalmotif.delete_region
 
 ::: universalmotif.site_spacings

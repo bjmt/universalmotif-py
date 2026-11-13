@@ -144,6 +144,51 @@ def test_tensors_come_back_as_tensors():
     seqs = _seqs(length=40)
     x = torch.from_numpy(um.one_hot(seqs))
     for out in (um.insert_sites(x, "TGACTCA"), um.shuffle_sequences(x, seed=1), um.implant_motifs(um.example_motifs()[5], x, seed=1),
-                um.shuffle_region(x, 5, 30, n=2)):
+                um.shuffle_region(x, 5, 30, n=2), um.insert_sites(x, "TGA", mode="insert"),
+                um.delete_region(x, 5, 10)):
         assert isinstance(out, torch.Tensor)
     assert all(isinstance(v, torch.Tensor) for v in um.site_spacings(x, "GG", "TT", spacings=[0, 1]).values())
+
+
+def test_inserting_sites():
+    seqs = _seqs(length=30)
+    for kw in ({}, {"positions": 0}, {"positions": 30}, {"keep_length": True}):
+        got = um.insert_sites(seqs, "TGANTCA", mode="insert", **kw)
+        assert all(len(g) == (30 if kw.get("keep_length") else 37) for g in got)
+        np.testing.assert_array_equal(um.insert_sites(um.one_hot(seqs), "TGANTCA", mode="insert", **kw),
+                                      um.one_hot(got))
+    # Letters after a site move along, and positions refer to the input.
+    seq = seqs[0]
+    assert um.insert_sites(seq, "TGANTCA", mode="insert") == seq[:15] + "TGANTCA" + seq[15:]
+    two = um.insert_sites(seq, ["GG", "TT"], positions=[20, 5], mode="insert")
+    assert two == seq[:5] + "TT" + seq[5:20] + "GG" + seq[20:]
+    # Keeping the length cuts both ends equally, an odd extra letter on the right.
+    kept = um.insert_sites(seq, "TGA", mode="insert", keep_length=True)
+    assert kept == (seq[:15] + "TGA" + seq[15:])[1:31]
+    last = um.insert_sites(um.one_hot(seqs, dtype=np.int8).transpose(0, 2, 1), "TGA", mode="insert")
+    assert last.shape == (5, 33, 4) and last.dtype == np.int8
+    with pytest.raises(ValueError, match="cut into the site"):
+        um.insert_sites(seq, "TGACTCA", positions=0, mode="insert", keep_length=True)
+    with pytest.raises(ValueError, match="does not fit"):
+        um.insert_sites(seq, "TGA", positions=31, mode="insert")
+    with pytest.raises(ValueError, match="mode"):
+        um.insert_sites(seq, "TGA", mode="replace")
+
+
+def test_deleting_regions():
+    seqs = _seqs(length=30)
+    got = um.delete_region(seqs, 10, 15)
+    assert got == [s[:10] + s[15:] for s in seqs]
+    np.testing.assert_array_equal(um.delete_region(um.one_hot(seqs), 10, 15), um.one_hot(got))
+    kept = um.delete_region(seqs, 10, 15, keep_length=True)
+    assert kept == ["NN" + s[:10] + s[15:] + "NNN" for s in seqs]
+    x = um.delete_region(um.one_hot(seqs), 10, 15, keep_length=True)
+    np.testing.assert_array_equal(x, um.one_hot(kept))
+    assert x[:, :, :2].sum() == 0
+    assert um.delete_region({"a": seqs[0]}, 0, 30) == {"a": ""}
+    single = um.delete_region(um.one_hot(seqs)[0], 10, 15)
+    assert single.shape == (4, 25)
+    with pytest.raises(ValueError, match="does not fit"):
+        um.delete_region(seqs, 10, 31)
+    with pytest.raises(ValueError, match="end after"):
+        um.delete_region(seqs, 10, 10)

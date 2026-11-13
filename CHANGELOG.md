@@ -95,6 +95,9 @@ New:
   one-hot sequences.
 - `shuffle_region()` shuffles one stretch of each sequence several times,
   for measuring what it adds to a model's prediction.
+- `insert_sites(mode="insert")` inserts sites between the letters rather
+  than over them, with `keep_length=True` to cut the sequences back to
+  their length, and `delete_region()` deletes a stretch of each sequence.
 - `read_seqlets(trim=)` cuts seqlets to the core columns of their patterns,
   as `read_modisco()` trims them, and `plot_spacing(axis=1)` takes
   predictions with sequences first.

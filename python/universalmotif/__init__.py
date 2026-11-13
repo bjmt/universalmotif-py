@@ -11,6 +11,7 @@ from ._biopython import from_biopython, to_biopython
 from ._display import _repr_html_ as _motif_html
 from ._deep import (
     ContributionScores,
+    delete_region,
     from_filters,
     from_one_hot,
     insert_sites,
@@ -171,6 +172,7 @@ __all__ = [
     "create_motif",
     "create_sequences",
     "dedup_hits",
+    "delete_region",
     "draw_logo",
     "enrich_motifs",
     "example_file",
