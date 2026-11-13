@@ -138,6 +138,7 @@ from ._sequences import (
     sample_sites,
     sequence_complexity,
     shuffle_motifs,
+    shuffle_region,
     shuffle_sequences,
     window_string,
 )
@@ -267,6 +268,7 @@ __all__ = [
     "sequence_complexity",
     "set_nthreads",
     "shuffle_motifs",
+    "shuffle_region",
     "shuffle_sequences",
     "shuffle_string",
     "shuffled_references",

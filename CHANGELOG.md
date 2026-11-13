@@ -86,6 +86,15 @@ New:
 - `shuffled_references()` makes dinucleotide shuffles of one-hot sequences,
   drawn uniformly and with Ns kept in place, as references for
   attribution, reproducible across batches with `offset`.
+- `insert_sites()`, `site_spacings()`, `shuffle_sequences()` and
+  `implant_motifs()` take one-hot arrays and tensors and return them in the
+  same layout and dtype, and `create_sequences(output="onehot")` gives
+  one-hot sequences.
+- `shuffle_region()` shuffles one stretch of each sequence several times,
+  for measuring what it adds to a model's prediction.
+- `read_seqlets(trim=)` cuts seqlets to the core columns of their patterns,
+  as `read_modisco()` trims them, and `plot_spacing(axis=1)` takes
+  predictions with sequences first.
 - `view_attributions(motifs=)` draws each hit's motif above it, such as
   the CWMs `scan_contributions()` matched, and a `label` column in the
   hits sets the text shown for each.

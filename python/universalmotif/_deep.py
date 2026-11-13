@@ -396,6 +396,7 @@ def read_seqlets(
     regions: Any = None,
     window: int | None = None,
     scores: str | None = None,
+    trim: float | None = None,
 ):
     """Read the seqlets of a TF-MoDISco results file, the sites each
     pattern was built from, as a table of hits.
@@ -440,6 +441,19 @@ def read_seqlets(
     holds nested lists, and ``np.asarray(row["scores"])`` gives the array
     of one row either way.
 
+    Seqlets span the whole window of their pattern, weak flanks included,
+    so that the seqlets of motifs that sit close together overlap, and
+    their centres can only come so near the ends of the inputs. With
+    ``trim``, each seqlet is cut to the columns of its pattern that
+    [`read_modisco()`][universalmotif.read_modisco] keeps with the same
+    ``trim_threshold``, such as 0.3, and its position, ``score``, ``match``
+    and ``scores`` follow, so that the seqlets match the trimmed CWMs. This
+    suits counting the spacings between motifs, or testing their positions,
+    where the flanks would otherwise get in the way. In either case, the
+    universe for such tests is the window modisco looked at, not the whole
+    input, and the number of inputs comes from the regions, since the file
+    does not record inputs without seqlets.
+
     Needs the ``h5py`` extra.
 
     Examples
@@ -464,6 +478,8 @@ def read_seqlets(
         ) from e
     if scores is not None and scores not in _SEQLET_SCORES:
         raise ValueError('scores must be None, "projected" or "hypothetical"')
+    if trim is not None and not 0 <= trim <= 1:
+        raise ValueError("trim must be between 0 and 1")
     if window is not None:
         if regions is None:
             raise ValueError("window places seqlets within the regions; give regions too")
@@ -485,15 +501,25 @@ def read_seqlets(
                                  f"the file has {shown or 'none'}")
         chosen = [i for i, label in enumerate(labels) if wanted is None or label in wanted]
         groups = []
+        cores = []
         for i in chosen:
-            seqlets = f[found[i][0]][found[i][1]].get("seqlets")
+            pattern = f[found[i][0]][found[i][1]]
+            seqlets = pattern.get("seqlets")
             need = _SEQLET_DATASETS + (("hypothetical_contribs",) if scores == "hypothetical" else ())
             missing = [k for k in need if seqlets is None or k not in seqlets]
             if missing:
                 raise ValueError(f"{labels[i]} has no seqlets in {os.fspath(path)}; "
                                  f"it lacks {', '.join(missing)}")
             groups.append(seqlets)
-        widths = [g["sequence"].shape[1] for g in groups]
+            width = seqlets["sequence"].shape[1]
+            if trim is None:
+                cores.append((0, width))
+            else:
+                if "contrib_scores" not in pattern or pattern["contrib_scores"].shape[0] != width:
+                    raise ValueError(f"trimming needs the seqlets of {labels[i]} to be as wide as its "
+                                     "pattern's contribution scores")
+                cores.append(_core_columns(pattern, trim))
+        widths = [b - a for a, b in cores]
         counts = [g["example_idx"].shape[0] for g in groups]
         total = sum(counts)
         same = len(set(widths)) == 1
@@ -506,7 +532,7 @@ def read_seqlets(
         letters = []
         reversed_input = None if table is None else (table["strand"] == "-").to_numpy()
         at = 0
-        for i, g, n in zip(chosen, groups, counts):
+        for i, g, n, (a, b) in zip(chosen, groups, counts, cores):
             example = np.asarray(g["example_idx"][()], dtype=np.int64)
             if table is not None and n and int(example.max()) >= table.height:
                 raise ValueError(f"seqlets come from input {int(example.max())}, counted from 0, but "
@@ -515,17 +541,21 @@ def read_seqlets(
             start = np.asarray(g["start"][()], dtype=np.int64)
             order = np.lexsort((start, example))
             rc = np.asarray(g["is_revcomp"][()], dtype=bool)[order]
+            end = np.asarray(g["end"][()], dtype=np.int64)[order]
+            start = start[order]
+            # Seqlets are stored along their pattern, so the core columns
+            # count from the start on the + strand and from the end on the -.
             cols["motif_i"].append(np.full(n, i, dtype=np.uint32))
             cols["example"].append(example[order])
-            cols["start"].append(start[order])
-            cols["end"].append(np.asarray(g["end"][()], dtype=np.int64)[order])
+            cols["start"].append(np.where(rc, end - b, start + a))
+            cols["end"].append(np.where(rc, end - a, start + b))
             cols["rc"].append(rc)
-            contrib = np.asarray(g["contrib_scores"][()], dtype=np.float32)[order]
+            contrib = np.asarray(g["contrib_scores"][()], dtype=np.float32)[order][:, a:b]
             cols["score"].append(contrib.sum(axis=(1, 2), dtype=np.float64))
-            letters.append(_seqlet_letters(np.asarray(g["sequence"][()])[order]))
+            letters.append(_seqlet_letters(np.asarray(g["sequence"][()])[order][:, a:b]))
             if scores is not None:
                 x = contrib if scores == "projected" else np.asarray(g[_SEQLET_SCORES[scores]][()],
-                                                                     dtype=np.float32)[order]
+                                                                     dtype=np.float32)[order][:, a:b]
                 del contrib
                 flip = rc if reversed_input is None else rc ^ reversed_input[example[order]]
                 x[flip] = x[flip, ::-1, ::-1]
@@ -582,6 +612,15 @@ def read_seqlets(
             out["scores"] = (pl.concat(ragged) if ragged
                              else pl.Series([], dtype=pl.List(pl.List(pl.Float32))))
     return pl.DataFrame(out)
+
+
+def _core_columns(pattern, trim: float) -> tuple[int, int]:
+    """The columns of a pattern that read_modisco() keeps with
+    ``trim_threshold=trim``."""
+    width = pattern["contrib_scores"].shape[0]
+    total = np.abs(np.asarray(pattern["contrib_scores"][()], dtype=float)).sum(axis=1)
+    keep = np.flatnonzero(total >= trim * total.max())
+    return (int(keep[0]), int(keep[-1]) + 1) if keep.size else (0, width)
 
 
 def _seqlet_letters(onehot: np.ndarray) -> Any:
@@ -965,9 +1004,10 @@ def _site_letters(site: Any) -> str:
 
 
 def insert_sites(
-    sequences: str | Sequence[str] | Mapping[str, str],
+    sequences: Any,
     sites: Any,
     positions: int | Sequence[int] | None = None,
+    alphabet: str = "ACGT",
 ):
     """Write the same sites into every sequence, for measuring a model's
     response to them.
@@ -985,7 +1025,15 @@ def insert_sites(
     sequences, such as from
     [`shuffle_sequences()`][universalmotif.shuffle_sequences], with and
     without a motif. Returns the new sequences in the same form as the
-    input.
+    input: a string, a list or a dict, or a one-hot array.
+
+    One-hot sequences, as from [`one_hot()`][universalmotif.one_hot], are
+    given as an array of shape (sequences, letters, length) or (sequences,
+    length, letters), or a single sequence without the first axis, with the
+    letters in the order of ``alphabet``. The sites are written straight
+    into a copy, which keeps the layout and dtype, and a PyTorch tensor
+    comes back as a tensor. A letter of a site outside ``alphabet``, such as
+    N, leaves its column empty, as it would be after encoding the sequence.
 
     Examples
     --------
@@ -995,8 +1043,10 @@ def insert_sites(
     ['ATGACTCAAA', 'CTGACTCACC']
     >>> um.insert_sites(bkg, ["GG", "TT"], positions=[0, 8])
     ['GGAAAAAATT', 'GGCCCCCCTT']
+    >>> x = um.insert_sites(um.one_hot(bkg), "TGACTCA")
+    >>> x.shape, um.from_one_hot(x)
+    ((2, 4, 10), ['ATGACTCAAA', 'CTGACTCACC'])
     """
-    names, seqs = _sequence_pairs(sequences)
     several = isinstance(sites, (list, tuple))
     letters = [_site_letters(x) for x in sites] if several else [_site_letters(sites)]
     if positions is None:
@@ -1007,13 +1057,35 @@ def insert_sites(
         starts = [int(positions)] if np.ndim(positions) == 0 else [int(p) for p in positions]
         if len(starts) != len(letters):
             raise ValueError(f"{len(starts)} positions for {len(letters)} sites")
+
+    def place(length: int) -> list[int]:
+        out = []
+        for k, site in enumerate(letters):
+            p = (length - len(site)) // 2 if starts is None else starts[k]
+            if p < 0 or p + len(site) > length:
+                raise ValueError(f"the site {site} at {p} does not fit in a sequence of length {length}")
+            out.append(p)
+        return out
+
+    from ._onehot import _is_array, _letters_middle, _restore_array
+
+    if _is_array(sequences):
+        a, form = _letters_middle(sequences, alphabet)
+        out = a.copy()
+        index = {c: i for i, c in enumerate(alphabet)}
+        for site, p in zip(letters, place(a.shape[2])):
+            column = np.zeros((len(alphabet), len(site)), dtype=out.dtype)
+            for j, c in enumerate(site):
+                i = index.get(c, index.get(c.upper(), index.get(c.lower())))
+                if i is not None:
+                    column[i, j] = 1
+            out[:, :, p:p + len(site)] = column
+        return _restore_array(out, form)
+    names, seqs = _sequence_pairs(sequences)
     out = []
     for seq in seqs:
         new = list(seq)
-        for k, site in enumerate(letters):
-            p = (len(seq) - len(site)) // 2 if starts is None else starts[k]
-            if p < 0 or p + len(site) > len(seq):
-                raise ValueError(f"the site {site} at {p} does not fit in a sequence of length {len(seq)}")
+        for site, p in zip(letters, place(len(seq))):
             new[p:p + len(site)] = site
         out.append("".join(new))
     from ._sequences import _restore
@@ -1022,11 +1094,12 @@ def insert_sites(
 
 
 def site_spacings(
-    sequences: str | Sequence[str] | Mapping[str, str],
+    sequences: Any,
     first: Any,
     second: Any,
     spacings: Iterable[int],
     start: int | None = None,
+    alphabet: str = "ACGT",
 ) -> dict[int, Any]:
     """Two sites at a range of spacings, for measuring how a model responds
     to the distance between them.
@@ -1036,7 +1109,11 @@ def site_spacings(
     given as for [`insert_sites()`][universalmotif.insert_sites]. By default
     ``start`` places the pair in the middle of each sequence at the widest
     spacing, so that ``first`` stays put as ``second`` moves. Returns a dict
-    from each spacing to the new sequences, in the same form as the input.
+    from each spacing to the new sequences, in the same form as the input,
+    which may be one-hot as for ``insert_sites()``. Each spacing's sequences
+    are as large as the input, so for many spacings of many one-hot
+    sequences it is best to predict one spacing at a time rather than to
+    stack them.
 
     Examples
     --------
@@ -1044,11 +1121,21 @@ def site_spacings(
     >>> res = um.site_spacings("AAAAAAAAAAAA", "GG", "TT", spacings=[0, 2, 4])
     >>> res
     {0: 'AAGGTTAAAAAA', 2: 'AAGGAATTAAAA', 4: 'AAGGAAAATTAA'}
+    >>> x = um.site_spacings(um.one_hot(["AAAAAAAAAAAA"]), "GG", "TT", spacings=[0, 2, 4])
+    >>> um.from_one_hot(x[2])
+    ['AAGGAATTAAAA']
     """
     spacings = [int(d) for d in spacings]
     if not spacings or min(spacings) < 0:
         raise ValueError("spacings must be one or more whole numbers, 0 or greater")
     a, b = _site_letters(first), _site_letters(second)
+    from ._onehot import _is_array, _letters_middle
+
+    if _is_array(sequences):
+        length = _letters_middle(sequences, alphabet)[0].shape[2]
+        s0 = (length - len(a) - max(spacings) - len(b)) // 2 if start is None else int(start)
+        return {d: insert_sites(sequences, [a, b], positions=[s0, s0 + len(a) + d], alphabet=alphabet)
+                for d in spacings}
     names, seqs = _sequence_pairs(sequences)
     out = {}
     for d in spacings:

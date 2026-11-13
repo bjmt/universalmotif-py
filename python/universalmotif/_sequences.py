@@ -16,6 +16,7 @@ from . import _core
 from ._analysis import _sequence_pairs
 from ._api import _bkg_table, _check_motif
 from ._core import Motif
+from ._onehot import _array_strings, _is_array, _restore_array, _strings_array
 from ._threads import _nthreads
 
 _ALPHABETS = {"DNA": "ACGT", "RNA": "ACGU", "AA": "ACDEFGHIKLMNPQRSTVWY"}
@@ -369,7 +370,7 @@ _SHUFFLE_METHODS = ("euler", "markov", "linear")
 
 
 def shuffle_sequences(
-    sequences: str | Sequence[str] | Mapping[str, str],
+    sequences,
     k: int = 2,
     method: str = "euler",
     seed: int | None = None,
@@ -377,6 +378,7 @@ def shuffle_sequences(
     window_size: float = 0.1,
     window_overlap: float = 0.01,
     nthreads: int | None = None,
+    alphabet: str = "ACGT",
 ):
     """Shuffle sequences while preserving their k-mer composition.
 
@@ -397,7 +399,14 @@ def shuffle_sequences(
     the package setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns new sequences in the same form as the input, whether a string, a
-    list or a dict with the same keys.
+    list or a dict with the same keys, or one-hot sequences, given as for
+    [`insert_sites()`][universalmotif.insert_sites] with the letters in the
+    order of ``alphabet``. These are shuffled as the sequences they encode,
+    with positions holding no letter read as N, so that the result is the
+    one-hot encoding of shuffling the sequences as text, in the same layout
+    and dtype. For several shuffles of each sequence that keep any Ns in
+    place, as references for attribution, see
+    [`shuffled_references()`][universalmotif.shuffled_references].
 
     Examples
     --------
@@ -408,16 +417,99 @@ def shuffle_sequences(
     'ACCGTACGGTAACGTT'
     >>> um.count_kmers(shuffled, k=2).equals(um.count_kmers(seq, k=2))
     True
+    >>> um.from_one_hot(um.shuffle_sequences(um.one_hot([seq]), seed=1))
+    ['ACCGTACGGTAACGTT']
     """
     nthreads = _nthreads(nthreads)
     if method not in _SHUFFLE_METHODS:
         raise ValueError("method must be 'euler', 'markov' or 'linear'")
     if k < 1:
         raise ValueError("k must be at least 1")
-    names, seqs = _sequence_pairs(sequences)
     win = (float(window_size), float(window_overlap)) if window else None
+    if _is_array(sequences):
+        seqs, form = _array_strings(sequences, alphabet)
+        out = _core._shuffle_sequences(seqs, k, method, _seed(seed), win, nthreads)
+        return _strings_array(out, form, alphabet)
+    names, seqs = _sequence_pairs(sequences)
     out = _core._shuffle_sequences(seqs, k, method, _seed(seed), win, nthreads)
     return _restore(sequences, names, out)
+
+
+def shuffle_region(
+    sequences,
+    start: int,
+    end: int,
+    n: int = 20,
+    k: int = 2,
+    method: str = "euler",
+    seed: int | None = None,
+    nthreads: int | None = None,
+    alphabet: str = "ACGT",
+):
+    """Shuffle one stretch of each sequence ``n`` times, leaving the rest as
+    it is, for measuring what a model loses when a site or region is taken
+    apart.
+
+    Letters from ``start`` up to ``end``, counted from 0 with the end left
+    out, are shuffled as by
+    [`shuffle_sequences()`][universalmotif.shuffle_sequences], keeping their
+    k-mer counts, and the region must lie within every sequence. Comparing a
+    model's predictions for the sequences with the mean of those for their
+    shuffles gives the effect of the region, as with
+    [`plot_marginalization()`][universalmotif.plot_marginalization].
+
+    Sequences are given as for ``shuffle_sequences()``, including as one-hot
+    arrays. A string gives a list of ``n`` strings, a list gives a list of
+    lists and a dict a dict of lists, while one-hot sequences of shape
+    (sequences, letters, length) give an array of shape (sequences, n,
+    letters, length), in the layout and dtype of the input, which takes
+    ``n`` times its memory. Results depend on ``seed`` and ``n`` but not on
+    ``nthreads``, which defaults to the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> um.shuffle_region("AAAAATGACTCAGTCATGACCCCCC", 5, 20, n=3, seed=1)
+    ['AAAAATGTCATGAGACACTCCCCCC', 'AAAAATGTGACAGACTCATCCCCCC', 'AAAAATGACATGAGTCACTCCCCCC']
+    >>> x = um.one_hot(["AAAAATGACTCAGTCATGACCCCCC", "TTTTTTGACTCAGTCATGAGGGGGG"])
+    >>> um.shuffle_region(x, 5, 20, n=3).shape
+    (2, 3, 4, 25)
+    """
+    nthreads = _nthreads(nthreads)
+    if method not in _SHUFFLE_METHODS:
+        raise ValueError("method must be 'euler', 'markov' or 'linear'")
+    if k < 1:
+        raise ValueError("k must be at least 1")
+    if n < 0:
+        raise ValueError("n must be 0 or more")
+    start, end = int(start), int(end)
+    array = _is_array(sequences)
+    if array:
+        seqs, form = _array_strings(sequences, alphabet)
+    else:
+        names, seqs = _sequence_pairs(sequences)
+    if not 0 <= start < end:
+        raise ValueError("the region must start at 0 or later and end after it starts")
+    short = [len(s) for s in seqs if len(s) < end]
+    if short:
+        raise ValueError(f"the region from {start} to {end} does not fit in a sequence of length {min(short)}")
+    if end - start < k:
+        raise ValueError(f"the region is shorter than k ({k})")
+    parts = [s[start:end] for s in seqs for _ in range(n)]
+    shuffled = _core._shuffle_sequences(parts, k, method, _seed(seed), None, nthreads) if parts else []
+    out = [seqs[i // n][:start] + part + seqs[i // n][end:] for i, part in enumerate(shuffled)] if n else []
+    if array:
+        if not n:
+            empty = np.zeros((len(seqs), 0, len(alphabet), len(seqs[0]) if seqs else 0), dtype=form.dtype)
+            return _restore_array(empty, form)
+        return _strings_array(out, form, alphabet, lead=(n,))
+    groups = [out[i * n:(i + 1) * n] for i in range(len(seqs))]
+    if isinstance(sequences, str):
+        return groups[0]
+    if isinstance(sequences, Mapping):
+        return dict(zip(names, groups))
+    return groups
 
 
 def create_sequences(
@@ -427,7 +519,9 @@ def create_sequences(
     freqs: Sequence[float] | Mapping[str, float] | None = None,
     seed: int | None = None,
     nthreads: int | None = None,
-) -> list[str]:
+    output: str = "strings",
+    dtype=np.float32,
+):
     """Random sequences.
 
     ``alphabet`` is ``"DNA"``, ``"RNA"``, ``"AA"`` or a string of letters.
@@ -439,13 +533,18 @@ def create_sequences(
     are uniform by default.
 
     ``nthreads`` defaults to the package setting from
-    [`set_nthreads()`][universalmotif.set_nthreads].
+    [`set_nthreads()`][universalmotif.set_nthreads]. With
+    ``output="onehot"``, the sequences come as an array of shape (seqnum,
+    letters, seqlen) and type ``dtype``, as from
+    [`one_hot()`][universalmotif.one_hot], ready for a model.
 
     Examples
     --------
     >>> import universalmotif as um
     >>> um.create_sequences(seqnum=3, seqlen=12, seed=1)
     ['TTTGGACAGCGC', 'TGGTAGCAAGTA', 'ATAGAAGGACGT']
+    >>> um.create_sequences(seqnum=3, seqlen=12, seed=1, output="onehot").shape
+    (3, 4, 12)
 
     AT-rich sequences, from letter frequencies:
 
@@ -457,6 +556,8 @@ def create_sequences(
     letters = _ALPHABETS.get(alphabet, None) or _letters(alphabet)
     if len(letters) < 1:
         raise ValueError("the alphabet cannot be empty")
+    if output not in ("strings", "onehot"):
+        raise ValueError("output must be 'strings' or 'onehot'")
     if seqnum < 0 or seqlen < 1:
         raise ValueError("seqnum must be non-negative and seqlen positive")
     f = None
@@ -474,7 +575,13 @@ def create_sequences(
             f = [float(freqs[x]) for x in kl]
         else:
             f = [float(x) for x in freqs]
-    return _core._create_sequences(letters, seqnum, seqlen, f, _seed(seed), nthreads)
+    seqs = _core._create_sequences(letters, seqnum, seqlen, f, _seed(seed), nthreads)
+    if output == "onehot":
+        from ._deep import one_hot
+
+        alphabet = "".join(letters)
+        return one_hot(seqs, alphabet=alphabet, dtype=dtype) if seqs else np.zeros((0, len(alphabet), seqlen), dtype)
+    return seqs
 
 
 def shuffle_motifs(motifs: Motif | Iterable[Motif], k: int = 2, seed: int | None = None):
@@ -532,7 +639,7 @@ _IMPLANT_SCHEMA = {
 
 def implant_motifs(
     motifs: Motif | Iterable[Motif],
-    sequences: str | Sequence[str] | Mapping[str, str],
+    sequences,
     n_per_seq: int = 1,
     rate: float | None = None,
     positions: Sequence[Sequence[int]] | None = None,
@@ -542,6 +649,7 @@ def implant_motifs(
     max_retries: int = 100,
     seed: int | None = None,
     return_indices: bool = False,
+    alphabet: str = "ACGT",
 ):
     """Plant sites sampled from DNA or RNA motifs into sequences.
 
@@ -558,7 +666,9 @@ def implant_motifs(
     ``min_spacing`` letters from other sites; a site that cannot be placed
     in ``max_retries`` attempts is skipped with a warning.
 
-    Returns the new sequences in the same form as the input, and with
+    Returns the new sequences in the same form as the input, which may be
+    one-hot as for [`insert_sites()`][universalmotif.insert_sites], with the
+    letters in the order of ``alphabet``, and with
     ``return_indices`` also a DataFrame of the sites with the columns
     ``sequence_i``, ``motif_i``, ``start``, ``width``, ``strand`` and
     ``planted``. The indices and ``start`` count from 0, and
@@ -580,7 +690,11 @@ def implant_motifs(
     if n_per_seq < 0:
         raise ValueError("n_per_seq must be a non-negative integer")
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
-    names, seqs = _sequence_pairs(sequences)
+    array = _is_array(sequences)
+    if array:
+        seqs, form = _array_strings(sequences, alphabet)
+    else:
+        names, seqs = _sequence_pairs(sequences)
     pos = None if positions is None else [[int(p) for p in ps] for ps in positions]
     if pos is not None and any(p < 0 for ps in pos for p in ps):
         raise ValueError("positions must be at least 0")
@@ -589,7 +703,7 @@ def implant_motifs(
     )
     for w in warns:
         warnings.warn(w, stacklevel=2)
-    out = _restore(sequences, names, new)
+    out = _strings_array(new, form, alphabet) if array else _restore(sequences, names, new)
     if return_indices:
         return out, pl.DataFrame(idx, schema=_IMPLANT_SCHEMA)
     return out
@@ -733,6 +847,7 @@ __all__ = [
     "sample_sites",
     "sequence_complexity",
     "shuffle_motifs",
+    "shuffle_region",
     "shuffle_sequences",
     "window_string",
 ]

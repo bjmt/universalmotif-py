@@ -6,6 +6,8 @@ Random sequences, shuffling, k-mer counts and backgrounds, sequence complexity, 
 
 ::: universalmotif.shuffle_sequences
 
+::: universalmotif.shuffle_region
+
 ::: universalmotif.shuffle_string
 
 ::: universalmotif.get_bkg

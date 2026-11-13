@@ -118,6 +118,7 @@ def plot_spacing(
     predictions: Mapping[int, Any] | Any,
     baseline: Any = None,
     spacings: Sequence[int] | None = None,
+    axis: int = 0,
     output: int | str | Sequence[int | str] | None = None,
     names: Sequence[str] | None = None,
     band: str | None = "ci",
@@ -161,8 +162,11 @@ def plot_spacing(
         Predictions for the background sequences without sites, in the same
         order and of the same shape as those for each spacing, or a single
         number to subtract from every prediction.
-    spacings
-        The spacing of each row of ``predictions`` when it is an array.
+    spacings, axis
+        The spacing of each row of ``predictions`` when it is an array, and
+        the axis along which spacings run: 0 for (spacings, sequences) and 1
+        for predictions made with sequences first, of shape (sequences,
+        spacings) or (sequences, spacings, outputs).
     output
         The index or name of the output to draw, or a list of them, for
         models with several outputs. All outputs are drawn by default.
@@ -234,6 +238,7 @@ def plot_spacing(
     >>> ax = um.plot_spacing(stacked, spacings=range(31), band="sd", ax=axes[1])
     >>> ax is axes[1]
     True
+    >>> ax = um.plot_spacing(stacked.T, spacings=range(31), axis=1, ax=axes[0])
     >>> plt.close(fig)
     """
     if band not in ("ci", "se", "sd", None):
@@ -252,6 +257,10 @@ def plot_spacing(
                              "from spacing to predictions")
         stack = _to_numpy(predictions)
         xs = [int(d) for d in spacings]
+        if axis not in (0, 1):
+            raise ValueError("axis must be 0, for spacings first, or 1, for sequences first")
+        if axis == 1 and stack.ndim >= 2:
+            stack = np.swapaxes(stack, 0, 1)
         if stack.ndim not in (2, 3):
             raise ValueError("an array of predictions must have shape (spacings, sequences) or "
                              f"(spacings, sequences, outputs), not {stack.shape}")
