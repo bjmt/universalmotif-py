@@ -51,6 +51,7 @@ New:
 - The `create` command makes motifs from consensus sequences or from
   aligned sites, including the hits table of `scan`, and the `heatmap`
   command draws `plot_comparison()` heatmaps, with `--cut` for the tree.
+- The `scan` command writes hits as BED with `--bed`.
 - `scan_sequences(ranges=)` scans only the given ranges of a genome,
   merging those that overlap, and returns the hits on the genome.
 - Backgrounds can be given as the table `get_bkg()` returns, wherever a
@@ -71,6 +72,8 @@ Fixes:
 - `umotif enrich --test` takes `sites`, the name `enrich_motifs()` uses,
   and still accepts `hits`.
 - Command line errors no longer lose a quote at either end of the message.
+- `logo --each` cuts file names to 100 characters, which merged motifs,
+  named after all their members, could overrun.
 - `view_motifs()` signatures show `fit_to_height=<default>` instead of an
   object address.
 

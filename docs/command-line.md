@@ -62,8 +62,8 @@ A few conventions hold across the commands.
   complemented.
 - **Tables** are written as tab-separated text with a header row, with
   missing values written as `NA` and lists joined by commas. Positions count
-  from 0 and leave the end out, so the first three columns of a table of
-  hits on a genome can be read as BED.
+  from 0 and leave the end out, as in BED files, and `scan --bed` writes
+  hits as BED directly.
 - **Output** goes to standard output unless a file is given with `-o`, so
   commands can be chained with pipes. Files ending in `.gz` are written
   gzipped.
@@ -120,6 +120,173 @@ peaks:
 ```sh
 umotif compare enriched.meme --db jaspar.meme --complete -o similar.tsv
 umotif find -s peaks.fa -b bkg.fa --seed 1 --table found.tsv -o found.meme
+```
+
+## More examples
+
+The recipes below show the other commands on their own. The file names are
+placeholders: `motifs.meme` stands for any motif file, `peaks.bed` for a
+BED file of ranges and `genome.fa.gz` for a genome compressed with `bgzip`.
+
+### Converting and inspecting motifs
+
+Formats are recognized when reading and chosen from the output file's
+extension when writing, so converting a file only takes naming the output,
+and several files can be combined into one:
+
+```sh
+umotif convert motifs.jaspar -o motifs.meme
+umotif convert motifs.meme other.transfac -o combined.meme
+```
+
+`--type` changes what the matrices hold, here counts for a JASPAR file, and
+`--rc` reverse complements every motif. `summary` lists the motifs with
+their consensus, information content and number of sites:
+
+```sh
+umotif convert motifs.meme --type PCM -o counts.jaspar
+umotif convert motifs.meme --rc -o motifs_rc.meme
+umotif summary motifs.meme
+```
+
+### Curating a collection
+
+Databases hold many closely related motifs. Taking the human bZIP motifs of
+HOCOMOCO as an example, `filter` keeps those of the FOS, JUN, ATF and CREB
+factors with enough information content to be useful, `trim` cuts their
+uninformative edges, and `heatmap` shows how they group, with the tree cut
+at a mean column correlation of 0.8:
+
+```sh
+umotif fetch hocomoco --species HUMAN -o hocomoco.meme
+umotif filter hocomoco.meme --regex '^(FOS|JUN|ATF|CREB)' --icscore 8 \
+    | umotif trim - -o bzip.meme
+umotif heatmap bzip.meme --cut 0.8 -o bzip.pdf
+```
+
+`merge` then combines similar motifs, with complete linkage requiring every
+pair in a cluster to be similar, and records which were merged with
+`--clusters`. `logo --each` draws every result to a file of its own:
+
+```sh
+umotif merge bzip.meme --linkage complete --clusters clusters.tsv -o bzip_merged.meme
+umotif logo bzip_merged.meme --each logos
+```
+
+### Making motifs
+
+`create` makes motifs from consensus sequences, which may use IUPAC codes,
+or from a file of aligned sites. A motif made from a consensus stands for
+100 sites, which `--nsites` changes, and gives other letters no weight
+unless `--pseudocount` gives them some:
+
+```sh
+umotif create TGASTCA CACGTG --name AP-1 --name G-box --pseudocount 1 -o seeds.meme
+umotif create --sites sites.fa -o from_sites.meme
+```
+
+It also reads the table of hits that `scan` writes, making one motif for
+each motif scanned from the sites it matched, so that a rough consensus
+motif can be refined from its matches in a set of sequences. The
+pseudocount above lets near matches score, and since short motifs cannot
+reach very small P-values, the cutoff is loosened:
+
+```sh
+umotif scan seeds.meme -s peaks.fa -P 1e-3 | umotif create --sites - -o refined.meme
+```
+
+### Comparing and clustering
+
+`compare` with `--db` finds the motifs of a database most similar to each
+query, such as the motifs found by `find`. `--complete` scores the whole of
+each query rather than only where the two motifs overlap, and here only
+matches with q-values below 0.05 are kept. Without `--db`, the motifs are
+compared with each other, and `--matrix` writes every score at once:
+
+```sh
+umotif compare found.meme --db jaspar.meme --complete -q 0.05 -o matches.tsv
+umotif compare motifs.meme --matrix score -o scores.tsv
+```
+
+`tree` clusters motifs and writes the tree in Newick format, drawn with
+logos at its tips with `--plot`, or with `-k` the cluster of each motif:
+
+```sh
+umotif tree motifs.meme --plot tree.pdf --logos -o tree.nwk
+umotif tree motifs.meme -k 5 -o clusters.tsv
+```
+
+### Scanning
+
+The sequences of a FASTA file are read and scanned a batch at a time.
+`--first-hit` keeps the leftmost hit of each motif in each sequence, which
+is quicker when only the presence of a motif matters, and `--no-overlaps`
+keeps the best of overlapping hits, comparing those on opposite strands
+too:
+
+```sh
+umotif scan motifs.meme -s seqs.fa -o hits.tsv
+umotif scan motifs.meme -s seqs.fa --first-hit -o first_hits.tsv
+umotif scan motifs.meme -s seqs.fa --no-overlaps -o best_hits.tsv
+```
+
+A genome can be scanned whole, or only in ranges, whose hits are reported
+on the genome, or within each range with `--local`. `--bed` writes the hits
+as BED, named by motif, ready for a genome browser:
+
+```sh
+umotif scan motifs.meme -g genome.fa.gz -P 1e-5 -p 4 -o genome_hits.tsv
+umotif scan motifs.meme -g genome.fa.gz -r peaks.bed --bed -o peak_hits.bed
+umotif scan motifs.meme -g genome.fa.gz -r peaks.bed --local -o peak_hits.tsv
+```
+
+### Sequences and backgrounds
+
+`shuffle` keeps the k-mer counts of sequences, dinucleotides by default,
+and `extract` writes the sequences of ranges, reverse complementing those on
+the minus strand:
+
+```sh
+umotif shuffle -s peaks.fa --seed 1 -o shuffled.fa
+umotif extract -g genome.fa.gz -r peaks.bed -o peaks.fa
+```
+
+`bkg` draws background sequences from the genome, matched to the targets on
+GC content and length. `-n` draws several for each target, and `--table`
+records which matched which:
+
+```sh
+umotif bkg -g genome.fa.gz -r peaks.bed -n 2 --seed 1 --table matched.tsv -o bkg.fa
+```
+
+`enrich` and `find` compare the targets with background sequences given
+with `-b`, or without them with shuffled targets, here keeping
+trinucleotides with `--shuffle-k 3`:
+
+```sh
+umotif enrich motifs.meme -s peaks.fa --shuffle-k 3 --seed 1 -o enriched.tsv
+umotif find -s peaks.fa --shuffle-k 3 --seed 1 -o found.meme
+```
+
+### Peaks and their surroundings
+
+`proximity` tests whether the hits of each motif sit closer to anchors,
+such as transcription start sites, than expected by chance, scanning the
+genome given with `-g`:
+
+```sh
+umotif proximity motifs.meme -a tss.bed -g genome.fa.gz -o near_tss.tsv
+```
+
+`coocc` tests which pairs of motifs share peaks more often than chance,
+`posenr` which motifs gather at particular positions within the peaks, by
+default around their centres, and `matrix` writes a peak by motif table of
+matches for single-cell ATAC analyses:
+
+```sh
+umotif coocc motifs.meme -g genome.fa.gz -r peaks.bed -o pairs.tsv
+umotif posenr motifs.meme -g genome.fa.gz -r peaks.bed -o positions.tsv
+umotif matrix motifs.meme -g genome.fa.gz -r peaks.bed -o peak_by_motif.tsv
 ```
 
 ## Reference

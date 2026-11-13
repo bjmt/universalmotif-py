@@ -842,3 +842,26 @@ def test_heatmap(tmp_path):
     assert (tmp_path / "plain.pdf").read_bytes()[:4] == b"%PDF"
     run("heatmap", MOTIFS, ok=False)
     run("heatmap", MOTIFS, "-o", tmp_path / "x.png", "--no-cluster", "--cut", "0.5", ok=False)
+
+
+def test_scan_bed_and_long_logo_names(tmp_path, genome):
+    fasta, bed, _, _ = genome
+    run("scan", MOTIFS, "-g", fasta, "-r", bed, "--bed", "-o", tmp_path / "hits.bed")
+    run("scan", MOTIFS, "-g", fasta, "-r", bed, "-o", tmp_path / "hits.tsv")
+    hits = table(tmp_path / "hits.tsv")
+    back = um.read_bed(tmp_path / "hits.bed")
+    assert back.height == hits.height
+    assert back["chrom", "start", "end", "strand"].rows() == hits["chrom", "start", "end", "strand"].rows()
+    assert back["name"].to_list() == hits["motif"].to_list()
+    # A whole genome scan names hits by the chromosome scanned.
+    run("scan", MOTIFS, "-g", fasta, "--bed", "-o", tmp_path / "whole.bed")
+    assert set(um.read_bed(tmp_path / "whole.bed")["chrom"]) <= {"chr1", "chr2"}
+    # Merged motifs are named after all their members; logo files stay short.
+    long = um.create_motif("TGACTCA", name="merged_" + "+".join(f"MOTIF{i}.H12CORE.0.P.B" for i in range(30)))
+    um.write_meme([long], tmp_path / "long.meme")
+    run("logo", tmp_path / "long.meme", "--each", tmp_path / "logos")
+    (logo,) = list((tmp_path / "logos").iterdir())
+    assert len(logo.name) <= 104
+    # A table of hits with no rows has no sites.
+    (tmp_path / "empty.tsv").write_text("motif\tmatch\n")
+    run("create", "--sites", tmp_path / "empty.tsv", ok=False)

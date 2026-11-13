@@ -403,7 +403,10 @@ def cmd_tree(a):
 
 
 def _safe_name(name: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._+-]+", "_", name).strip("_") or "motif"
+    """A motif name as a file stem, kept well within file name limits,
+    since merged motifs are named after all their members."""
+    stem = re.sub(r"[^A-Za-z0-9._+-]+", "_", name).strip("_") or "motif"
+    return stem[:100].rstrip("._+-") or "motif"
 
 
 def cmd_logo(a):
@@ -452,6 +455,8 @@ def _read_sites(path: str) -> dict[str, list[str]]:
     if "match" in header:
         df = pl.read_csv(io.StringIO("\n".join(lines)), separator="\t", null_values="NA",
                          infer_schema_length=10000)
+        if df["match"].drop_nulls().is_empty():
+            raise CliError(f"no sites in {path}")
         if "motif" not in df.columns:
             return {"": df["match"].drop_nulls().to_list()}
         return {name: g["match"].drop_nulls().to_list()
@@ -565,7 +570,30 @@ def cmd_scan(a):
             hits = um.scan_sequences(motifs, genome, **kw)
     else:
         raise CliError("give the sequences to scan with -s or -g")
-    write_table(hits, a.output)
+    if a.bed:
+        write_hits_bed(hits, a.output)
+    else:
+        write_table(hits, a.output)
+
+
+def write_hits_bed(hits: pl.DataFrame, path: str | None) -> None:
+    """Hits as BED6, named by motif, on the chromosome where they have
+    one and otherwise on the sequence scanned."""
+    import universalmotif as um
+
+    with tempfile.TemporaryDirectory() as tmp:
+        file = Path(tmp) / "hits.bed"
+        if hits.height:
+            um.write_bed(hits, file, name="motif", score="")
+            text = file.read_text()
+        else:
+            text = ""
+    out = _open_output(path)
+    try:
+        out.write(text)
+    finally:
+        if out is not sys.stdout:
+            out.close()
 
 
 def cmd_compare(a):
@@ -1089,6 +1117,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                         "when most sequences have one")
     p.add_argument("--local", action="store_true",
                    help="with -r, report positions within each range, not on the genome")
+    p.add_argument("--bed", action="store_true",
+                   help="write the hits as BED, named by motif, rather than as a table")
     p.add_argument("--genomic", action="store_true",
                    help="with -s, read each sequence's place in the genome from names like "
                         "chrom:start-end and report hits in genomic coordinates")
