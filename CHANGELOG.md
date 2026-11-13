@@ -30,6 +30,8 @@ Changes in behaviour:
   than 0.05.
 - Functions taking `nthreads` default to the package setting, which is 1
   unless changed.
+- Writers gzip `.gz` paths at level 6, as the `gzip` command does, which
+  is about four times faster than before for files 3% larger.
 
 New:
 

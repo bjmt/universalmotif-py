@@ -110,7 +110,7 @@ def _open_output(path: str | None, binary: bool = False):
     if path in (None, "-"):
         return sys.stdout.buffer if binary else sys.stdout
     if path.endswith(".gz"):
-        return gzip.open(path, "wb" if binary else "wt")
+        return gzip.open(path, "wb" if binary else "wt", compresslevel=6)
     return open(path, "wb" if binary else "w")
 
 

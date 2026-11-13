@@ -50,10 +50,12 @@ def _write_text(file: PathLike, text: str, overwrite: bool, append: bool) -> Non
     path = Path(file)
     if path.exists() and not overwrite and not append:
         raise FileExistsError(f"{path} exists; set overwrite=True or append=True")
-    # A .gz path is written gzipped; appending adds a gzip member, which
-    # readers treat as a continuation of the file.
-    opener = gzip.open if path.suffix == ".gz" else open
-    with opener(path, "at" if append else "wt") as f:
+    # A .gz path is written gzipped, at gzip's own default level of 6, which
+    # is several times faster than Python's default of 9 for files barely
+    # larger; appending adds a gzip member, which readers treat as a
+    # continuation of the file.
+    mode = "at" if append else "wt"
+    with (gzip.open(path, mode, compresslevel=6) if path.suffix == ".gz" else open(path, mode)) as f:
         # Written a slice at a time, so the text is never encoded whole.
         step = 1 << 20
         for i in range(0, len(text), step):

@@ -318,8 +318,7 @@ def write_bed(
     path = Path(file)
     if path.exists() and not overwrite:
         raise FileExistsError(f"{path} exists; set overwrite=True")
-    opener = gzip.open if path.suffix == ".gz" else open
-    with opener(path, "wt") as f:
+    with (gzip.open(path, "wt", compresslevel=6) if path.suffix == ".gz" else open(path, "w")) as f:
         f.write("".join(ln + "\n" for ln in lines))
 
 
