@@ -779,9 +779,7 @@ fn _scan_contributions<'py>(
             min_importance: i,
         })
         .collect();
-    let mut opts = ContribScanOptions::default();
-    opts.rc = rc;
-    opts.nthreads = nthreads;
+    let opts = ContribScanOptions { rc, nthreads };
     let hits = py
         .detach(|| scan_contributions(&motifs, values, &lengths, width, &thresholds, &opts))
         .map_err(err)?;

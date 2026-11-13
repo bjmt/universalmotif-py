@@ -208,13 +208,14 @@ fn _shuffle_codes<'py>(
     let values = codes
         .as_slice()
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
-    let mut opts = shuffle::CodeShuffleOptions::default();
-    opts.k = k;
-    opts.method = method.parse::<ShuffleMethod>().map_err(err)?;
-    opts.seed = seed;
-    opts.offset = offset;
-    opts.unknown = Some(4);
-    opts.nthreads = nthreads;
+    let opts = shuffle::CodeShuffleOptions {
+        k,
+        method: method.parse::<ShuffleMethod>().map_err(err)?,
+        seed,
+        offset,
+        unknown: Some(4),
+        nthreads,
+    };
     let out = py
         .detach(|| shuffle::shuffle_codes(values, length, n, &opts))
         .map_err(err)?;
