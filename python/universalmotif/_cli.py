@@ -436,6 +436,79 @@ def cmd_logo(a):
     _close_figure(fig)
 
 
+def _read_sites(path: str) -> dict[str, list[str]]:
+    """Aligned sites by motif name from a FASTA file, a plain list with one
+    site per line, or a table with a match column, such as umotif scan
+    writes, whose sites are grouped by its motif column if it has one."""
+    if path != "-" and not Path(path).exists():
+        raise CliError(f"no such file: {path}")
+    text = _read_bytes(path).decode()
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.startswith("#")]
+    if not lines:
+        raise CliError(f"no sites in {path}")
+    if lines[0].startswith(">"):
+        return {"": [ln for ln in lines if not ln.startswith(">")]}
+    header = lines[0].split("\t")
+    if "match" in header:
+        df = pl.read_csv(io.StringIO("\n".join(lines)), separator="\t", null_values="NA",
+                         infer_schema_length=10000)
+        if "motif" not in df.columns:
+            return {"": df["match"].drop_nulls().to_list()}
+        return {name: g["match"].drop_nulls().to_list()
+                for (name,), g in df.group_by("motif", maintain_order=True)}
+    return {"": lines}
+
+
+def cmd_create(a):
+    import universalmotif as um
+
+    if bool(a.consensus) == bool(a.sites):
+        raise CliError("give consensus sequences, or a file of sites with --sites")
+    kw = {"alphabet": a.alphabet, "type": a.type, "pseudocount": a.pseudocount,
+          "family": a.family, "organism": a.organism}
+    names = a.name or []
+    motifs = []
+    if a.consensus:
+        if len(names) not in (0, len(a.consensus)):
+            raise CliError("give one --name per consensus sequence, or none")
+        for i, cons in enumerate(a.consensus):
+            motifs.append(um.create_motif(cons, name=names[i] if names else cons,
+                                          nsites=a.nsites, **kw))
+    else:
+        groups = _read_sites(a.sites)
+        if len(names) not in (0, len(groups)):
+            raise CliError(f"give one --name per motif ({len(groups)}), or none")
+        for i, (group, sites) in enumerate(groups.items()):
+            widths = {len(s) for s in sites}
+            if len(widths) > 1:
+                raise CliError(f"the sites{' of ' + group if group else ''} differ in length "
+                               f"({min(widths)} to {max(widths)}); they must be aligned")
+            stem = Path(a.sites).name.split(".")[0] if a.sites != "-" else "motif"
+            name = names[i] if names else (group or stem or "motif")
+            motifs.append(um.create_motif(sites, name=name, **kw))
+    write_motifs(motifs, a.output, a.to)
+
+
+def cmd_heatmap(a):
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import universalmotif as um
+
+    if a.output in (None, "-"):
+        raise CliError("give a file to draw the heatmap to with -o (PNG, PDF or SVG)")
+    motifs = read_motifs(a.motifs, a.format)
+    if len(motifs) < 2:
+        raise CliError("at least two motifs are needed for a heatmap")
+    fig = um.plot_comparison(
+        motifs, labels=a.labels, value=a.value, min_overlap=a.min_overlap, rc=a.rc,
+        cluster=a.cluster, method=a.method, dendrogram=a.dendrogram, cut=a.cut,
+        cut_height=a.cut_height, cmap=a.cmap, annotate=a.annotate, logos=a.logos,
+        nthreads=a.threads)
+    fig.savefig(a.output, bbox_inches="tight", dpi=a.dpi)
+    _close_figure(fig)
+
+
 def _close_figure(fig) -> None:
     import matplotlib.pyplot as plt
 
@@ -839,6 +912,63 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
         d.add_argument("--refresh", action="store_true",
                        help="download again rather than using the cache")
         _motif_out_args(d)
+
+    p = command("create", cmd_create, "make motifs from consensus sequences or sites",
+                "Make motifs from consensus sequences, one per sequence, which may use IUPAC "
+                "codes, or from a file of aligned sites with --sites: a FASTA file, a list of "
+                "one site per line, or a table with a match column, such as umotif scan "
+                "writes, which gives one motif per motif named in it.")
+    p.add_argument("consensus", nargs="*", metavar="CONSENSUS",
+                   help="consensus sequences, such as TGASTCA")
+    p.add_argument("--sites", help="file of aligned sites; - reads standard input")
+    _motif_out_args(p)
+    p.add_argument("--name", action="append",
+                   help="motif name, one per motif in order (repeatable; default: the consensus, "
+                        "the motif names of a table, or the name of the sites file)")
+    p.add_argument("--alphabet", help="DNA, RNA, AA or a string of letters (default: guessed)")
+    p.add_argument("--type", choices=("PCM", "PPM", "PWM", "ICM"),
+                   help="type of the motifs (default: PPM)")
+    p.add_argument("--nsites", type=int,
+                   help="number of sites a consensus motif stands for (default: 100)")
+    p.add_argument("--pseudocount", type=float, default=0.0,
+                   help="pseudocount for the conversion to --type (default: 0)")
+    p.add_argument("--family", help="family of the motifs")
+    p.add_argument("--organism", help="organism of the motifs")
+
+    p = command("heatmap", cmd_heatmap, "draw motif similarities as a clustered heatmap",
+                "Compare motifs all against all and draw the scores, P-values or q-values as a "
+                "heatmap, clustered and with a dendrogram, and optionally the tree cut at a "
+                "level of similarity.")
+    _motif_args(p)
+    p.add_argument("-o", "--output", help="file for the heatmap (PNG, PDF or SVG)")
+    p.add_argument("--value", choices=("score", "pvalue", "qvalue"), default="score",
+                   help="what the cells show; P- and q-values as -log10 (default: score)")
+    p.add_argument("--labels", default="name",
+                   help="motif field to label rows and columns with, such as altname "
+                        "(default: name)")
+    p.add_argument("--min-overlap", type=int, default=6,
+                   help="minimum overlap of aligned motifs (default: 6)")
+    p.add_argument("--no-rc", dest="rc", action="store_false",
+                   help="do not align motifs as reverse complements")
+    p.add_argument("--no-cluster", dest="cluster", action="store_false",
+                   help="keep the motifs in the order given")
+    p.add_argument("--method", default="complete",
+                   choices=("complete", "average", "single", "ward.D", "ward.D2", "mcquitty",
+                            "median", "centroid"),
+                   help="linkage method (default: complete)")
+    p.add_argument("--dendrogram", choices=("left", "top", "both", "none"), default="left",
+                   help="where to draw the tree (default: left)")
+    p.add_argument("--cut", type=float,
+                   help="show where the tree is cut at this score, such as 0.8, boxing the "
+                        "groups of motifs")
+    p.add_argument("--cut-height", type=float, help="show where the tree is cut at this height")
+    p.add_argument("--cmap", default="Blues", help="matplotlib colour map (default: Blues)")
+    p.add_argument("--annotate", action=argparse.BooleanOptionalAction, default=None,
+                   help="write each value in its cell (default: for up to 20 motifs)")
+    p.add_argument("--logos", action=argparse.BooleanOptionalAction, default=None,
+                   help="draw logos beside the rows (default: for up to 60 motifs)")
+    p.add_argument("--dpi", type=int, default=150, help="resolution of PNG files (default: 150)")
+    _threads_arg(p)
 
     p = command("summary", cmd_summary, "summarize motifs as a table",
                 "Summarize motifs as a table, one row per motif.")

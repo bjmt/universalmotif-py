@@ -48,6 +48,9 @@ New:
   `resize_ranges()` gives ranges one width around their centre, start, end
   or narrowPeak summit, dropping or trimming windows that run off a
   chromosome.
+- The `create` command makes motifs from consensus sequences or from
+  aligned sites, including the hits table of `scan`, and the `heatmap`
+  command draws `plot_comparison()` heatmaps, with `--cut` for the tree.
 - `scan_sequences(ranges=)` scans only the given ranges of a genome,
   merging those that overlap, and returns the hits on the genome.
 - Backgrounds can be given as the table `get_bkg()` returns, wherever a

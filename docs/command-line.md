@@ -17,12 +17,14 @@ umotif scan --help
 | --- | --- |
 | `convert` | Convert motifs between formats and types, or reverse complement them. |
 | `fetch` | Download motifs from JASPAR, HOCOMOCO or CIS-BP, keeping a local cache. |
+| `create` | Make motifs from consensus sequences, or from aligned sites in a FASTA file, a list or the hits of `umotif scan`. |
 | `summary` | Summarize motifs as a table. |
 | `filter` | Keep the motifs that pass every filter given. |
 | `trim` | Trim low-information positions from motif edges. |
 | `merge` | Merge similar motifs, or all of them into one. |
 | `tree` | Cluster motifs into a tree, written as Newick, or cut it into clusters. |
 | `logo` | Draw logos, in one aligned figure or one file per motif. |
+| `heatmap` | Draw motif similarities as a clustered heatmap, optionally with the tree cut at a score. |
 | `scan` | Scan sequences, whole genomes or genomic ranges for motif hits. |
 | `compare` | Compare motifs with each other or with a database. |
 | `enrich` | Test motifs for enrichment in target sequences. |

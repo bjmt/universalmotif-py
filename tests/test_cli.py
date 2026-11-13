@@ -801,3 +801,44 @@ def test_cli_defaults(tmp_path):
         motifs, qvalue=0.5, linkage="complete", return_clusters=True)["cluster"].to_list()
     run("shuffle", "-s", TARGETS, "--seed", "3", "-o", tmp_path / "s.fa")
     assert um.read_fasta(tmp_path / "s.fa") == um.shuffle_sequences(targets, k=2, seed=3)
+
+
+def test_create(tmp_path, monkeypatch):
+    run("create", "TGASTCA", "CACGTG", "--name", "AP-1", "--name", "G-box", "-o", tmp_path / "c.meme")
+    made = um.read_meme(tmp_path / "c.meme")
+    assert names(made) == ["AP-1", "G-box"]
+    assert [m.consensus for m in made] == ["TGASTCA", "CACGTG"]
+    # Sites from FASTA, named after the file, and from a plain list as counts.
+    (tmp_path / "ap1.fa").write_text(">a\nTGACTCA\n>b\nTGAGTCA\n>c\nTGACTCT\n")
+    run("create", "--sites", tmp_path / "ap1.fa", "-o", tmp_path / "s.meme")
+    m = um.read_meme(tmp_path / "s.meme")[0]
+    assert m.name == "ap1" and m.nsites == 3
+    (tmp_path / "list.txt").write_text("TGACTCA\nTGAGTCA\n")
+    run("create", "--sites", tmp_path / "list.txt", "--type", "PCM", "-o", tmp_path / "l.jaspar")
+    assert um.read_jaspar(tmp_path / "l.jaspar")[0].matrix.sum(axis=0).tolist() == [2.0] * 7
+    # A table of hits gives one motif per motif scanned.
+    run("scan", MOTIFS, "-s", TARGETS, "-o", tmp_path / "hits.tsv")
+    hits = table(tmp_path / "hits.tsv")
+    run("create", "--sites", tmp_path / "hits.tsv", "-o", tmp_path / "h.meme")
+    rebuilt = um.read_meme(tmp_path / "h.meme")
+    assert names(rebuilt) == hits["motif"].unique(maintain_order=True).to_list()
+    counts = dict(hits.group_by("motif").len().iter_rows())
+    assert all(m.nsites == counts[m.name] for m in rebuilt)
+    # Errors.
+    run("create", ok=False)
+    run("create", "TGACTCA", "--sites", tmp_path / "ap1.fa", ok=False)
+    run("create", "TGACTCA", "CACGTG", "--name", "one", ok=False)
+    (tmp_path / "ragged.txt").write_text("TGACTCA\nTGACTC\n")
+    run("create", "--sites", tmp_path / "ragged.txt", ok=False)
+
+
+def test_heatmap(tmp_path):
+    run("heatmap", MOTIFS, "-o", tmp_path / "h.png", "--cut", "0.6")
+    assert (tmp_path / "h.png").read_bytes()[:4] == b"\x89PNG"
+    run("heatmap", MOTIFS, "-o", tmp_path / "h.svg", "--value", "pvalue", "--dendrogram", "both",
+        "--no-logos", "--no-annotate", "--labels", "altname")
+    assert "<svg" in (tmp_path / "h.svg").read_text()[:500]
+    run("heatmap", MOTIFS, "-o", tmp_path / "plain.pdf", "--no-cluster")
+    assert (tmp_path / "plain.pdf").read_bytes()[:4] == b"%PDF"
+    run("heatmap", MOTIFS, ok=False)
+    run("heatmap", MOTIFS, "-o", tmp_path / "x.png", "--no-cluster", "--cut", "0.5", ok=False)
