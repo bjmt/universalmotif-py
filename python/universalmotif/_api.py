@@ -84,6 +84,12 @@ def create_motif(
 ) -> Motif:
     """Create a motif.
 
+    Dots and dashes are not taken as letters when the alphabet is guessed
+    from strings of DNA, RNA or amino acids, since they usually stand for
+    gaps; they make an error instead, and count as letters only when given
+    in a custom ``alphabet``. Gapped motifs are made from sites with
+    ``pieces``.
+
     Parameters
     ----------
     input
@@ -130,11 +136,6 @@ def create_motif(
         [`add_gap()`][universalmotif.add_gap] gives it. Sites without a
         spacer give an ungapped motif. Gapped motifs are matched with their
         gaps by [`scan_sequences()`][universalmotif.scan_sequences].
-
-    Dots and dashes are not taken as letters when the alphabet is guessed
-    from strings of DNA, RNA or amino acids, since they usually stand for
-    gaps; they make an error instead, and count as letters only when given
-    in a custom ``alphabet``.
 
     Examples
     --------
