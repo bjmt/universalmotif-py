@@ -118,6 +118,8 @@ New:
 - `view_attributions(motifs=)` draws each hit's motif above it, such as
   the CWMs `scan_contributions()` matched, and a `label` column in the
   hits sets the text shown for each.
+- `plot_spacing(helix_period=)` and `plot_pair_spacing(helix_period=)`
+  set the period of the helix lines, 10.5 bp by default.
 - `plot_comparison(cut=)` and `plot_comparison(cut_height=)` draw where
   the tree would be cut across the dendrogram, and box each group of
   motifs on the heatmap.

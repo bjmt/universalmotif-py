@@ -334,6 +334,11 @@ def test_plot_helix_and_gap():
     fig = plot_pair_spacing(hits, "A", "B", max_distance=60, helix=21, distance="gap", overlaps=True)
     guides = [ln.get_xdata()[0] for ln in fig.axes[0].lines if ln.get_linestyle() == "--"]
     assert guides == pytest.approx([10.5 * k for k in range(6)])
+    tens = plot_pair_spacing(hits, "A", "B", max_distance=60, helix=20, helix_period=10, distance="gap")
+    guides = [ln.get_xdata()[0] for ln in tens.axes[0].lines if ln.get_linestyle() == "--"]
+    assert guides == pytest.approx([10.0 * k for k in range(7)])
+    with pytest.raises(ValueError, match="helix_period"):
+        plot_pair_spacing(hits, "A", "B", helix=True, helix_period=0)
     assert fig.axes[-1].get_xlabel() == "Gap between hits (bp)"
     assert fig.axes[-1].patches[0].get_center()[0] == pytest.approx(-8)
 

@@ -24,7 +24,6 @@ _MUTED = "#5E5E5E"
 # A fixed order of hues that stay apart for the common forms of colour
 # blindness, for several outputs.
 _PALETTE = ("#2A78D6", "#EB6834", "#1BAF7A", "#EDA100", "#E87BA4", "#008300", "#6250D6", "#E34948")
-_HELIX = 10.5
 # The 97.5% quantile of Student's t for 1 to 30 degrees of freedom.
 _T975 = (12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2.201, 2.179, 2.160,
          2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086, 2.080, 2.074, 2.069, 2.064, 2.060, 2.056,
@@ -123,6 +122,7 @@ def plot_spacing(
     names: Sequence[str] | None = None,
     band: str | None = "ci",
     helix: bool | float = False,
+    helix_period: float = 10.5,
     colour: str | Sequence[str] | None = None,
     text_size: float = 9,
     figsize: tuple[float, float] | None = None,
@@ -179,12 +179,14 @@ def plot_spacing(
         ``"sd"`` for one standard deviation of the predictions either side,
         which shows how much the response varies between backgrounds, or
         ``None`` for no band.
-    helix
-        Mark the period of the DNA double helix, 10.5 bp, with faint
-        vertical lines, to judge whether the response follows it. The lines
-        pass through the spacing given, as one at which the two sites lie
-        on the same face of the helix, or with ``True`` through the spacing
-        of the strongest mean response.
+    helix, helix_period
+        Mark the period of the DNA double helix, ``helix_period`` base pairs
+        and 10.5 by default, with faint vertical lines, to judge whether the
+        response follows it. The lines pass through the spacing given, as
+        one at which the two sites lie on the same face of the helix, or
+        with ``True`` through the spacing of the strongest mean response.
+        DNA wrapped around nucleosomes, for one, turns a little faster,
+        about every 10.2 to 10.4 base pairs.
     colour
         A colour for all lines, or one per output drawn.
     text_size
@@ -243,6 +245,8 @@ def plot_spacing(
     """
     if band not in ("ci", "se", "sd", None):
         raise ValueError("band must be 'ci', 'se', 'sd' or None")
+    if not (isinstance(helix_period, (int, float)) and math.isfinite(helix_period) and helix_period > 0):
+        raise ValueError("helix_period must be a positive number of base pairs")
     if isinstance(predictions, Mapping):
         if spacings is not None:
             raise ValueError("spacings are taken from the keys of predictions, so give them only with an array")
@@ -322,8 +326,8 @@ def plot_spacing(
             anchor = x[int(np.argmax(np.abs(means[:, which[0]])))]
         else:
             anchor = float(helix)
-        first = anchor - math.floor((anchor - x[0] + pad) / _HELIX) * _HELIX
-        for g in np.arange(first, x[-1] + pad, _HELIX):
+        first = anchor - math.floor((anchor - x[0] + pad) / helix_period) * helix_period
+        for g in np.arange(first, x[-1] + pad, helix_period):
             ax.axvline(g, color=_GUIDE, linewidth=0.9, linestyle=(0, (4, 3)), zorder=0)
     marker = 4.5 if len(x) <= 30 else 3.2 if len(x) <= 70 else 0
     several = len(which) > 1

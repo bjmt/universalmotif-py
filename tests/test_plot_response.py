@@ -215,6 +215,11 @@ def test_spacing_helix_guides():
     np.testing.assert_allclose(_guides(plot_spacing(preds, helix=True).axes[0]), [0, 10.5, 21])
     assert set(ax.get_xticks()) >= {0, 5, 10, 15, 20}
     assert all(float(t).is_integer() for t in ax.get_xticks())
+    # Another period, such as that of DNA on nucleosomes.
+    np.testing.assert_allclose(_guides(plot_spacing(preds, helix=5, helix_period=10.2).axes[0]), [5, 15.2])
+    for bad in (0, -3, float("nan"), "10"):
+        with pytest.raises(ValueError, match="helix_period"):
+            plot_spacing(preds, helix=True, helix_period=bad)
 
 
 def test_spacing_into_axes():

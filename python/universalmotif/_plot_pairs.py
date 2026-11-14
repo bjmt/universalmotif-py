@@ -23,7 +23,6 @@ _BARS = "#255C99"
 _EXPECTED = "#333333"
 _GUIDE = "#D4D4D4"
 _MUTED = "#5E5E5E"
-_HELIX = 10.5
 _HETERO = ("tandem, first upstream", "tandem, second upstream", "convergent", "divergent")
 _HOMO = ("tandem", "convergent", "divergent")
 # Pairs are counted this many at a time, which bounds the memory used however
@@ -454,6 +453,7 @@ def plot_pair_spacing(
     null: str = "positions",
     sequences=None,
     helix: bool | float = False,
+    helix_period: float = 10.5,
     names: str | Sequence[str] | None = None,
     colour: str = _BARS,
     text_size: float = 9,
@@ -498,11 +498,13 @@ def plot_pair_spacing(
         [`pair_spacings()`][universalmotif.pair_spacings]. The distance is
         between centres by default. Without ``arrangements`` all pairs are
         drawn in one panel.
-    helix
-        Mark the period of the DNA double helix, 10.5 bp, with faint
-        vertical lines. The lines pass through the distance given, or with
-        ``True`` through the distance with the largest excess of pairs over
-        those expected.
+    helix, helix_period
+        Mark the period of the DNA double helix, ``helix_period`` base pairs
+        and 10.5 by default, with faint vertical lines. The lines pass
+        through the distance given, or with ``True`` through the distance
+        with the largest excess of pairs over those expected. DNA wrapped
+        around nucleosomes, for one, turns a little faster, about every 10.2
+        to 10.4 base pairs.
     names
         Names for the two motifs in the panel labels, or one for a motif
         paired with itself. Long names of motifs are otherwise cut to their
@@ -562,6 +564,8 @@ def plot_pair_spacing(
     """
     if ax is not None and arrangements:
         raise ValueError("ax holds a single panel; give arrangements=False to draw every pair in it")
+    if not (isinstance(helix_period, (int, float)) and math.isfinite(helix_period) and helix_period > 0):
+        raise ValueError("helix_period must be a positive number of base pairs")
     res = pair_spacings(hits, first, second, max_distance=max_distance, distance=distance, overlaps=overlaps,
                         arrangements=arrangements, null=null, sequences=sequences)
     names_in = hits.with_columns(pl.col("motif").cast(pl.String))
@@ -596,8 +600,8 @@ def plot_pair_spacing(
     if helix is not False and helix is not None:
         excess = (obs - exp).sum(axis=0)
         anchor = float(x[int(np.argmax(excess))]) if helix is True else float(helix)
-        start = anchor - math.floor((anchor - x[0]) / _HELIX) * _HELIX
-        guides = np.arange(start, x[-1] + 0.5, _HELIX)
+        start = anchor - math.floor((anchor - x[0]) / helix_period) * helix_period
+        guides = np.arange(start, x[-1] + 0.5, helix_period)
     else:
         guides = np.array([])
     top = max(float(obs.max()), float(exp.max()), 1.0)
