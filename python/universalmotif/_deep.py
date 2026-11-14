@@ -1007,11 +1007,17 @@ def mutagenesis_effects(
 
 def _site_letters(site: Any) -> str:
     """A site as letters: a string as it is, or a motif's most probable
-    letter at each position."""
+    letter at each position, with a dot for each position of the smallest
+    size of each of its gaps."""
     if isinstance(site, Motif):
         ppm = convert_type(site, "PPM").matrix
         letters = np.array(list(site.letters))
-        return "".join(letters[np.argmax(ppm, axis=0)])
+        best = "".join(letters[np.argmax(ppm, axis=0)])
+        if site.isgapped:
+            # From the last gap back, so that earlier locations still hold.
+            for loc, size in sorted(zip(site.gaploc, site.mingap), reverse=True):
+                best = best[:loc] + "." * size + best[loc:]
+        return best
     if not isinstance(site, str) or not site:
         raise TypeError("a site must be a non-empty string or a motif")
     return site
@@ -1064,6 +1070,14 @@ def insert_sites(
     without a motif. Returns the new sequences in the same form as the
     input: a string, a list or a dict, or a one-hot array.
 
+    A dot in a site leaves the letter beneath it as it is, so that
+    ``"GATA..CACGTG"`` writes two parts with two of the sequence's own
+    letters between them, and a gapped motif gives its letters with dots in
+    the smallest size of each gap; add the gap with another size with
+    [`add_gap()`][universalmotif.add_gap] for other spacings. With
+    ``mode="insert"``, the parts are inserted around the letters under the
+    dots.
+
     One-hot sequences, as from [`one_hot()`][universalmotif.one_hot], are
     given as an array of shape (sequences, letters, length) or (sequences,
     length, letters), or a single sequence without the first axis, with the
@@ -1112,7 +1126,7 @@ def insert_sites(
                 p = starts[k]
             else:
                 p = length // 2 if inserting else (length - len(site)) // 2
-            fits = 0 <= p <= length if inserting else 0 <= p and p + len(site) <= length
+            fits = (0 <= p and p + site.count(".") <= length) if inserting else 0 <= p and p + len(site) <= length
             if not fits:
                 raise ValueError(f"the site {site} at {p} does not fit in a sequence of length {length}")
             out.append(p)
@@ -1120,23 +1134,33 @@ def insert_sites(
 
     def insert(seq: Any, length: int, cut: Any, site_of: Any, join: Any) -> Any:
         """``seq`` with the sites inserted, joined from its pieces, taken
-        with ``cut(seq, start, end)``, and the sites."""
-        at = place(length)
-        order = sorted(range(len(letters)), key=lambda k: at[k])
-        parts, prev, starts_new, added = [], 0, {}, 0
-        for k in order:
-            parts.append(cut(seq, prev, at[k]))
-            starts_new[k] = at[k] + added
-            parts.append(site_of(k))
-            added += len(letters[k])
-            prev = at[k]
+        with ``cut(seq, start, end)``, and the parts of the sites, made with
+        ``site_of(letters)``."""
+        import re
+
+        # The parts of each site, between its dots, each going in before the
+        # letter of the sequence it would have covered.
+        parts_at = []
+        for p, site in zip(place(length), letters):
+            before = 0
+            for m in re.finditer(r"[^.]+", site):
+                parts_at.append((p + m.start() - before, m.group()))
+                before += len(m.group())
+        parts_at.sort(key=lambda x: x[0])
+        parts, prev, placed, added = [], 0, [], 0
+        for at, piece in parts_at:
+            parts.append(cut(seq, prev, at))
+            placed.append((at + added, piece))
+            parts.append(site_of(piece))
+            added += len(piece)
+            prev = at
         parts.append(cut(seq, prev, length))
         out = join(parts)
         if keep_length:
             left = added // 2
-            for k in order:
-                if starts_new[k] < left or starts_new[k] + len(letters[k]) > length + left:
-                    raise ValueError(f"keeping the length would cut into the site {letters[k]}; "
+            for at, piece in placed:
+                if at < left or at + len(piece) > length + left:
+                    raise ValueError(f"keeping the length would cut into the site {piece}; "
                                      "place it further from the ends")
             out = cut(out, left, left + length)
         return out
@@ -1145,26 +1169,33 @@ def insert_sites(
 
     if _is_array(sequences):
         a, form = _letters_middle(sequences, alphabet)
-        columns = [_site_columns(site, alphabet, a.dtype) for site in letters]
         if inserting:
             n = a.shape[0]
-            out = insert(a, a.shape[2], lambda x, i, j: x[:, :, i:j],
-                         lambda k: np.broadcast_to(columns[k], (n,) + columns[k].shape),
+
+            def piece_columns(piece: str) -> np.ndarray:
+                c = _site_columns(piece, alphabet, a.dtype)
+                return np.broadcast_to(c, (n,) + c.shape)
+
+            out = insert(a, a.shape[2], lambda x, i, j: x[:, :, i:j], piece_columns,
                          lambda parts: np.concatenate(parts, axis=2))
             return _restore_array(np.ascontiguousarray(out), form)
         out = a.copy()
-        for column, p in zip(columns, place(a.shape[2])):
-            out[:, :, p:p + column.shape[1]] = column
+        for site, p in zip(letters, place(a.shape[2])):
+            column = _site_columns(site, alphabet, a.dtype)
+            keep = np.array([c != "." for c in site])
+            out[:, :, p:p + len(site)][:, :, keep] = column[:, keep]
         return _restore_array(out, form)
     names, seqs = _sequence_pairs(sequences)
     out = []
     for seq in seqs:
         if inserting:
-            out.append(insert(seq, len(seq), lambda x, i, j: x[i:j], lambda k: letters[k], "".join))
+            out.append(insert(seq, len(seq), lambda x, i, j: x[i:j], lambda piece: piece, "".join))
             continue
         new = list(seq)
         for site, p in zip(letters, place(len(seq))):
-            new[p:p + len(site)] = site
+            for j, c in enumerate(site):
+                if c != ".":
+                    new[p + j] = c
         out.append("".join(new))
     from ._sequences import _restore
 

@@ -190,6 +190,12 @@ def score_match(
     its pseudocount reapplied first, or 1 if it has none, unless
     ``allow_nonfinite``.
 
+    For a gapped motif, a word may hold a spacer in each gap, whose letters
+    are not scored, as in scanning: either marked with dots, as in the
+    matches of ``scan_sequences()``, or, for a motif with one gap, as the
+    letters beyond the motif's width. Spacers must have a size within their
+    gap's range.
+
     Examples
     --------
     >>> import universalmotif as um
@@ -200,9 +206,39 @@ def score_match(
     >>> um.score_match(motif, ["TGAGTAA", "AAAAAAA"]).round(3).tolist()
     [9.356, -6.985]
     """
+    m = _one_motif(motif)
     words = [match] if isinstance(match, str) else list(match)
-    out = np.array(_core._score_match(_one_motif(motif), words, allow_nonfinite))
+    if m.isgapped:
+        words = [_without_spacers(m, w) for w in words]
+    out = np.array(_core._score_match(m, words, allow_nonfinite))
     return float(out[0]) if isinstance(match, str) else out
+
+
+def _without_spacers(m: Motif, word: str) -> str:
+    """A word for a gapped motif with the letters of its spacers taken out."""
+    import re
+
+    sizes = list(zip(m.mingap, m.maxgap))
+    if "." in word:
+        runs = list(re.finditer(r"\.+", word))
+        letters = word.replace(".", "")
+        cuts = [len(word[:r.start()].replace(".", "")) for r in runs]
+        if len(letters) != m.width or cuts != list(m.gaploc):
+            raise ValueError(f"the word {word} does not have the motif's {m.width} letters with gaps after "
+                             f"{', '.join(map(str, m.gaploc))} of them")
+        gaps = [len(r.group()) for r in runs]
+    elif len(word) == m.width:
+        return word
+    elif len(m.gaploc) == 1:
+        letters, gaps = word[:m.gaploc[0]] + word[len(word) - (m.width - m.gaploc[0]):], [len(word) - m.width]
+        if gaps[0] < 0:
+            raise ValueError(f"the word {word} is shorter than the motif's {m.width} positions")
+    else:
+        raise ValueError(f"the word {word} needs its spacers marked with dots, since the motif has several gaps")
+    bad = [g for g, (lo, hi) in zip(gaps, sizes) if not lo <= g <= hi]
+    if bad:
+        raise ValueError(f"the word {word} has a spacer of {bad[0]}, outside the motif's gap sizes")
+    return letters
 
 
 def get_scores(motif: Motif, allow_nonfinite: bool = False) -> npt.NDArray[np.float64]:

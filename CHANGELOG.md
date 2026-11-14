@@ -100,6 +100,12 @@ New:
   for measuring what it adds to a model's prediction.
 - `create_motif(sites, pieces=(left, right))` makes a gapped motif from
   sites with spacers of different lengths, such as half-site repeats.
+- Gapped motifs give sites with spacers: `sample_sites()` and
+  `implant_motifs()` draw a spacer size within each gap, implants keep the
+  sequence's letters in their spacers, `insert_sites()` and
+  `site_spacings()` take dots in sites as letters to leave as they are and
+  give gapped motifs their smallest gap, and `score_match()` scores words
+  with spacers as scanning does.
 - `insert_sites(mode="insert")` inserts sites between the letters rather
   than over them, with `keep_length=True` to cut the sequences back to
   their length, and `delete_region()` deletes a stretch of each sequence.

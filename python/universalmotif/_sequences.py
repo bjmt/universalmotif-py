@@ -611,7 +611,9 @@ def shuffle_motifs(motifs: Motif | Iterable[Motif], k: int = 2, seed: int | None
 
 def sample_sites(motif: Motif, n: int = 100, seed: int | None = None) -> list[str]:
     """Draw ``n`` sites from a motif, each letter chosen with the motif's
-    probabilities at its position.
+    probabilities at its position. Sites of a gapped motif have a spacer in
+    each gap, of a size drawn uniformly within its range, filled with
+    letters drawn from the motif's background.
 
     Examples
     --------
@@ -661,6 +663,10 @@ def implant_motifs(
     comes from a motif chosen at random, on a random strand unless
     ``strand="+"``, and overwrites the sequence where it lands.
 
+    A gapped motif's sites get a spacer in each gap, of a size drawn
+    uniformly within its range, which keeps the sequence's own letters, so
+    that only the motif's columns are written.
+
     Random positions are the mean of ``centre_bias`` uniform draws, so values
     above 1 favour the middle of sequences, and keep at least
     ``min_spacing`` letters from other sites; a site that cannot be placed
@@ -671,8 +677,9 @@ def implant_motifs(
     letters in the order of ``alphabet``, and with
     ``return_indices`` also a DataFrame of the sites with the columns
     ``sequence_i``, ``motif_i``, ``start``, ``width``, ``strand`` and
-    ``planted``. The indices and ``start`` count from 0, and
-    ``planted`` is the site as it reads on the forward strand.
+    ``planted``. The indices and ``start`` count from 0, ``width``
+    includes any spacers, and ``planted`` is the site as it reads on the
+    forward strand.
 
     Examples
     --------

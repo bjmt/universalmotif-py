@@ -192,3 +192,38 @@ def test_deleting_regions():
         um.delete_region(seqs, 10, 31)
     with pytest.raises(ValueError, match="end after"):
         um.delete_region(seqs, 10, 10)
+
+
+def test_gapped_motifs_in_site_utilities():
+    gapped = um.create_motif(["GATAccCACGTG", "GATAcccccCACGTG"], pieces=(4, 6), name="g")
+    assert (gapped.mingap, gapped.maxgap) == ([2], [5])
+    sites = um.sample_sites(gapped, n=100, seed=1)
+    assert all(s.startswith("GATA") and s.endswith("CACGTG") for s in sites)
+    assert {len(s) - 10 for s in sites} == {2, 3, 4, 5}
+    seqs = ["T" * 50] * 30
+    new, table = um.implant_motifs(gapped, seqs, seed=2, return_indices=True)
+    assert set(table["width"]) <= set(range(12, 16)) and table["width"].n_unique() > 1
+    for (i, start, width, strand, planted) in table.select("sequence_i", "start", "width", "strand",
+                                                           "planted").iter_rows():
+        assert new[i][start:start + width] == planted
+        site = planted if strand == "+" else planted[::-1].translate(str.maketrans("ACGT", "TGCA"))
+        # The spacer keeps the sequence's letters.
+        assert site[4:-6] == ("T" if strand == "+" else "A") * (width - 10)
+    # Sites with dots leave the letters beneath; gapped motifs use their smallest gap.
+    bkg = _seqs(length=30)
+    got = um.insert_sites(bkg, "GA..TC")
+    assert got == [s[:12] + "GA" + s[14:16] + "TC" + s[18:] for s in bkg]
+    np.testing.assert_array_equal(um.insert_sites(um.one_hot(bkg), "GA..TC"), um.one_hot(got))
+    ins = um.insert_sites(bkg, "GA..TC", mode="insert")
+    assert ins == [s[:15] + "GA" + s[15:17] + "TC" + s[17:] for s in bkg]
+    np.testing.assert_array_equal(um.insert_sites(um.one_hot(bkg), "GA..TC", mode="insert"), um.one_hot(ins))
+    assert um.insert_sites(bkg[:1], gapped) == um.insert_sites(bkg[:1], "GATA..CACGTG")
+    pair = um.site_spacings(bkg[0], gapped, "TT", spacings=[0])[0]
+    assert pair[8:12] == "GATA" and pair[14:20] == "CACGTG" and pair[20:22] == "TT"
+    # Words with spacers score as scanning scores them.
+    motif = um.normalize(gapped)
+    hits = um.scan_sequences(motif, [s[:10] + "GATAAACACGTG" + s[22:] for s in bkg], pvalue=1e-4)
+    np.testing.assert_allclose(um.score_match(motif, hits["match"].to_list()), hits["score"])
+    assert um.score_match(motif, "GATAAACACGTG") == um.score_match(motif, "GATA..CACGTG")
+    with pytest.raises(ValueError, match="outside the motif's gap sizes"):
+        um.score_match(motif, "GATAACACGTG")
