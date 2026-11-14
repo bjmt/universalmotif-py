@@ -36,7 +36,8 @@ class Genome(Mapping[str, str]):
     them. Letters come back as they are in the file, so soft-masking is kept.
     [`scan_sequences()`][universalmotif.scan_sequences] scans a genome one
     chromosome at a time, and [`match_bkg()`][universalmotif.match_bkg]
-    reads only the windows it draws.
+    reads only the windows it draws. A genome can be pickled, as when it is
+    sent to worker processes, and is opened again from its path there.
 
     Examples
     --------
@@ -51,6 +52,11 @@ class Genome(Mapping[str, str]):
     def __init__(self, path: str | os.PathLike[str]):
         self.path = os.fspath(path)
         self._inner = _core._Genome(self.path)
+
+    def __reduce__(self):
+        # Reopened from its path, so that a genome can go to worker
+        # processes, such as those of a PyTorch DataLoader.
+        return (Genome, (self.path,))
 
     def _index(self, name: object) -> int:
         i = self._inner.index(name) if isinstance(name, str) else None

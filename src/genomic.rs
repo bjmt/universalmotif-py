@@ -139,6 +139,13 @@ fn _gc_fraction(seqs: Vec<PyBackedStr>) -> Vec<f64> {
     seqs.iter().map(|s| background::gc_fraction(s)).collect()
 }
 
+/// The GC fraction and the fraction of other letters than A, C, G, T and U
+/// of each sequence.
+#[pyfunction]
+fn _composition(seqs: Vec<PyBackedStr>) -> (Vec<f64>, Vec<f64>) {
+    seqs.iter().map(|s| background::composition(s)).unzip()
+}
+
 /// Covariates as (name, target values, universe values, bins, bin type).
 type CovariateSpec = (String, Vec<f64>, Vec<f64>, usize, String);
 
@@ -156,7 +163,22 @@ fn _match_bkg(
     unique: bool,
     seed: u64,
 ) -> PyResult<(Vec<usize>, usize)> {
-    let covariates: Vec<Covariate> = covariates
+    let covariates = covariate_list(covariates)?;
+    let opts = MatchOptions {
+        n_per_target,
+        n_bins_gc,
+        n_bins_length,
+        unique,
+        seed,
+    };
+    let m = py
+        .detach(|| background::match_bkg(&targets, &universe, &covariates, &opts))
+        .map_err(err)?;
+    Ok((m.universe_index, m.fallback_targets))
+}
+
+fn covariate_list(covariates: Vec<CovariateSpec>) -> PyResult<Vec<Covariate>> {
+    covariates
         .into_iter()
         .map(|(name, t, u, n_bins, bt)| {
             Ok(Covariate {
@@ -167,7 +189,28 @@ fn _match_bkg(
                 bin_type: bt.parse::<BinType>().map_err(err)?,
             })
         })
-        .collect::<PyResult<_>>()?;
+        .collect()
+}
+
+/// `_match_bkg` from the GC fraction and length of each target and universe
+/// sequence.
+#[pyfunction]
+#[pyo3(signature = (gc_targets, len_targets, gc_universe, len_universe, covariates, n_per_target, n_bins_gc, n_bins_length, unique, seed))]
+#[allow(clippy::too_many_arguments)]
+fn _match_bkg_values(
+    py: Python<'_>,
+    gc_targets: Vec<f64>,
+    len_targets: Vec<f64>,
+    gc_universe: Vec<f64>,
+    len_universe: Vec<f64>,
+    covariates: Vec<CovariateSpec>,
+    n_per_target: usize,
+    n_bins_gc: usize,
+    n_bins_length: usize,
+    unique: bool,
+    seed: u64,
+) -> PyResult<(Vec<usize>, usize)> {
+    let covariates = covariate_list(covariates)?;
     let opts = MatchOptions {
         n_per_target,
         n_bins_gc,
@@ -176,7 +219,16 @@ fn _match_bkg(
         seed,
     };
     let m = py
-        .detach(|| background::match_bkg(&targets, &universe, &covariates, &opts))
+        .detach(|| {
+            background::match_bkg_values(
+                gc_targets,
+                len_targets,
+                gc_universe,
+                len_universe,
+                &covariates,
+                &opts,
+            )
+        })
         .map_err(err)?;
     Ok((m.universe_index, m.fallback_targets))
 }
@@ -198,7 +250,9 @@ fn _genome_windows(
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_proximity, m)?)?;
     m.add_function(wrap_pyfunction!(_gc_fraction, m)?)?;
+    m.add_function(wrap_pyfunction!(_composition, m)?)?;
     m.add_function(wrap_pyfunction!(_match_bkg, m)?)?;
+    m.add_function(wrap_pyfunction!(_match_bkg_values, m)?)?;
     m.add_function(wrap_pyfunction!(_genome_windows, m)?)?;
     Ok(())
 }

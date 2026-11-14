@@ -1290,21 +1290,72 @@ def site_spacings(
 
 
 class _OneHotBatches:
-    """Batches of one-hot sequences read from a genome as they are needed."""
+    """Batches of one-hot sequences read from a genome as they are needed,
+    with signal targets and augmentation drawn afresh on each pass."""
 
-    def __init__(self, genome, table, batch_size, alphabet, dtype, nthreads):
+    def __init__(self, genome, table, batch_size, alphabet, dtype, nthreads, bigwigs=None,
+                 output_width=None, max_shift=0, reverse_complement=False, swap=None, seed=0,
+                 target_dtype=np.float32):
         self._genome, self._table = genome, table
         self._batch_size, self._alphabet, self._dtype, self._nthreads = batch_size, alphabet, dtype, nthreads
+        self._bigwigs, self._output_width, self._max_shift = bigwigs, output_width, max_shift
+        self._rc, self._swap, self._seed, self._target_dtype = reverse_complement, swap, seed, target_dtype
+        self._passes = 0
 
     def __len__(self) -> int:
         return (self._table.height + self._batch_size - 1) // self._batch_size
 
     def __iter__(self):
+        import polars as pl
+
         from ._genome import _fetch_ranges
 
-        for i in range(0, self._table.height, self._batch_size):
-            seqs = _fetch_ranges(self._genome, self._table.slice(i, self._batch_size), self._nthreads)
-            yield one_hot(seqs, alphabet=self._alphabet, dtype=self._dtype)
+        t = self._table
+        n = t.height
+        width = int(t["end"][0] - t["start"][0]) if n else 0
+        centre = (t["start"] + width // 2).to_numpy()
+        minus = (t["strand"] == "-").to_numpy()
+        # Each pass draws its own shifts and flips, reproducibly from the seed.
+        rng = np.random.default_rng([self._seed, self._passes])
+        self._passes += 1
+        shift = rng.integers(-self._max_shift, self._max_shift + 1, n) if self._max_shift else np.zeros(n, int)
+        flip = rng.random(n) < 0.5 if self._rc else np.zeros(n, bool)
+        readers = None
+        if self._bigwigs is not None:
+            import pybigtools
+
+            readers = [pybigtools.open(path) for path in self._bigwigs]
+            sizes = [r.chroms() for r in readers]
+        for i in range(0, n, self._batch_size):
+            rows = slice(i, i + self._batch_size)
+            c = centre[rows] + shift[rows]
+            batch = t.slice(i, self._batch_size).with_columns(
+                start=pl.Series(c - width // 2), end=pl.Series(c - width // 2 + width))
+            x = one_hot(_fetch_ranges(self._genome, batch, self._nthreads), alphabet=self._alphabet,
+                        dtype=self._dtype)
+            f = flip[rows]
+            if f.any():
+                # With the letters in ACGT order, reversing both axes
+                # reverse complements.
+                x[f] = x[f][:, ::-1, ::-1]
+            if readers is None:
+                yield x
+                continue
+            ow = self._output_width
+            y = np.zeros((len(c), len(readers), ow), dtype=self._target_dtype)
+            chroms = batch["chrom"].to_list()
+            for k, (chrom, mid) in enumerate(zip(chroms, c.tolist())):
+                a = mid - ow // 2
+                for j, (r, size) in enumerate(zip(readers, sizes)):
+                    if chrom in size:
+                        y[k, j] = r.values(chrom, a, a + ow, fillna=0.0)
+            # Targets follow their sequences: reversed for ranges on the -
+            # strand and for flipped ones, but not both, with paired strand
+            # tracks swapped.
+            g = minus[rows] ^ f
+            if g.any():
+                y[g] = y[g][:, self._swap, ::-1]
+            yield x, y
 
     def __repr__(self) -> str:
         return f"<{len(self)} batches of up to {self._batch_size} sequences>"
@@ -1416,8 +1467,16 @@ def one_hot_batches(
     alphabet: str = "ACGT",
     dtype: Any = np.float32,
     nthreads: int | None = None,
+    bigwigs: Any = None,
+    output_width: int | None = None,
+    max_shift: int = 0,
+    reverse_complement: bool = False,
+    strand_pairs: Sequence[tuple[Any, Any]] | None = None,
+    seed: int | None = None,
+    target_dtype: Any = np.float32,
 ):
-    """Genomic ranges as one-hot batches for a model, read a batch at a time.
+    """Genomic ranges as one-hot batches for a model, read a batch at a time,
+    with signal targets and augmentation for training.
 
     ``genome`` and ``ranges`` are as for
     [`extract_ranges()`][universalmotif.extract_ranges]: a
@@ -1429,7 +1488,7 @@ def one_hot_batches(
     must all have the same width, or with ``width`` each is replaced by a
     window of that width around its middle, the lower one for even widths.
     Every range is checked before any is read, and must fit within its
-    chromosome.
+    chromosome, along with any shift and target window.
 
     Returns an iterable of arrays of shape (sequences, letters, width), up
     to ``batch_size`` sequences each and in the order of the ranges, with a
@@ -1437,8 +1496,33 @@ def one_hot_batches(
     at a time, so large sets of regions can be fed to a model, for example
     as ``model(torch.from_numpy(x))`` for each batch ``x``.
 
-    ``nthreads`` defaults to the package setting from
-    [`set_nthreads()`][universalmotif.set_nthreads].
+    Parameters
+    ----------
+    bigwigs, output_width, target_dtype
+        Signal to train on, such as the coverage of an assay, as a bigWig
+        path, a list of them or a mapping from names to them. Each batch is
+        then a pair ``(x, y)``, with ``y`` of shape (sequences, tracks,
+        output_width) and type ``target_dtype``, holding each track's values
+        over the ``output_width`` positions, by default the input width,
+        around the middle of each input window, with 0 where a track has no
+        value. Targets are reversed along with their sequences. Needs the
+        ``bigwig`` extra.
+    max_shift, reverse_complement, seed
+        Augmentation for training, drawn afresh each time the batches are
+        iterated over, so that every pass over the data, or epoch, sees the
+        regions a little differently, yet reproducibly from ``seed``: each
+        window moves by up to ``max_shift`` positions either way, so that a
+        model does not learn where sites sit in its input, and with
+        ``reverse_complement`` half of them, chosen at random, are reverse
+        complemented, as their targets are. Reverse complements need the
+        alphabet ``"ACGT"`` or ``"ACGU"``.
+    strand_pairs
+        Pairs of tracks of ``bigwigs`` for the two strands, given by
+        position or by name, which swap places in the targets of reverse
+        complemented sequences.
+    nthreads
+        Threads for reading a genome on disk, by default the package setting
+        from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Examples
     --------
@@ -1450,10 +1534,18 @@ def one_hot_batches(
     2
     >>> [um.from_one_hot(x) for x in batches]
     [['CCGG'], ['GTAC']]
+
+    Shifted and reverse complemented at random, differently on each pass:
+
+    >>> batches = um.one_hot_batches(genome, [("chr1", 6, 14)], max_shift=2,
+    ...                              reverse_complement=True, seed=1)
+    >>> [um.from_one_hot(x)[0] for _ in range(4) for x in batches]
+    ['TTACGTAC', 'TTACGTAC', 'CGTACGTA', 'GTACGTAA']
     """
     nthreads = _nthreads(nthreads)
     from ._genome import _check_ranges
     from ._genomic import _range_table
+    from ._sequences import _seed
 
     if int(batch_size) < 1:
         raise ValueError("batch_size must be 1 or more")
@@ -1466,8 +1558,53 @@ def one_hot_batches(
         table = table.with_columns(start=first, end=first + width)
     elif table.height and (table["end"] - table["start"]).n_unique() > 1:
         raise ValueError("the ranges have different widths; give width to take windows of one width")
-    _check_ranges(genome, table)
-    return _OneHotBatches(genome, table, int(batch_size), alphabet, dtype, nthreads)
+    max_shift = int(max_shift)
+    if max_shift < 0:
+        raise ValueError("max_shift must be 0 or more")
+    if reverse_complement and alphabet not in ("ACGT", "ACGU"):
+        raise ValueError('reverse complements need the alphabet "ACGT" or "ACGU"')
+    paths = names = swap = None
+    in_width = int(table["end"][0] - table["start"][0]) if table.height else 0
+    if bigwigs is None:
+        if output_width is not None or strand_pairs is not None:
+            raise ValueError("output_width and strand_pairs go with bigwigs")
+    else:
+        try:
+            import pybigtools  # noqa: F401
+        except ImportError as e:
+            raise ImportError("reading bigWig files needs pybigtools; install it with `pip install "
+                              "universalmotif[bigwig]`") from e
+        if isinstance(bigwigs, (str, os.PathLike)):
+            bigwigs = [bigwigs]
+        if isinstance(bigwigs, Mapping):
+            names, paths = [str(k) for k in bigwigs], [os.fspath(v) for v in bigwigs.values()]
+        else:
+            paths = [os.fspath(v) for v in bigwigs]
+            names = [str(i) for i in range(len(paths))]
+        if not paths:
+            raise ValueError("bigwigs is empty")
+        output_width = in_width if output_width is None else int(output_width)
+        if output_width < 1:
+            raise ValueError("output_width must be 1 or more")
+        def track(p: Any) -> int | None:
+            if isinstance(p, (int, np.integer)):
+                return int(p) if 0 <= p < len(paths) else None
+            return names.index(str(p)) if str(p) in names else None
+
+        swap = np.arange(len(paths))
+        for pair in strand_pairs or []:
+            ends = [track(p) for p in pair] if len(pair) == 2 else [None]
+            if None in ends:
+                raise ValueError(f"the strand pair {pair} does not name two tracks of bigwigs")
+            swap[ends[0]], swap[ends[1]] = ends[1], ends[0]
+    # Every window, with its largest shift either way and its target window,
+    # must fit in its chromosome.
+    reach = max(in_width, output_width or 0)
+    centre = table["start"] + in_width // 2
+    _check_ranges(genome, table.with_columns(start=centre - reach // 2 - max_shift,
+                                             end=centre - reach // 2 + reach + max_shift))
+    return _OneHotBatches(genome, table, int(batch_size), alphabet, dtype, nthreads, paths, output_width,
+                          max_shift, bool(reverse_complement), swap, _seed(seed), target_dtype)
 
 
 __all__ = [

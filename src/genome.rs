@@ -55,6 +55,26 @@ impl PyGenome {
         py.detach(|| self.genome.fetch_many(&ranges, nthreads))
             .map_err(err)
     }
+
+    /// The GC fraction and the fraction of other letters than A, C, G, T
+    /// and U of many ranges, given as for `fetch_many`, read in parallel
+    /// without keeping the sequences.
+    #[pyo3(signature = (ranges, nthreads=1))]
+    fn composition_many(
+        &self,
+        py: Python<'_>,
+        ranges: Vec<(usize, u64, u64)>,
+        nthreads: usize,
+    ) -> PyResult<(Vec<f64>, Vec<f64>)> {
+        let ranges: Vec<GRange> = ranges
+            .into_iter()
+            .map(|(i, s, e)| GRange::new(i, s as i64, e as i64))
+            .collect();
+        let comp = py
+            .detach(|| self.genome.composition_many(&ranges, nthreads))
+            .map_err(err)?;
+        Ok(comp.into_iter().unzip())
+    }
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

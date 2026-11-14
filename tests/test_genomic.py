@@ -617,3 +617,47 @@ def test_range_positions_must_be_whole_numbers():
     # Floats holding whole numbers are fine.
     frame = pl.DataFrame({"chrom": ["c1"], "start": [1.0], "end": [4.0]})
     assert um.extract_ranges({"c1": "ACGTACGT"}, frame) == {"c1:1-4": "CGT"}
+
+
+def test_match_bkg_negatives_as_ranges(tmp_path):
+    rng = np.random.default_rng(7)
+    seqs = {c: "".join(rng.choice(list("ACGT"), n)) for c, n in {"c1": 4000, "c2": 3000}.items()}
+    # A stretch of Ns, as in a gap of an assembly.
+    seqs["c2"] = seqs["c2"][:1000] + "N" * 800 + seqs["c2"][1800:]
+    peaks = pl.DataFrame({"chrom": ["c1", "c1", "c2"], "start": [500, 2500, 2500], "end": [600, 2600, 2600]})
+    targets = list(um.extract_ranges(seqs, peaks).values())
+    by_seq = um.match_bkg(targets, genome=seqs, exclude=peaks, n_candidates=400, n_per_target=4, seed=2,
+                          return_indices=True)
+    # Targets given as ranges are measured in the genome, with the same result.
+    by_range = um.match_bkg(None, genome=seqs, target_ranges=peaks, exclude=peaks, n_candidates=400,
+                            n_per_target=4, seed=2, return_indices=True)
+    assert by_range.equals(by_seq)
+    ranges = um.match_bkg(None, genome=seqs, target_ranges=peaks, exclude=peaks, n_candidates=400,
+                          n_per_target=4, seed=2, return_ranges=True)
+    assert ranges.columns == ["chrom", "start", "end", "target_i", "gc"]
+    assert ranges["target_i"].to_list() == by_seq["target_i"].to_list()
+    assert (ranges["chrom"] + ":" + ranges["start"].cast(pl.String) + "-" + ranges["end"].cast(pl.String)
+            ).to_list() == by_seq["universe_name"].to_list()
+    np.testing.assert_allclose(ranges["gc"], by_seq["universe_gc"])
+    # The sequences come from the windows drawn, read from a genome on disk too.
+    um.write_fasta(seqs, tmp_path / "g.fa")
+    on_disk = um.match_bkg(targets, genome=um.Genome(tmp_path / "g.fa"), exclude=peaks, n_candidates=400,
+                           n_per_target=4, seed=2)
+    assert list(on_disk) == by_seq["universe_name"].to_list()
+    assert all(seqs[n.split(":")[0]][int(n.split(":")[1].split("-")[0]):int(n.split("-")[1])] == v
+               for n, v in on_disk.items())
+    # Windows with Ns can be left out.
+    any_n = um.match_bkg(targets, genome=seqs, n_candidates=600, n_per_target=10, seed=3, return_ranges=True)
+    clean = um.match_bkg(targets, genome=seqs, n_candidates=600, n_per_target=10, seed=3, return_ranges=True,
+                         max_n_fraction=0)
+    def has_n(df):
+        return [("N" in seqs[c][s:e]) for c, s, e in df.select("chrom", "start", "end").iter_rows()]
+    assert any(has_n(any_n)) and not any(has_n(clean))
+    with pytest.raises(ValueError, match="apply to windows drawn from a genome"):
+        um.match_bkg(targets, targets, return_ranges=True)
+    with pytest.raises(ValueError, match="not both"):
+        um.match_bkg(targets, genome=seqs, return_ranges=True, return_indices=True)
+    with pytest.raises(ValueError, match="target_ranges and a genome"):
+        um.match_bkg(None, genome=seqs)
+    with pytest.raises(ValueError, match="max_n_fraction"):
+        um.match_bkg(targets, genome=seqs, max_n_fraction=2)

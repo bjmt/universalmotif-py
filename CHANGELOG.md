@@ -98,6 +98,15 @@ New:
 - `insert_sites(mode="insert")` inserts sites between the letters rather
   than over them, with `keep_length=True` to cut the sequences back to
   their length, and `delete_region()` deletes a stretch of each sequence.
+- `match_bkg()` draws windows from a genome in far less memory, measuring
+  candidates as it reads them and reading only those drawn, takes the
+  targets as `target_ranges` alone, leaves out windows with Ns with
+  `max_n_fraction`, and gives the windows drawn as ranges with
+  `return_ranges=True`.
+- `one_hot_batches()` gives signal targets from bigWig files with
+  `bigwigs` and `output_width`, and shifts and reverse complements regions
+  at random for training with `max_shift`, `reverse_complement`,
+  `strand_pairs` and `seed`. A `Genome` can be pickled.
 - `read_seqlets(trim=)` cuts seqlets to the core columns of their patterns,
   as `read_modisco()` trims them, and `plot_spacing(axis=1)` takes
   predictions with sequences first.

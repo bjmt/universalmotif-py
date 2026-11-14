@@ -148,9 +148,9 @@ def test_match_bkg_on_signal(tmp_path):
                     for n in plain["universe_name"]]
     assert matched["universe_atac"].mean() > 9
     assert um.signal_stats(path, plain_ranges)["signal"].mean() < matched["universe_atac"].mean() - 2
-    with pytest.raises(ValueError, match="go together"):
+    with pytest.raises(ValueError, match="needs target_ranges"):
         um.match_bkg(targets, genome=chroms, bigwig=path)
-    with pytest.raises(ValueError, match="needs a genome"):
+    with pytest.raises(ValueError, match="need a genome"):
         um.match_bkg(targets, universe=targets, bigwig=path, target_ranges=target_ranges)
     with pytest.raises(ValueError, match="10 sequences"):
         um.match_bkg(targets, genome=chroms, bigwig=path, target_ranges=target_ranges[:3])
@@ -333,3 +333,75 @@ def test_signal_values_edges(tmp_path):
             um.signal_values(path, "chr1", start, end)
     with pytest.raises(ValueError, match=r"does not fit in chr1 \(length 10\)"):
         um.signal_values(path, "chr1", 5, 11)
+
+
+def test_genomes_pickle(tmp_path):
+    import pickle
+
+    chroms = {"chr1": "ACGTTGCAAG" * 30, "chr2": "GGGAAACCCT" * 10}
+    um.write_fasta(chroms, tmp_path / "g.fa")
+    genome = um.Genome(tmp_path / "g.fa")
+    back = pickle.loads(pickle.dumps(genome))
+    assert back.path == genome.path and back.subseq("chr2", 5, 25) == chroms["chr2"][5:25]
+    batches = um.one_hot_batches(genome, [("chr1", 10, 30)], max_shift=3, seed=2)
+    again = pickle.loads(pickle.dumps(batches))
+    np.testing.assert_array_equal(next(iter(again)), next(iter(batches)))
+
+
+def test_one_hot_batches_with_targets(tmp_path):
+    rng = np.random.default_rng(4)
+    chroms = {"chr1": "".join(rng.choice(list("ACGT"), 600)), "chr2": "".join(rng.choice(list("ACGT"), 400))}
+    lengths = {c: len(v) for c, v in chroms.items()}
+    plus = _bigwig(tmp_path / "plus.bw", lengths,
+                   [("chr1", i, i + 1, float(i)) for i in range(600)] + [("chr2", i, i + 1, 1000.0 + i) for i in range(400)])
+    minus = _bigwig(tmp_path / "minus.bw", {"chr1": 600}, [("chr1", i, i + 1, -float(i)) for i in range(600)])
+    ranges = pl.DataFrame({"chrom": ["chr1", "chr1", "chr2"], "start": [100, 300, 150], "end": [140, 340, 190],
+                           "strand": ["+", "-", "+"]})
+    batches = um.one_hot_batches(chroms, ranges, batch_size=2, bigwigs={"plus": plus, "minus": minus},
+                                 output_width=20)
+    (x1, y1), (x2, y2) = list(batches)
+    x, y = np.concatenate([x1, x2]), np.concatenate([y1, y2])
+    assert x.shape == (3, 4, 40) and y.shape == (3, 2, 20) and y.dtype == np.float32
+    # Targets are the middle 20 positions of each window, 0 where a track has no values.
+    np.testing.assert_array_equal(y[0, 0], np.arange(110, 130))
+    np.testing.assert_array_equal(y[0, 1], -np.arange(110, 130))
+    np.testing.assert_array_equal(y[2, 0], 1000 + np.arange(160, 180))
+    assert (y[2, 1] == 0).all()
+    # A range on the - strand has its sequence and targets reversed.
+    assert um.from_one_hot(x[1:2])[0] == um.extract_ranges(chroms, ranges[1])["chr1:300-340(-)"]
+    np.testing.assert_array_equal(y[1, 0], np.arange(310, 330)[::-1])
+    flipped = um.one_hot_batches(chroms, ranges, batch_size=3, bigwigs=[plus, minus], output_width=20,
+                                 strand_pairs=[(0, 1)])
+    _, yf = next(iter(flipped))
+    np.testing.assert_array_equal(yf[1, 0], -np.arange(310, 330)[::-1])
+    np.testing.assert_array_equal(yf[1, 1], np.arange(310, 330)[::-1])
+    # Augmentation: the same shifts with or without reverse complements, and
+    # flipped rows reverse complemented with their targets.
+    kw = {"batch_size": 3, "bigwigs": [plus, minus], "output_width": 20, "strand_pairs": [(0, 1)],
+          "max_shift": 30, "seed": 9}
+    xa, ya = next(iter(um.one_hot_batches(chroms, ranges, **kw)))
+    xb, yb = next(iter(um.one_hot_batches(chroms, ranges, reverse_complement=True, **kw)))
+    rows = ~np.all(xa == xb, axis=(1, 2))
+    np.testing.assert_array_equal(xb[rows], xa[rows][:, ::-1, ::-1])
+    np.testing.assert_array_equal(yb[rows], ya[rows][:, ::-1, ::-1])
+    np.testing.assert_array_equal(yb[~rows], ya[~rows])
+    # Shifts move windows and targets together, differ between passes and
+    # repeat with the seed.
+    shifted = um.one_hot_batches(chroms, ranges[:1], bigwigs=plus, output_width=10, max_shift=30, seed=3)
+    passes = [next(iter(shifted)) for _ in range(5)]
+    starts = [int(y[0, 0, 0]) - 15 for _, y in passes]
+    assert len(set(starts)) > 1 and all(70 <= s <= 130 for s in starts)
+    for (x, _), s in zip(passes, starts):
+        assert um.from_one_hot(x)[0] == chroms["chr1"][s:s + 40]
+    again = um.one_hot_batches(chroms, ranges[:1], bigwigs=plus, output_width=10, max_shift=30, seed=3)
+    assert [int(next(iter(again))[1][0, 0, 0]) - 15 for _ in range(5)] == starts
+    with pytest.raises(ValueError, match="does not fit"):
+        um.one_hot_batches(chroms, [("chr1", 0, 40)], max_shift=5)
+    with pytest.raises(ValueError, match="does not fit"):
+        um.one_hot_batches(chroms, [("chr1", 0, 40)], bigwigs=plus, output_width=100)
+    with pytest.raises(ValueError, match="strand pair"):
+        um.one_hot_batches(chroms, ranges, bigwigs=[plus], strand_pairs=[(0, 1)])
+    with pytest.raises(ValueError, match="go with bigwigs"):
+        um.one_hot_batches(chroms, ranges, output_width=10)
+    with pytest.raises(ValueError, match="alphabet"):
+        um.one_hot_batches(chroms, ranges, alphabet="ACGTN", reverse_complement=True)
