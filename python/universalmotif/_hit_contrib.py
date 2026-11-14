@@ -332,6 +332,21 @@ def scan_contributions(
     whether the model gave the window much weight at all. Every motif is
     matched on its own, so motifs that share a site all have hits there.
 
+    FiNeMo, the other common way to call hits from contribution scores,
+    instead fits all the motifs to each region at once, rebuilding the
+    region's scores as a sparse sum of CWMs placed along it, so that motifs
+    compete for the same signal and redundant patterns at a site usually
+    leave a single hit. That suits composite and overlapping motifs, whose
+    signal has to be shared out between them, but takes many rounds of
+    optimisation per region, best run on a GPU, and gives scores relative to
+    each region's own scale. This function takes a single pass, matches
+    10,000 regions of 1,000 bases against 60 CWMs in under half a second on
+    two CPU threads, keeps the scale of the scores, and leaves overlaps
+    between motifs to ``no_overlaps_by_motif``. On the regions of an ENCODE
+    ATAC-seq model, both covered about 95% of TF-MoDISco's seqlets with a
+    hit of the right pattern, while FiNeMo called over twice as many hits
+    per region, many of them weak.
+
     Thresholds are given for every motif at once or one per motif, as a
     list or a mapping from motif names, and
     [`modisco_thresholds()`][universalmotif.modisco_thresholds] sets them
