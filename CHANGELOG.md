@@ -35,6 +35,9 @@ Changes in behaviour:
   contributions when every motif is one, and `merge_motifs()` merges them
   as CWMs, where they were compared and merged as probabilities of their
   absolute values before.
+- `create_motif()` refuses dots and dashes among DNA, RNA or amino acid
+  letters, which it made into letters of a custom alphabet before; a
+  custom `alphabet` still counts them.
 - `to_filters()` gives CWMs as their own contributions by default rather
   than as log2 odds, which failed on contributions of exactly zero, and
   warns that it leaves out the gaps of gapped motifs.
@@ -95,6 +98,8 @@ New:
   one-hot sequences.
 - `shuffle_region()` shuffles one stretch of each sequence several times,
   for measuring what it adds to a model's prediction.
+- `create_motif(sites, pieces=(left, right))` makes a gapped motif from
+  sites with spacers of different lengths, such as half-site repeats.
 - `insert_sites(mode="insert")` inserts sites between the letters rather
   than over them, with `keep_length=True` to cut the sequences back to
   their length, and `delete_region()` deletes a stretch of each sequence.

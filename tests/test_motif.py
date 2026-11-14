@@ -220,3 +220,34 @@ def test_reverse_complement_is_an_involution(alphabet):
         back = um.motif_rc(rc)
         np.testing.assert_array_equal(back.matrix, m.matrix)
         assert back.consensus == m.consensus and back.icscore == pytest.approx(m.icscore)
+
+
+def test_create_gapped_motifs_from_pieces():
+    sites = ["AGGTCAgAGGTCA", "AGGTCAggAGGTCA", "AGGTCAcatAGGTCA", "AGGTCAtgAGGTCA"]
+    dr = um.create_motif(sites, pieces=(6, 6), type="PCM", name="DR")
+    assert (dr.width, dr.isgapped, dr.gaploc, dr.mingap, dr.maxgap) == (12, True, [6], [1], [3])
+    assert dr.nsites == 4 and dr.name == "DR"
+    plain = um.create_motif([s[:6] + s[-6:] for s in sites], type="PCM")
+    np.testing.assert_array_equal(dr.matrix, plain.matrix)
+    # Sites without spacers make an ungapped motif, and one site works too.
+    assert not um.create_motif(["AGGTCAAGGTCA"] * 2, pieces=(6, 6)).isgapped
+    one = um.create_motif("TGACnnnnTCA", pieces=(4, 3))
+    assert one.consensus == "TGACTCA" and (one.mingap, one.maxgap) == ([4], [4])
+    # The motif finds sites with any spacer in its range.
+    hits = um.scan_sequences(um.normalize(dr), ["TTTAGGTCAAAAAGGTCATTT", "TTTAGGTCAAGGTCATTTTTT"], pvalue=1e-4)
+    assert hits["sequence"].to_list() == ["seq1"] and hits["match"][0] == "AGGTCA...AGGTCA"
+    with pytest.raises(ValueError, match="shorter than its two parts"):
+        um.create_motif(["AGGTCAAGG"], pieces=(6, 6))
+    with pytest.raises(ValueError, match="two parts"):
+        um.create_motif(sites, pieces=(6,))
+    with pytest.raises(TypeError, match="sites"):
+        um.create_motif(10, pieces=(3, 3))
+
+
+def test_dots_and_dashes_are_not_letters():
+    for bad in ("GATA..CACGTG", ["GATA--CACGTG", "GATATTCACGTG"]):
+        with pytest.raises(ValueError, match="pieces=") as err:
+            um.create_motif(bad)
+        assert "not a DNA letter" in str(err.value)
+    # A custom alphabet takes them as letters.
+    assert um.create_motif(["GATA--CACGTG", "GATATTCACGTG"], alphabet="-ACGT").alphabet == "-ACGT"

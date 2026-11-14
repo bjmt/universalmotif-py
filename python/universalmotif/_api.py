@@ -80,6 +80,7 @@ def create_motif(
     eval: float | None = None,
     extrainfo: Mapping[str, str] | None = None,
     seed: int | None = None,
+    pieces: Sequence[int] | None = None,
 ) -> Motif:
     """Create a motif.
 
@@ -94,7 +95,8 @@ def create_motif(
         - A string: a consensus sequence. IUPAC ambiguity codes are allowed
           for DNA and amino acids.
         - A sequence of equal-length strings: aligned sites, which are
-          counted. ``nsites`` then defaults to the number of strings.
+          counted. ``nsites`` then defaults to the number of strings. With
+          ``pieces``, the sites may differ in length.
         - A 2-D array of shape (letters, positions). Give the row letters
           with ``letters``, which are sorted with the rows reordered to
           match, or give ``alphabet`` and supply the rows in alphabet order.
@@ -118,6 +120,21 @@ def create_motif(
         [`get_bkg()`][universalmotif.get_bkg] returns. Uniform by default.
     seed
         Random seed, for random motifs only.
+    pieces
+        For sites made of two parts with a spacer of varying length between
+        them, such as the half-sites of nuclear receptors: the widths of the
+        two parts, as ``(left, right)``. The first ``left`` and last
+        ``right`` letters of each site are counted as the motif's columns,
+        and the motif gets a gap after its first ``left`` columns, from the
+        shortest to the longest spacer among the sites, as
+        [`add_gap()`][universalmotif.add_gap] gives it. Sites without a
+        spacer give an ungapped motif. Gapped motifs are matched with their
+        gaps by [`scan_sequences()`][universalmotif.scan_sequences].
+
+    Dots and dashes are not taken as letters when the alphabet is guessed
+    from strings of DNA, RNA or amino acids, since they usually stand for
+    gaps; they make an error instead, and count as letters only when given
+    in a custom ``alphabet``.
 
     Examples
     --------
@@ -149,6 +166,13 @@ def create_motif(
     (3.0, 'TATAWW')
     >>> motif.matrix.tolist()
     [[0.0, 3.0, 0.0, 3.0, 2.0, 2.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [3.0, 0.0, 3.0, 0.0, 1.0, 1.0]]
+
+    Direct repeats of a half-site with spacers of one to three letters:
+
+    >>> sites = ["AGGTCAgAGGTCA", "AGGTCAggAGGTCA", "AGGTCAcatAGGTCA", "AGGTCAtgAGGTCA"]
+    >>> dr = um.create_motif(sites, pieces=(6, 6), name="DR")
+    >>> dr.width, dr.gaploc, dr.mingap, dr.maxgap
+    (12, [6], [1], [3])
     """
     opts = dict(
         type=type or "PPM",
@@ -174,17 +198,44 @@ def create_motif(
     if letters is not None and (is_random or isinstance(input, str)):
         raise TypeError("letters is only used for matrix input")
 
+    if pieces is not None:
+        sites = [input] if isinstance(input, str) else input
+        if is_random or not (isinstance(sites, Sequence) and sites and all(isinstance(x, str) for x in sites)):
+            raise TypeError("pieces is only used for sites given as strings")
+        widths = [int(w) for w in pieces]
+        if len(widths) != 2 or min(widths) < 1:
+            raise ValueError("pieces gives the widths of the two parts of each site, either side of its spacer")
+        left, right = widths
+        short = [x for x in sites if len(x) < left + right]
+        if short:
+            raise ValueError(f"the site {short[0]} is shorter than its two parts, {left} and {right} letters")
+        spacers = [len(x) - left - right for x in sites]
+        motif = create_motif([x[:left] + x[len(x) - right:] for x in sites] if len(sites) > 1 else
+                             sites[0][:left] + sites[0][len(sites[0]) - right:],
+                             alphabet, type, letters=letters, **{k: v for k, v in opts.items() if k != "type"})
+        if max(spacers) == 0:
+            return motif
+        from ._utils import add_gap
+
+        return add_gap(motif, gaploc=left, mingap=min(spacers), maxgap=max(spacers))
+
     if is_random:
         width = 10 if input is None else int(input)
         if width <= 0:
             raise ValueError("width must be greater than 0")
         return _core._create_random(width, alphabet or "DNA", seed, **opts)
-    if isinstance(input, str):
-        return _core._create_from_strings([input], alphabet, **opts)
-    if isinstance(input, Sequence) and len(input) > 0 and all(isinstance(s, str) for s in input):
+    if isinstance(input, str) or (isinstance(input, Sequence) and len(input) > 0
+                                  and all(isinstance(s, str) for s in input)):
         if letters is not None:
             raise TypeError("letters is only used for matrix input")
-        return _core._create_from_strings(list(input), alphabet, **opts)
+        strings = [input] if isinstance(input, str) else list(input)
+        try:
+            return _core._create_from_strings(strings, alphabet, **opts)
+        except ValueError as e:
+            if "custom alphabet" in str(e) and any("." in x or "-" in x for x in strings):
+                raise ValueError(f"{e}; create_motif(sites, pieces=(left, right)) does both for sites "
+                                 "with spacers of different lengths") from None
+            raise
 
     matrix = np.asarray(input, dtype=np.float64)
     if matrix.ndim != 2:
