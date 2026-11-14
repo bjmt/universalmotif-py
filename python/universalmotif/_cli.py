@@ -34,6 +34,8 @@ _EXTENSIONS = {
     ".matrix": "matrix",
 }
 _FORMAT_LIST = ", ".join(_MOTIF_FORMATS)
+_FORMAT_NAMES = {"meme": "MEME", "jaspar": "JASPAR", "homer": "HOMER", "transfac": "TRANSFAC",
+                 "cisbp": "CIS-BP", "uniprobe": "UniPROBE", "matrix": "a plain matrix"}
 _BED_SUFFIXES = (".bed", ".narrowpeak", ".broadpeak", ".bedgraph")
 
 
@@ -96,11 +98,27 @@ def read_motifs(paths: list[str], fmt: str | None = None) -> list:
         if path != "-" and not Path(path).exists():
             raise CliError(f"no such file: {path}")
         text = _read_bytes(path).decode()
-        kind = fmt or (None if path == "-" else _EXTENSIONS.get(_stem_suffix(path))) or _sniff_format(text)
+        kind, how = fmt, None
+        if kind is None and path != "-":
+            kind, how = _EXTENSIONS.get(_stem_suffix(path)), "its extension"
+        if kind is None:
+            kind, how = _sniff_format(text), "its contents"
+        # A format that was guessed is named in errors, since a wrong guess
+        # otherwise shows only as a puzzling failure to read.
+        hint = "" if how is None else f" (read as {_FORMAT_NAMES[kind]} from {how}; give -f if that is wrong)"
+        name = "standard input" if path == "-" else path
         with tempfile.TemporaryDirectory() as tmp:
             file = Path(tmp) / "motifs"
             file.write_text(text)
-            motifs += readers[kind](file)
+            try:
+                found = readers[kind](file)
+            except (ValueError, KeyError) as e:
+                if not hint:
+                    raise
+                raise CliError(f"{name}: {_unquote(str(e))}{hint}") from None
+        if not found and hint:
+            raise CliError(f"no motifs were read from {name}{hint}")
+        motifs += found
     if not motifs:
         raise CliError("no motifs were read")
     return motifs

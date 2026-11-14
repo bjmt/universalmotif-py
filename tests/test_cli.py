@@ -865,3 +865,22 @@ def test_scan_bed_and_long_logo_names(tmp_path, genome):
     # A table of hits with no rows has no sites.
     (tmp_path / "empty.tsv").write_text("motif\tmatch\n")
     run("create", "--sites", tmp_path / "empty.tsv", ok=False)
+
+
+def test_guessed_formats_are_named_in_errors(tmp_path, capsys):
+    def error(*args):
+        run(*args, ok=False)
+        return capsys.readouterr().err
+
+    fasta = tmp_path / "seqs.fa"
+    fasta.write_text(">seq1\nACGTACGTACGT\n>seq2\nTTTTGGGGCCCC\n")
+    assert "read as JASPAR from its contents; give -f if that is wrong" in error("summary", fasta)
+    renamed = tmp_path / "seqs.jaspar"
+    renamed.write_text(fasta.read_text())
+    assert "read as JASPAR from its extension" in error("summary", renamed)
+    junk = tmp_path / "junk.txt"
+    junk.write_text("hello world\n")
+    assert "read as a plain matrix from its contents" in error("summary", junk)
+    # A format given with -f is not second-guessed.
+    err = error("summary", "-f", "jaspar", fasta)
+    assert "could not read a count" in err and "give -f" not in err

@@ -124,6 +124,8 @@ New:
 
 Fixes:
 
+- Command line errors on motif files whose format was recognized from the
+  extension or contents name that format and suggest `-f`.
 - `umotif enrich --test` takes `sites`, the name `enrich_motifs()` uses,
   and still accepts `hits`.
 - Command line errors no longer lose a quote at either end of the message.

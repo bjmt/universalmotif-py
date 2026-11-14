@@ -44,7 +44,8 @@ A few conventions hold across the commands.
 - **Motifs** can be in any of the supported formats: MEME, JASPAR, HOMER,
   TRANSFAC, CIS-BP, UniPROBE or plain matrices, gzipped or not, and CIS-BP
   archives downloaded as `.zip` files. The format is recognized from the
-  extension, or else from the contents, and can be given with `-f`. Several
+  extension, or else from the contents, and can be given with `-f`; when a
+  file cannot be read, the error names the format it was taken to be. Several
   motif files can be given at once, and `-` reads from standard input.
   Motifs are written in the format given with `-t`, or the one matching the
   output file's extension, and MEME otherwise.
