@@ -44,13 +44,27 @@ def test_compare_motifs_reference():
         ctx = f"compare case {i}: {case['set']} {a}"
         motifs = _set(case["set"])
         if "matrix" in case:
-            got = um.compare_motifs(motifs, matrix_out=a.get("matrix.out", "score"), **_opts(a))
+            out = a.get("matrix.out", "score")
+            got = um.compare_motifs(motifs, matrix_out=out, **_opts(a))
+            if out == "qvalue":
+                p = np.asarray(um.compare_motifs(motifs, matrix_out="pvalue", **_opts(a)))
+                got = np.array([_r_qvalues(p[r], r, got[r], ctx) for r in range(len(p))])
             want = np.array([nums(r) for r in case["matrix"]])
             got = _beyond_null(got, want, a)
             np.testing.assert_allclose(got, want, rtol=1e-12, atol=1e-300, err_msg=ctx)
         else:
             to = [int(x) - 1 for x in nums(a["compare.to"])]
-            got = um.compare_motifs(motifs, compare_to=to, qvalue=a.get("qvalue", 0.1), **_opts(a))
+            every = um.compare_motifs(motifs, compare_to=to, qvalue=1.0, **_opts(a))
+            r_q = np.zeros(every.height)
+            for q in to:
+                rows = np.flatnonzero(every["subject_i"].to_numpy() == q)
+                targets = every["target_i"].to_numpy()[rows]
+                own = int(np.flatnonzero(targets == q)[0]) if (targets == q).any() else None
+                r_q[rows] = _r_qvalues(every["pvalue"].to_numpy()[rows], own,
+                                       every["qvalue"].to_numpy()[rows], ctx)
+            got = (every.with_columns(pl.Series("qvalue", r_q))
+                   .filter(pl.col("qvalue") <= a.get("qvalue", 0.1))
+                   .sort("qvalue", "pvalue", "target_i"))
             w = case["long"]
             assert got["subject_i"].to_list() == [int(x) - 1 for x in nums(w["subject_i"])], ctx
             assert got["target_i"].to_list() == [int(x) - 1 for x in nums(w["target_i"])], ctx
@@ -73,6 +87,29 @@ def test_compare_motifs_reference():
                 want = np.array(nums(w[col]), dtype=float)
                 np.testing.assert_allclose(_beyond_null(got[col].to_numpy(), want, a), want,
                                            rtol=1e-12, err_msg=f"{ctx}: {col}")
+
+
+def _r_qvalues(p, own, port, ctx):
+    """The R package's q-values for one query, which count its comparison
+    with itself in the correction; the port's leave it out and give it its
+    P-value, which is checked here before R's are given back."""
+    p = np.asarray(p, dtype=float)
+    keep = np.ones(len(p), dtype=bool)
+    if own is not None:
+        keep[own] = False
+        assert port[own] == p[own], ctx
+    np.testing.assert_allclose(np.asarray(port)[keep], _bh(p[keep]), rtol=1e-12, err_msg=ctx)
+    return _bh(p)
+
+
+def _bh(p):
+    p = np.asarray(p, dtype=float)
+    order = np.argsort(p, kind="stable")
+    m = len(p)
+    adj = np.minimum.accumulate((p[order] * m / np.arange(1, m + 1))[::-1])[::-1]
+    out = np.empty(m)
+    out[order] = np.minimum(adj, 1.0)
+    return out
 
 
 @pytest.mark.filterwarnings("ignore:.*could not overlap the anchor")

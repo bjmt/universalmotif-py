@@ -50,6 +50,11 @@ Changes in behaviour:
 - `merge_motifs()` and `merge_similar()` align motifs narrower than
   `min_overlap` over their whole width, as comparisons do, rather than
   leaving them out.
+- `compare_motifs()` leaves each query's comparison with itself out of the
+  Benjamini-Hochberg correction of its q-values, and gives it its P-value
+  as its q-value; its tiny P-value made the best matches' q-values about
+  half what they should be. `merge_similar()` links motifs by these
+  q-values, so it can be a little stricter.
 
 Renamed, with the old names still working for now and warning:
 

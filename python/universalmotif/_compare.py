@@ -58,7 +58,10 @@ def compare_motifs(
     the probabilities. Each P-value comes from the exact distribution of
     that sum under a null model of columns, Bonferroni-corrected for the
     alignments tried, and q-values are Benjamini-Hochberg adjusted within
-    each query. P-values are worked out for each query's own columns and
+    each query over its comparisons with the other motifs. A motif's
+    comparison with itself is left out of that adjustment, as its tiny
+    P-value would make every other q-value smaller, and its q-value is its
+    P-value. P-values are worked out for each query's own columns and
     alignments, so a P-value matrix need not be symmetric even where the
     scores are.
 
