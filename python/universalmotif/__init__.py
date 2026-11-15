@@ -96,6 +96,7 @@ from ._io import (
 )
 from ._core import Motif
 from ._enrich import enrich_motifs, motif_coocc, motif_peaks
+from ._gapped_finder import gapped_motif_finder
 from ._genome import Genome, extract_ranges, signal_stats, signal_values
 from ._genomic import match_bkg, motif_proximity
 from ._interactions import interaction_effects, pair_mutagenesis, plot_interactions
@@ -183,6 +184,7 @@ __all__ = [
     "from_biopython",
     "from_filters",
     "from_one_hot",
+    "gapped_motif_finder",
     "genomic_hits",
     "get_bkg",
     "get_consensus",

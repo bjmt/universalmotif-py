@@ -11,3 +11,5 @@ Testing motifs for enrichment, co-occurrence and positional enrichment in a set 
 ::: universalmotif.motif_peaks
 
 ::: universalmotif.motif_finder
+
+::: universalmotif.gapped_motif_finder

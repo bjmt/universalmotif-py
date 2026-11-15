@@ -8,6 +8,7 @@ use pyo3::types::PyDict;
 use universalmotif::Motif;
 use universalmotif::complexity::{self, ComplexityMethod, ComplexityOptions};
 use universalmotif::finder::{FinderOptions, motif_finder};
+use universalmotif::gapped::{GappedFinderOptions, gapped_motif_finder};
 use universalmotif::kmer::{self, BkgOptions, WindowOptions};
 use universalmotif::sample::{self, ImplantMode, ImplantOptions};
 use universalmotif::shuffle::{self, ShuffleMethod, ShuffleOptions};
@@ -307,6 +308,91 @@ fn _implant_motifs<'py>(
 }
 
 #[pyfunction]
+#[pyo3(signature = (seqs, negatives, k, min_gap, max_gap, nmotifs, hit_pvalue, stop_pvalue, flank, min_ic, n_seeds, min_fraction, holdout, mismatch, mask, rc, shuffle_k, seed, nthreads))]
+#[allow(clippy::too_many_arguments)]
+fn _gapped_motif_finder<'py>(
+    py: Python<'py>,
+    seqs: Vec<PyBackedStr>,
+    negatives: Option<Vec<PyBackedStr>>,
+    k: Vec<usize>,
+    min_gap: usize,
+    max_gap: usize,
+    nmotifs: usize,
+    hit_pvalue: f64,
+    stop_pvalue: f64,
+    flank: usize,
+    min_ic: f64,
+    n_seeds: usize,
+    min_fraction: f64,
+    holdout: f64,
+    mismatch: bool,
+    mask: bool,
+    rc: bool,
+    shuffle_k: usize,
+    seed: u64,
+    nthreads: usize,
+) -> PyResult<(Vec<PyMotif>, Bound<'py, PyDict>)> {
+    let opts = GappedFinderOptions {
+        k,
+        min_gap,
+        max_gap,
+        nmotifs,
+        hit_pvalue,
+        stop_pvalue,
+        flank,
+        min_ic,
+        n_seeds,
+        min_fraction,
+        holdout,
+        mismatch,
+        mask,
+        rc,
+        shuffle_k,
+        seed,
+        nthreads,
+    };
+    let found = py
+        .detach(|| gapped_motif_finder(&seqs, negatives.as_deref(), &opts))
+        .map_err(err)?;
+    let d = PyDict::new(py);
+    d.set_item("k", found.iter().map(|f| f.k).collect::<Vec<_>>())?;
+    d.set_item(
+        "seed",
+        found.iter().map(|f| f.seed.clone()).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "seqs_pos",
+        found.iter().map(|f| f.seqs_pos).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "seqs_neg",
+        found.iter().map(|f| f.seqs_neg).collect::<Vec<_>>(),
+    )?;
+    d.set_item("n_pos", found.iter().map(|f| f.n_pos).collect::<Vec<_>>())?;
+    d.set_item("n_neg", found.iter().map(|f| f.n_neg).collect::<Vec<_>>())?;
+    d.set_item(
+        "candidates",
+        found.iter().map(|f| f.candidates).collect::<Vec<_>>(),
+    )?;
+    d.set_item("seeds", found.iter().map(|f| f.seeds).collect::<Vec<_>>())?;
+    d.set_item(
+        "ln_pvalue",
+        found.iter().map(|f| f.ln_pvalue).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "ln_spacing_pvalue",
+        found
+            .iter()
+            .map(|f| f.ln_spacing_pvalue)
+            .collect::<Vec<_>>(),
+    )?;
+    Ok((
+        found.into_iter().map(|f| PyMotif::from(f.motif)).collect(),
+        d,
+    ))
+}
+
+#[pyfunction]
 #[pyo3(signature = (seqs, negatives, min_width, max_width, nmotifs, hit_pvalue, stop_pvalue, qvalue, dedup_overlap, rc, shuffle_k, seed, pseudocount, nthreads))]
 #[allow(clippy::too_many_arguments)]
 fn _motif_finder<'py>(
@@ -401,5 +487,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_sample_sites, m)?)?;
     m.add_function(wrap_pyfunction!(_implant_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_motif_finder, m)?)?;
+    m.add_function(wrap_pyfunction!(_gapped_motif_finder, m)?)?;
     Ok(())
 }

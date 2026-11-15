@@ -29,6 +29,7 @@ umotif scan --help
 | `compare` | Compare motifs with each other or with a database. |
 | `enrich` | Test motifs for enrichment in target sequences. |
 | `find` | Discover motifs *de novo*. |
+| `find-gapped` | Discover gapped motifs *de novo*: two parts with a spacer of varying length. |
 | `shuffle` | Shuffle sequences, keeping their k-mer counts. |
 | `extract` | Write the sequences of genomic ranges as FASTA. |
 | `bkg` | Draw background sequences matched to targets on GC content, length and bigWig signal. |
@@ -297,6 +298,22 @@ umotif find -s peaks.fa --shuffle-k 3 --seed 1 -o found.meme
 ```
 
 <!-- output: enriched.tsv 5 9 -->
+
+`find-gapped` looks for motifs made of two parts with a spacer of varying
+length, such as direct repeats of a half site. Each motif is tested in a
+share of the targets and background held out from the search, 0.3 by
+default. For peaks from a genome, a background drawn from the genome with
+`bkg` gives far fewer false motifs than shuffled targets. Here it finds the
+G-box planted 23 letters from the AP-1 site, read on the other strand. No
+motif format keeps gaps, so the motifs are written as their two parts
+joined, and the table gives each gap:
+
+```sh
+umotif bkg -s peaks.fa -g genome.fa.gz --exclude peaks.bed --seed 1 -o bkg.fa
+umotif find-gapped -s peaks.fa -b bkg.fa --max-gap 30 --seed 1 --table gapped.tsv -o gapped.meme
+```
+
+<!-- output: gapped.tsv 2 8 -->
 
 ### Peaks and their surroundings
 

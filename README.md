@@ -90,7 +90,7 @@ found = um.motif_finder(targets, controls, seed=1)
   on the whole query, merging of similar motifs, and trees.
 - **Statistics:** enrichment, co-occurrence, positional enrichment,
   proximity to genomic anchors, composition-matched backgrounds and *de
-  novo* motif discovery.
+  novo* motif discovery, of gapped motifs too.
 - **Genomes:** FASTA, bgzip and 2bit genomes read a piece at a time, the
   sequences of peaks, bigWig signal over them, and hits moved back to
   genomic coordinates, with ranges exchanged with PyRanges and polars-bio.

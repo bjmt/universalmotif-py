@@ -685,6 +685,28 @@ def cmd_find(a):
     write_motifs(res["motif"].to_list(), a.output, a.to)
 
 
+def cmd_find_gapped(a):
+    import universalmotif as um
+
+    targets = _target_sequences(a, "target sequences")
+    bkg = read_sequences(a.bkg) if a.bkg else None
+    res = um.gapped_motif_finder(targets, bkg, k=a.k, min_gap=a.min_gap, max_gap=a.max_gap,
+                                 nmotifs=a.nmotifs, hit_pvalue=a.hit_pvalue, stop_pvalue=a.stop_pvalue,
+                                 n_seeds=a.seeds, min_fraction=a.min_fraction, holdout=a.holdout,
+                                 mismatch=a.mismatch, mask=a.mask, shuffle_k=a.shuffle_k, rc=a.rc,
+                                 seed=a.seed, nthreads=a.threads)
+    if a.table:
+        write_table(res, a.table)
+    if res.height == 0:
+        print("no gapped motifs were found", file=sys.stderr)
+        return
+    # No motif format keeps gaps, so the motifs are written as their two
+    # parts joined; the table gives each gap.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", ".* format cannot preserve gap definitions")
+        write_motifs(res["motif"].to_list(), a.output, a.to)
+
+
 def cmd_shuffle(a):
     import universalmotif as um
 
@@ -1210,6 +1232,42 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="q-value cutoff for reported motifs (default: 0.05)")
     p.add_argument("--no-rc", dest="rc", action="store_false", default=None,
                    help="search only the forward strand, as is done by default for RNA")
+    p.add_argument("--shuffle-k", type=int, default=2,
+                   help="k-mer size kept when shuffling targets for a background (default: 2)")
+    _seed_arg(p)
+    _threads_arg(p)
+
+    p = command("find-gapped", cmd_find_gapped, "discover gapped motifs de novo",
+                "Discover motifs made of two parts with a spacer of varying length, writing the "
+                "motifs with -o and a table of results with --table. Each motif is tested in a "
+                "share of the targets and background held out from the search. No motif format "
+                "keeps gaps, so the motifs are written as their two parts joined, and the table "
+                "gives each gap.")
+    _add_target_args(p, "target sequences")
+    p.add_argument("-b", "--bkg", help="FASTA file of background sequences")
+    _motif_out_args(p)
+    p.add_argument("--table", help="also write a table of the motifs found")
+    p.add_argument("-k", type=int, nargs="+", default=[4, 5, 6],
+                   help="k-mer sizes to seed motifs from, each from 2 to 6 (default: 4 5 6)")
+    p.add_argument("--min-gap", type=int, default=0, help="shortest spacer (default: 0)")
+    p.add_argument("--max-gap", type=int, default=20, help="longest spacer, at most 100 (default: 20)")
+    p.add_argument("--nmotifs", type=int, default=3, help="most motifs to find (default: 3)")
+    p.add_argument("--hit-pvalue", type=float, default=1e-4,
+                   help="P-value of a site counting as a hit (default: 1e-4)")
+    p.add_argument("--stop-pvalue", type=float, default=1e-3,
+                   help="spacing P-value at which to stop (default: 1e-3)")
+    p.add_argument("--seeds", type=int, default=6,
+                   help="seeds built into motifs for each k-mer size (default: 6)")
+    p.add_argument("--min-fraction", type=float, default=0.02,
+                   help="smallest share of targets a pair of k-mers must be in (default: 0.02)")
+    p.add_argument("--holdout", type=float, default=0.3,
+                   help="share of the targets and background held out to test the motifs; "
+                        "0 tests them where they were found (default: 0.3)")
+    p.add_argument("--mismatch", action="store_true",
+                   help="count pairs of 6-mers with up to one mismatch, for rarer motifs")
+    p.add_argument("--no-mask", dest="mask", action="store_false",
+                   help="leave low-complexity regions unmasked")
+    p.add_argument("--no-rc", dest="rc", action="store_false", help="search only the forward strand")
     p.add_argument("--shuffle-k", type=int, default=2,
                    help="k-mer size kept when shuffling targets for a background (default: 2)")
     _seed_arg(p)

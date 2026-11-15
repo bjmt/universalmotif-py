@@ -58,7 +58,7 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
   and trees.
 - **Statistics:** enrichment, co-occurrence, positional enrichment,
   proximity to genomic anchors, composition-matched backgrounds and *de
-  novo* motif discovery.
+  novo* motif discovery, of gapped motifs too.
 - **Sequences:** shuffling that keeps k-mer counts, random sequences, k-mer
   backgrounds, complexity, masking and sliding windows.
 - **Command line:** `umotif` runs the main functions on files, for shell
