@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-11-15)
 
 Changes in behaviour:
 
@@ -75,9 +75,9 @@ Renamed, with the old names still working for now and warning:
 
 New:
 
-- `gapped_motif_finder()` discovers motifs made of two parts with a spacer
-  of varying length, testing each in sequences held out from the search,
-  and the `find-gapped` command runs it on files.
+- `gapped_motif_finder()`, experimental for now, discovers motifs made of
+  two parts with a spacer of varying length, testing each in sequences held
+  out from the search, and the `find-gapped` command runs it on files.
 - `set_nthreads()` and `get_nthreads()` set and read the threads used by
   every function whose `nthreads` is left out, and the
   `UNIVERSALMOTIF_NTHREADS` environment variable sets them at import.

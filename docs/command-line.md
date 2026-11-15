@@ -29,7 +29,7 @@ umotif scan --help
 | `compare` | Compare motifs with each other or with a database. | [`compare_motifs()`][universalmotif.compare_motifs] |
 | `enrich` | Test motifs for enrichment in target sequences. | [`enrich_motifs()`][universalmotif.enrich_motifs] |
 | `find` | Discover motifs *de novo*. | [`motif_finder()`][universalmotif.motif_finder] |
-| `find-gapped` | Discover gapped motifs *de novo*: two parts with a spacer of varying length. | [`gapped_motif_finder()`][universalmotif.gapped_motif_finder] |
+| `find-gapped` | Discover gapped motifs *de novo*: two parts with a spacer of varying length (experimental). | [`gapped_motif_finder()`][universalmotif.gapped_motif_finder] |
 | `shuffle` | Shuffle sequences, keeping their k-mer counts. | [`shuffle_sequences()`][universalmotif.shuffle_sequences] |
 | `extract` | Write the sequences of genomic ranges as FASTA. | [`extract_ranges()`][universalmotif.extract_ranges] |
 | `bkg` | Draw background sequences matched to targets on GC content, length and bigWig signal. | [`match_bkg()`][universalmotif.match_bkg] |
@@ -299,14 +299,14 @@ umotif find -s peaks.fa --shuffle-k 3 --seed 1 -o found.meme
 
 <!-- output: enriched.tsv 5 9 -->
 
-`find-gapped` looks for motifs made of two parts with a spacer of varying
-length, such as direct repeats of a half site. Each motif is tested in a
-share of the targets and background held out from the search, 0.3 by
-default. For peaks from a genome, a background drawn from the genome with
-`bkg` gives far fewer false motifs than shuffled targets. Here it finds the
-G-box planted 23 letters from the AP-1 site, read on the other strand. No
-motif format keeps gaps, so the motifs are written as their two parts
-joined, and the table gives each gap:
+`find-gapped`, which is experimental for now, looks for motifs made of two
+parts with a spacer of varying length, such as direct repeats of a half
+site. Each motif is tested in a share of the targets and background held
+out from the search, 0.3 by default. For peaks from a genome, a background
+drawn from the genome with `bkg` gives far fewer false motifs than
+shuffled targets. Here it finds the G-box planted 23 letters from the AP-1
+site, read on the other strand. No motif format keeps gaps, so the motifs
+are written as their two parts joined, and the table gives each gap:
 
 ```sh
 umotif bkg -s peaks.fa -g genome.fa.gz --exclude peaks.bed --seed 1 -o bkg.fa

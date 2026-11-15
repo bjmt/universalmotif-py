@@ -58,6 +58,9 @@ def gapped_motif_finder(
 ) -> pl.DataFrame:
     """Find motifs made of two parts with a spacer of varying length.
 
+    The finder is experimental: its options, its results and the motifs it
+    finds may change in later releases.
+
     A share of the sequences and of the background, ``holdout``, is first
     set aside. In the rest, pairs of ``k``-mers at every spacing from
     ``min_gap`` to ``max_gap`` found in at least ``min_fraction`` of the

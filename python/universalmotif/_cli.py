@@ -1261,12 +1261,12 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     _seed_arg(p)
     _threads_arg(p)
 
-    p = command("find-gapped", cmd_find_gapped, "discover gapped motifs de novo",
+    p = command("find-gapped", cmd_find_gapped, "discover gapped motifs de novo (experimental)",
                 "Discover motifs made of two parts with a spacer of varying length, writing the "
                 "motifs with -o and a table of results with --table. Each motif is tested in a "
                 "share of the targets and background held out from the search. No motif format "
                 "keeps gaps, so the motifs are written as their two parts joined, and the table "
-                "gives each gap.")
+                "gives each gap. The command is experimental and may change in later releases.")
     _add_target_args(p, "target sequences")
     p.add_argument("-b", "--bkg", help="FASTA file of background sequences")
     _motif_out_args(p)
