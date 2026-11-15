@@ -43,6 +43,13 @@ def to_filters(
     A filter has a fixed width, so the gaps of gapped motifs are left out,
     with a warning, and their columns run together.
 
+    References
+    ----------
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -249,6 +256,13 @@ def read_modisco(
 
     Needs the ``h5py`` extra.
 
+    References
+    ----------
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -336,6 +350,13 @@ def modisco_thresholds(
         One row per pattern, named as ``read_modisco()`` names it, with the
         columns ``motif``, ``min_similarity``, ``min_importance`` and
         ``seqlets``, their number.
+
+    References
+    ----------
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
 
     Examples
     --------
@@ -469,6 +490,13 @@ def read_seqlets(
     does not record inputs without seqlets.
 
     Needs the ``h5py`` extra.
+
+    References
+    ----------
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
 
     Examples
     --------
@@ -815,6 +843,18 @@ def read_contributions(
     time; a ``.npz`` file is compressed, so it is read whole.
 
     Needs the ``h5py`` extra for HDF5 files.
+
+    References
+    ----------
+    - Pampari A, Shcherbina A, Kvon EZ, Kosicki M, Nair S, Kundu S, Kathiria
+      AS, Risca VI, et al. (2024). ChromBPNet: bias factorized, base-resolution
+      deep learning models of chromatin accessibility reveal cis-regulatory
+      sequence syntax, transcription factor footprints and regulatory variants.
+      *bioRxiv* 2024.12.25.630221. <https://doi.org/10.1101/2024.12.25.630221>
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
 
     Examples
     --------
@@ -1437,6 +1477,16 @@ def shuffled_references(
         tensor (on the CPU) when ``x`` is one. They take ``n`` times the
         memory of ``x``.
 
+    References
+    ----------
+    - Shrikumar A, Greenside P, Kundaje A (2017). Learning important features
+      through propagating activation differences. *Proceedings of the 34th
+      International Conference on Machine Learning*, PMLR 70:3145–3153.
+      <https://proceedings.mlr.press/v70/shrikumar17a.html>
+    - Lundberg SM, Lee SI (2017). A unified approach to interpreting model
+      predictions. *Advances in Neural Information Processing Systems*
+      30:4765–4774. <https://arxiv.org/abs/1705.07874>
+
     Examples
     --------
     >>> import numpy as np
@@ -1554,6 +1604,12 @@ def one_hot_batches(
     nthreads
         Threads for reading a genome on disk, by default the package setting
         from [`set_nthreads()`][universalmotif.set_nthreads].
+
+    References
+    ----------
+    - Kent WJ, Zweig AS, Barber G, Hinrichs AS, Karolchik D (2010). BigWig and
+      BigBed: enabling browsing of large distributed datasets. *Bioinformatics*
+      26(17):2204–2207. <https://doi.org/10.1093/bioinformatics/btq351>
 
     Examples
     --------

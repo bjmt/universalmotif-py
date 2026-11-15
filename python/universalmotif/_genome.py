@@ -222,6 +222,12 @@ def signal_stats(
 
     Needs the ``bigwig`` extra.
 
+    References
+    ----------
+    - Kent WJ, Zweig AS, Barber G, Hinrichs AS, Karolchik D (2010). BigWig and
+      BigBed: enabling browsing of large distributed datasets. *Bioinformatics*
+      26(17):2204–2207. <https://doi.org/10.1093/bioinformatics/btq351>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -286,6 +292,12 @@ def signal_values(
     [`view_attributions()`][universalmotif.view_attributions].
 
     Needs the ``bigwig`` extra.
+
+    References
+    ----------
+    - Kent WJ, Zweig AS, Barber G, Hinrichs AS, Karolchik D (2010). BigWig and
+      BigBed: enabling browsing of large distributed datasets. *Bioinformatics*
+      26(17):2204–2207. <https://doi.org/10.1093/bioinformatics/btq351>
 
     Examples
     --------

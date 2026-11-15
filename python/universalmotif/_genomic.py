@@ -549,6 +549,14 @@ def match_bkg(
         ``chrom:start-end``. With ``return_indices`` or ``return_ranges``,
         a DataFrame as described for them.
 
+    References
+    ----------
+    - Heinz S, Benner C, Spann N, Bertolino E, Lin YC, Laslo P, Cheng JX, Murre
+      C, et al. (2010). Simple combinations of lineage-determining
+      transcription factors prime cis-regulatory elements required for
+      macrophage and B cell identities. *Molecular Cell* 38(4):576–589.
+      <https://doi.org/10.1016/j.molcel.2010.05.004>
+
     Examples
     --------
     >>> import universalmotif as um

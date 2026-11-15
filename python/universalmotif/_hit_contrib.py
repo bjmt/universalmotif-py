@@ -434,6 +434,15 @@ def scan_contributions(
         Sequences are named as the scores are, or ``seq1``, ``seq2`` and so
         on.
 
+    References
+    ----------
+    - Fi-NeMo: Finding Neural Network Motifs. Kundaje Lab, Stanford University.
+      <https://github.com/kundajelab/Fi-NeMo>
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
+
     Examples
     --------
     A CWM of GAT matched against the scores of two sequences, of which only
@@ -592,6 +601,17 @@ def hit_contributions(
     -------
     HitContributions
         The hits with their total contributions, and the scores around them.
+
+    References
+    ----------
+    - Pampari A, Shcherbina A, Kvon EZ, Kosicki M, Nair S, Kundu S, Kathiria
+      AS, Risca VI, et al. (2024). ChromBPNet: bias factorized, base-resolution
+      deep learning models of chromatin accessibility reveal cis-regulatory
+      sequence syntax, transcription factor footprints and regulatory variants.
+      *bioRxiv* 2024.12.25.630221. <https://doi.org/10.1101/2024.12.25.630221>
+    - Kent WJ, Zweig AS, Barber G, Hinrichs AS, Karolchik D (2010). BigWig and
+      BigBed: enabling browsing of large distributed datasets. *Bioinformatics*
+      26(17):2204–2207. <https://doi.org/10.1093/bioinformatics/btq351>
 
     Examples
     --------

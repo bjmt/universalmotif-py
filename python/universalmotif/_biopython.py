@@ -57,6 +57,13 @@ def from_biopython(motifs):
 
     Needs the ``biopython`` extra.
 
+    References
+    ----------
+    - Cock PJA, Antao T, Chang JT, Chapman BA, Cox CJ, Dalke A, Friedberg I,
+      Hamelryck T, et al. (2009). Biopython: freely available Python tools for
+      computational molecular biology and bioinformatics. *Bioinformatics*
+      25(11):1422–1423. <https://doi.org/10.1093/bioinformatics/btp163>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -147,6 +154,13 @@ def to_biopython(motifs, jaspar=False):
     for a list.
 
     Needs the ``biopython`` extra.
+
+    References
+    ----------
+    - Cock PJA, Antao T, Chang JT, Chapman BA, Cox CJ, Dalke A, Friedberg I,
+      Hamelryck T, et al. (2009). Biopython: freely available Python tools for
+      computational molecular biology and bioinformatics. *Bioinformatics*
+      25(11):1422–1423. <https://doi.org/10.1093/bioinformatics/btp163>
 
     Examples
     --------

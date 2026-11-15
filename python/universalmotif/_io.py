@@ -71,6 +71,14 @@ def read_jaspar(file: PathLike, skip: int = 0) -> list[Motif]:
     with ``nsites`` set to the largest column sum. ``skip`` drops lines from
     the start of the file.
 
+    References
+    ----------
+    - Rauluseviciute I, Riudavets-Puig R, Blanc-Mathieu R, Castro-Mondragon JA,
+      Ferenc K, Kumar V, Lemma RB, Lucas J, et al. (2024). JASPAR 2024: 20th
+      anniversary of the open-access database of transcription factor binding
+      profiles. *Nucleic Acids Research* 52(D1):D174–D182.
+      <https://doi.org/10.1093/nar/gkad1059>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -89,6 +97,14 @@ def read_homer(file: PathLike, skip: int = 0) -> list[Motif]:
     The log-odds detection threshold is kept in ``extrainfo`` as
     ``"logodds.threshold"``, and site counts and P-values are read from
     HOMER's statistics column when present.
+
+    References
+    ----------
+    - Heinz S, Benner C, Spann N, Bertolino E, Lin YC, Laslo P, Cheng JX, Murre
+      C, et al. (2010). Simple combinations of lineage-determining
+      transcription factors prime cis-regulatory elements required for
+      macrophage and B cell identities. *Molecular Cell* 38(4):576–589.
+      <https://doi.org/10.1016/j.molcel.2010.05.004>
 
     Examples
     --------
@@ -109,6 +125,13 @@ def read_transfac(file: PathLike, skip: int = 0) -> list[Motif]:
     identifier in ``ID`` or the factor name in ``NA`` as the alternate name;
     ``HC`` and ``OS`` give the family and organism.
 
+    References
+    ----------
+    - Matys V, Kel-Margoulis OV, Fricke E, et al. (2006). TRANSFAC and its
+      module TRANSCompel: transcriptional gene regulation in eukaryotes.
+      *Nucleic Acids Research* 34(suppl_1):D108–D110.
+      <https://doi.org/10.1093/nar/gkj143>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -125,6 +148,13 @@ def read_cisbp(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read CIS-BP motifs, using the ``TF``, ``TF Name``, ``Family`` and
     ``Species`` fields as the name, alternate name, family and organism.
 
+    References
+    ----------
+    - Weirauch MT, Yang A, Albu M, Cote AG, Montenegro-Montero A, Drewe P,
+      Najafabadi HS, Lambert SA, et al. (2014). Determination and inference of
+      eukaryotic transcription factor sequence specificity. *Cell*
+      158(6):1431–1443. <https://doi.org/10.1016/j.cell.2014.08.009>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -140,6 +170,13 @@ def read_cisbp(file: PathLike, skip: int = 0) -> list[Motif]:
 def read_uniprobe(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read UniPROBE motifs from minimal files or from full output, whose
     enrichment scores are kept in ``extrainfo``.
+
+    References
+    ----------
+    - Hume MA, Barrera LA, Gisselbrecht SS, Bulyk ML (2015). UniPROBE, update
+      2015: new tools and content for the online database of protein-binding
+      microarray data on protein–DNA interactions. *Nucleic Acids Research*
+      43(D1):D117–D122. <https://doi.org/10.1093/nar/gku1045>
 
     Examples
     --------
@@ -188,6 +225,11 @@ def read_meme(
             ``strand``, ``position``, ``pvalue`` and ``site``.
         - ``"sites_meta_combined"``: a DataFrame of ``sequence``, ``pvalue``
             and ``diagram``.
+
+    References
+    ----------
+    - Bailey TL, Johnson J, Grant CE, Noble WS (2015). The MEME Suite. *Nucleic
+      Acids Research* 43(W1):W39–W49. <https://doi.org/10.1093/nar/gkv416>
 
     Examples
     --------
@@ -306,6 +348,11 @@ def write_meme(
     file only the motifs are written. Equal signs in names become periods and
     spaces become dashes.
 
+    References
+    ----------
+    - Bailey TL, Johnson J, Grant CE, Noble WS (2015). The MEME Suite. *Nucleic
+      Acids Research* 43(W1):W39–W49. <https://doi.org/10.1093/nar/gkv416>
+
     Examples
     --------
     >>> import tempfile
@@ -335,6 +382,14 @@ def write_jaspar(
     motifs: Motif | Iterable[Motif], file: PathLike, overwrite: bool = False, append: bool = False
 ) -> None:
     """Write DNA, RNA or amino acid motifs as JASPAR count matrices.
+
+    References
+    ----------
+    - Rauluseviciute I, Riudavets-Puig R, Blanc-Mathieu R, Castro-Mondragon JA,
+      Ferenc K, Kumar V, Lemma RB, Lucas J, et al. (2024). JASPAR 2024: 20th
+      anniversary of the open-access database of transcription factor binding
+      profiles. *Nucleic Acids Research* 52(D1):D174–D182.
+      <https://doi.org/10.1093/nar/gkad1059>
 
     Examples
     --------
@@ -376,6 +431,14 @@ def write_homer(
     a score that random sites from a uniform background reach with at most
     that probability. Give one value or one per motif.
 
+    References
+    ----------
+    - Heinz S, Benner C, Spann N, Bertolino E, Lin YC, Laslo P, Cheng JX, Murre
+      C, et al. (2010). Simple combinations of lineage-determining
+      transcription factors prime cis-regulatory elements required for
+      macrophage and B cell identities. *Molecular Cell* 38(4):576–589.
+      <https://doi.org/10.1016/j.molcel.2010.05.004>
+
     Examples
     --------
     >>> import tempfile
@@ -405,6 +468,13 @@ def write_transfac(
 ) -> None:
     """Write DNA or RNA motifs as TRANSFAC count matrices. ``name_tag`` and
     ``altname_tag`` choose the fields used for the name and alternate name.
+
+    References
+    ----------
+    - Matys V, Kel-Margoulis OV, Fricke E, et al. (2006). TRANSFAC and its
+      module TRANSCompel: transcriptional gene regulation in eukaryotes.
+      *Nucleic Acids Research* 34(suppl_1):D108–D110.
+      <https://doi.org/10.1093/nar/gkj143>
 
     Examples
     --------
@@ -438,6 +508,13 @@ def write_cisbp(
     ``TF Name``, ``Family`` and ``Species`` fields. Files written here can be
     read back with [`read_cisbp()`][universalmotif.read_cisbp].
 
+    References
+    ----------
+    - Weirauch MT, Yang A, Albu M, Cote AG, Montenegro-Montero A, Drewe P,
+      Najafabadi HS, Lambert SA, et al. (2014). Determination and inference of
+      eukaryotic transcription factor sequence specificity. *Cell*
+      158(6):1431–1443. <https://doi.org/10.1016/j.cell.2014.08.009>
+
     Examples
     --------
     >>> import tempfile
@@ -464,6 +541,13 @@ def write_uniprobe(
 
     Files written here can be read back with
     [`read_uniprobe()`][universalmotif.read_uniprobe].
+
+    References
+    ----------
+    - Hume MA, Barrera LA, Gisselbrecht SS, Bulyk ML (2015). UniPROBE, update
+      2015: new tools and content for the online database of protein-binding
+      microarray data on protein–DNA interactions. *Nucleic Acids Research*
+      43(D1):D117–D122. <https://doi.org/10.1093/nar/gku1045>
 
     Examples
     --------
@@ -507,6 +591,12 @@ def read_fasta(
     memory, and names must then be unique. To scan a
     file just once, pass its path to [`scan_sequences()`][universalmotif.scan_sequences] instead.
 
+    References
+    ----------
+    - Pearson WR, Lipman DJ (1988). Improved tools for biological sequence
+      comparison. *Proceedings of the National Academy of Sciences*
+      85(8):2444–2448. <https://doi.org/10.1073/pnas.85.8.2444>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -545,6 +635,12 @@ def write_fasta(
     characters, or not at all when it is 0. Unnamed sequences are called
     ``seq1``, ``seq2`` and so on. A path ending in ``.gz`` is written
     gzipped, as it is for every writer in the package.
+
+    References
+    ----------
+    - Pearson WR, Lipman DJ (1988). Improved tools for biological sequence
+      comparison. *Proceedings of the National Academy of Sciences*
+      85(8):2444–2448. <https://doi.org/10.1073/pnas.85.8.2444>
 
     Examples
     --------

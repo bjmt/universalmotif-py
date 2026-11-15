@@ -176,6 +176,20 @@ def compare_motifs(
     Where the best match differs, the two choices are near ties, a tenth to
     a fifth of an order of magnitude apart.
 
+    References
+    ----------
+    - Gupta S, Stamatoyannopoulos JA, Bailey TL, Noble WS (2007). Quantifying
+      similarity between motifs. *Genome Biology* 8(2):R24.
+      <https://doi.org/10.1186/gb-2007-8-2-r24>
+    - Benjamini Y, Hochberg Y (1995). Controlling the false discovery rate: a
+      practical and powerful approach to multiple testing. *Journal of the
+      Royal Statistical Society: Series B* 57(1):289–300.
+      <https://doi.org/10.1111/j.2517-6161.1995.tb02031.x>
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -388,6 +402,13 @@ def merge_similar(
 
     ``nthreads`` defaults to the package setting from
     [`set_nthreads()`][universalmotif.set_nthreads].
+
+    References
+    ----------
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
 
     Examples
     --------

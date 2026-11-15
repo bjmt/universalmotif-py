@@ -71,6 +71,13 @@ def read_bed(file: str | os.PathLike, format: str | None = None) -> pl.DataFrame
         ``.bedGraph`` or ``.bg``, with or without ``.gz``), and otherwise
         BED.
 
+    References
+    ----------
+    - UCSC Genome Browser. Data file formats: BED format.
+      <https://genome.ucsc.edu/FAQ/FAQformat.html#format1>
+    - UCSC Genome Browser. Data file formats: ENCODE narrowPeak format.
+      <https://genome.ucsc.edu/FAQ/FAQformat.html#format12>
+
     Examples
     --------
     >>> import tempfile, pathlib
@@ -284,6 +291,11 @@ def write_bed(
         out.
     overwrite
         Replace ``file`` if it exists.
+
+    References
+    ----------
+    - UCSC Genome Browser. Data file formats: BED format.
+      <https://genome.ucsc.edu/FAQ/FAQformat.html#format1>
 
     Examples
     --------

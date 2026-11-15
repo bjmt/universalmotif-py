@@ -90,6 +90,13 @@ def enrich_motifs(
     ``nthreads`` defaults to the package setting from
     [`set_nthreads()`][universalmotif.set_nthreads].
 
+    References
+    ----------
+    - Benjamini Y, Hochberg Y (1995). Controlling the false discovery rate: a
+      practical and powerful approach to multiple testing. *Journal of the
+      Royal Statistical Society: Series B* 57(1):289–300.
+      <https://doi.org/10.1111/j.2517-6161.1995.tb02031.x>
+
     Examples
     --------
     The G-box and W-box planted in the example targets are found enriched
@@ -246,6 +253,13 @@ def motif_coocc(
     ``pvalue`` and ``qvalue``, sorted by q-value then P-value, with untested
     pairs and their null P-values last.
 
+    References
+    ----------
+    - Benjamini Y, Hochberg Y (1995). Controlling the false discovery rate: a
+      practical and powerful approach to multiple testing. *Journal of the
+      Royal Statistical Society: Series B* 57(1):289–300.
+      <https://doi.org/10.1111/j.2517-6161.1995.tb02031.x>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -372,6 +386,16 @@ def motif_peaks(
         [`scan_sequences()`][universalmotif.scan_sequences] if ``hits`` has
         one, and otherwise the 0-based rank of its name among those in
         ``hits``, and ``centres`` holds the rounded hit centres used.
+
+    References
+    ----------
+    - Bailey TL, Machanick P (2012). Inferring direct DNA binding from
+      ChIP-seq. *Nucleic Acids Research* 40(17):e128.
+      <https://doi.org/10.1093/nar/gks433>
+    - Benjamini Y, Hochberg Y (1995). Controlling the false discovery rate: a
+      practical and powerful approach to multiple testing. *Journal of the
+      Royal Statistical Society: Series B* 57(1):289–300.
+      <https://doi.org/10.1111/j.2517-6161.1995.tb02031.x>
 
     Examples
     --------

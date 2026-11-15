@@ -611,6 +611,13 @@ def mask_complexity(
     str, list, dict or polars.DataFrame
         The masked sequences in the form they were given, or the regions.
 
+    References
+    ----------
+    - Morgulis A, Gertz EM, Schäffer AA, Agarwala R (2006). A fast and
+      symmetric DUST implementation to mask low-complexity DNA sequences.
+      *Journal of Computational Biology* 13(5):1028–1040.
+      <https://doi.org/10.1089/cmb.2006.13.1028>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -719,6 +726,11 @@ def meme_alph(
     ``"PROTEIN"`` for alphabets that extend one, and ``letter_names`` and
     ``colours`` describe each letter, with colours as hexadecimal RGB. The
     definition is returned as text, or written to ``file`` if one is given.
+
+    References
+    ----------
+    - Bailey TL, Johnson J, Grant CE, Noble WS (2015). The MEME Suite. *Nucleic
+      Acids Research* 43(W1):W39–W49. <https://doi.org/10.1093/nar/gkv416>
 
     Examples
     --------

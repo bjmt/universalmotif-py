@@ -185,6 +185,19 @@ def calc_complexity(
     scored against the same alphabet. Returns a float for one string and a
     numpy array for several.
 
+    References
+    ----------
+    - Wootton JC, Federhen S (1993). Statistics of local complexity in amino
+      acid sequences and sequence databases. *Computers & Chemistry*
+      17(2):149–163. <https://doi.org/10.1016/0097-8485(93)85006-X>
+    - Trifonov EN (1990). Making sense of the human genome. In Sarma RH, Sarma
+      MH (eds), *Structure & Methods, Volume 1: Human Genome Initiative & DNA
+      Recombination*, 69–77. Adenine Press.
+    - Morgulis A, Gertz EM, Schäffer AA, Agarwala R (2006). A fast and
+      symmetric DUST implementation to mask low-complexity DNA sequences.
+      *Journal of Computational Biology* 13(5):1028–1040.
+      <https://doi.org/10.1089/cmb.2006.13.1028>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -329,6 +342,11 @@ def get_bkg(
         can be given as they are as the background of a motif, or wherever
         else a background is taken, where the single letters are used.
 
+    References
+    ----------
+    - Bailey TL, Johnson J, Grant CE, Noble WS (2015). The MEME Suite. *Nucleic
+      Acids Research* 43(W1):W39–W49. <https://doi.org/10.1093/nar/gkv416>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -407,6 +425,16 @@ def shuffle_sequences(
     and dtype. For several shuffles of each sequence that keep any Ns in
     place, as references for attribution, see
     [`shuffled_references()`][universalmotif.shuffled_references].
+
+    References
+    ----------
+    - Altschul SF, Erickson BW (1985). Significance of nucleotide sequence
+      alignments: a method for random sequence permutation that preserves
+      dinucleotide and codon usage. *Molecular Biology and Evolution*
+      2(6):526–538. <https://doi.org/10.1093/oxfordjournals.molbev.a040370>
+    - Jiang M, Anderson J, Gillespie J, Mayne M (2008). uShuffle: a useful tool
+      for shuffling biological sequences while preserving the k-let counts.
+      *BMC Bioinformatics* 9:192. <https://doi.org/10.1186/1471-2105-9-192>
 
     Examples
     --------
@@ -781,7 +809,12 @@ def motif_finder(
     Without ``bkg_sequences``, the background is the positives shuffled
     with [`shuffle_sequences()`][universalmotif.shuffle_sequences] using the
     Euler method with ``k=shuffle_k`` and ``seed``. Parallelism is across
-    widths.
+    widths. Shuffles suit sequences without much structure, but genomic
+    sequences hold many loose repeats, such as GA-rich stretches, that
+    shuffling breaks up, so such repeats come back as motifs enriched over
+    the shuffles even in regions with nothing to find. For genomic sequences,
+    a background drawn from the genome and matched for composition, as from
+    [`match_bkg()`][universalmotif.match_bkg], gives far fewer false motifs.
 
     Returns a DataFrame in order of P-value, with the motifs in an object
     column ``motif`` alongside ``name``, ``consensus``, ``rank``, ``width``,
@@ -794,6 +827,16 @@ def motif_finder(
 
     ``nthreads`` defaults to the package setting from
     [`set_nthreads()`][universalmotif.set_nthreads].
+
+    References
+    ----------
+    - Bailey TL (2021). STREME: accurate and versatile sequence motif
+      discovery. *Bioinformatics* 37(18):2834–2840.
+      <https://doi.org/10.1093/bioinformatics/btab203>
+    - Benjamini Y, Hochberg Y (1995). Controlling the false discovery rate: a
+      practical and powerful approach to multiple testing. *Journal of the
+      Royal Statistical Society: Series B* 57(1):289–300.
+      <https://doi.org/10.1111/j.2517-6161.1995.tb02031.x>
 
     Examples
     --------

@@ -157,6 +157,14 @@ def jaspar(
     Downloads are cached, so asking for the latest release keeps returning
     the motifs of the first download until ``refresh`` is given.
 
+    References
+    ----------
+    - Rauluseviciute I, Riudavets-Puig R, Blanc-Mathieu R, Castro-Mondragon JA,
+      Ferenc K, Kumar V, Lemma RB, Lucas J, et al. (2024). JASPAR 2024: 20th
+      anniversary of the open-access database of transcription factor binding
+      profiles. *Nucleic Acids Research* 52(D1):D174–D182.
+      <https://doi.org/10.1093/nar/gkad1059>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -255,6 +263,19 @@ def hocomoco(
     ``AHR.H12CORE.0.P.B``, with the transcription factor as the alternative
     name and its TFClass family as the family. The quality grade, A to D, and
     a few more details go in ``extrainfo``.
+
+    References
+    ----------
+    - Vorontsov IE, Eliseeva IA, Zinkevich A, Nikonov M, Abramov S, Boytsov A,
+      Kamenets V, Kasianova A, et al. (2024). HOCOMOCO in 2024: a rebuild of
+      the curated collection of binding models for human and mouse
+      transcription factors. *Nucleic Acids Research* 52(D1):D154–D163.
+      <https://doi.org/10.1093/nar/gkad1077>
+    - Kulakovskiy IV, Vorontsov IE, Yevshin IS, Sharipov RN, Fedorova AD,
+      Rumynskiy EI, Medvedeva YA, Magana-Mora A, et al. (2018). HOCOMOCO:
+      towards a complete collection of transcription factor binding models for
+      human and mouse via large-scale ChIP-Seq analysis. *Nucleic Acids
+      Research* 46(D1):D252–D259. <https://doi.org/10.1093/nar/gkx1106>
 
     Examples
     --------
@@ -362,6 +383,13 @@ def cisbp(
     adds the motifs CIS-BP assigns to a factor from similar factors, which by
     default are left out.
 
+    References
+    ----------
+    - Weirauch MT, Yang A, Albu M, Cote AG, Montenegro-Montero A, Drewe P,
+      Najafabadi HS, Lambert SA, et al. (2014). Determination and inference of
+      eukaryotic transcription factor sequence specificity. *Cell*
+      158(6):1431–1443. <https://doi.org/10.1016/j.cell.2014.08.009>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -406,6 +434,13 @@ def read_cisbp_archive(
     ``extrainfo``. Motifs CIS-BP infers from similar factors are left out
     unless ``inferred``, ``family`` keeps only some families, and motifs
     whose matrix file is empty are skipped.
+
+    References
+    ----------
+    - Weirauch MT, Yang A, Albu M, Cote AG, Montenegro-Montero A, Drewe P,
+      Najafabadi HS, Lambert SA, et al. (2014). Determination and inference of
+      eukaryotic transcription factor sequence specificity. *Cell*
+      158(6):1431–1443. <https://doi.org/10.1016/j.cell.2014.08.009>
 
     Examples
     --------
