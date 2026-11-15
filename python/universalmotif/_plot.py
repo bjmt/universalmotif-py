@@ -292,7 +292,9 @@ def _anchor_ic(m: Motif) -> float:
 def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by, rc_text, nthreads,
                     align=True):
     """Display matrices of motifs aligned to a common frame, in display
-    order: returns (names, matrices, offsets, widths, alphabet)."""
+    order: returns (names, matrices, offsets, widths, gaps, alphabet), the
+    gaps of each motif given as (columns before it, mingap, maxgap) within
+    the frame."""
     if use_type not in _YLABELS:
         raise ValueError("use_type must be one of PCM, PPM, PWM, ICM and CWM")
     if sort_by not in ("none", "ic", "similarity"):
@@ -317,8 +319,9 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
         mats = [np.array(_core._display_matrix(m, use_type, relative_entropy), dtype=float).T for m in ms]
     names = _make_unique([m.name for m in ms])
     widths = [m.shape[1] for m in mats]
+    gaps = [list(zip(m.gaploc, m.mingap, m.maxgap)) if m.isgapped else [] for m in ms]
     if len(ms) == 1:
-        return names, mats, [0], widths, alphabet
+        return names, mats, [0], widths, gaps, alphabet
 
     if align:
         placements, width = _core._anchor_layout(ms, 0, min_overlap, rc, nthreads)
@@ -330,6 +333,8 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
         if flip:
             m = _rc_matrix(m)
             names[i] = names[i] + rc_text
+            gaps[i] = [(m.shape[1] - g, lo, hi) for g, lo, hi in reversed(gaps[i])]
+        gaps[i] = [(left + g, lo, hi) for g, lo, hi in gaps[i]]
         out = np.zeros((m.shape[0], width))
         out[:, left : left + m.shape[1]] = m
         padded.append(out)
@@ -352,7 +357,7 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
                 dist[i][j] = dist[j][i] = 1 - r
         perm = list(_core._hclust(dist, "complete", [str(i) for i in range(n)])["order"])
     return ([names[i] for i in perm], [padded[i] for i in perm], [offsets[i] for i in perm],
-            [widths[i] for i in perm], alphabet)
+            [widths[i] for i in perm], [gaps[i] for i in perm], alphabet)
 
 
 def _round_step(x: float) -> float:
@@ -413,6 +418,19 @@ def _style_axes(ax, ylabel, ticks, ylim, n, show_positions, labels=None, text_si
     ax.set_ylabel(ylabel, fontsize=text_size)
 
 
+def _draw_gaps(ax: Axes, gaps: list[tuple[int, int, int]], text_size: float) -> None:
+    """Mark each gap of a motif with a dashed line between the columns on
+    either side of it, reaching past the letters to a label above the panel
+    with the gap sizes."""
+    for after, lo, hi in gaps:
+        x = after + 0.5
+        ax.plot([x, x], [-0.06, 1.04], transform=ax.get_xaxis_transform(), color="#606060",
+                linewidth=0.9, linestyle=(0, (3, 2)), clip_on=False, zorder=3)
+        label = str(lo) if lo == hi else f"{lo}\u2013{hi}"
+        ax.text(x, 1.05, label, transform=ax.get_xaxis_transform(), ha="center", va="bottom",
+                fontsize=text_size * 0.75, color="#404040")
+
+
 def view_motifs(
     motifs: Motif | Iterable[Motif],
     use_type: str | None = None,
@@ -452,7 +470,9 @@ def view_motifs(
     better as reverse complements are flipped and get ``rc_text`` added to
     their names, and all of them are padded into a common frame and drawn
     one above the other. With ``align=False`` they are drawn as they are,
-    from the left of the frame.
+    from the left of the frame. Each gap of a gapped motif is marked with a
+    dashed line between the columns on either side, labelled with the gap
+    sizes, and does not take up any columns.
 
     Parameters
     ----------
@@ -540,7 +560,7 @@ def view_motifs(
 
         warnings.warn('fit_to_height is ignored for use_type "ICM", "PWM" and "CWM"', stacklevel=2)
         fit_to_height = None
-    names, mats, offsets, widths, alphabet = _prepare_motifs(
+    names, mats, offsets, widths, gaps, alphabet = _prepare_motifs(
         motifs, use_type, rc, min_overlap, relative_entropy, sort_by, rc_text, nthreads, align
     )
     if return_raw:
@@ -571,11 +591,12 @@ def view_motifs(
         fig, axes = plt.subplots(n, 1, figsize=figsize, squeeze=False, sharex=shared)
     else:
         fig, axes = target.figure, np.array([[target]], dtype=object)
-    for k, (name, m, off, w) in enumerate(zip(names, mats, offsets, widths)):
+    for k, (name, m, off, w, gap) in enumerate(zip(names, mats, offsets, widths, gaps)):
         ax = axes[k, 0]
         glyphs = _panel_glyphs(m, rows, use_type, min_height, x_spacer, y_spacer, sort_positions,
                                sort_positions_decreasing, fit_to_height, flip_neg)
         _draw_glyphs(ax, glyphs, colours)
+        _draw_gaps(ax, gap, text_size)
         if use_type in ("PWM", "CWM"):
             ax.axhline(0, linewidth=0.5, color="#BFBFBF")
         labels = None
@@ -587,7 +608,8 @@ def view_motifs(
             # A single logo is always named above, as the figure is sized
             # for names beside the logos only when there are several.
             if names_pos == "top" or n == 1:
-                ax.set_title(name, fontsize=text_size)
+                # Room is left for the gap sizes between the logo and its name.
+                ax.set_title(name, fontsize=text_size, pad=6 + (text_size if gap else 0))
             else:
                 ax.text(1.02, 0.5, name, transform=ax.transAxes, va="center", ha="left", fontsize=text_size)
     if target is not None:

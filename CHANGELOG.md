@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+New:
+
+- `view_motifs()` marks the gaps of gapped motifs with a dashed line
+  labelled with the gap sizes.
+
 ## 0.5.0 (2026-11-15)
 
 Changes in behaviour:

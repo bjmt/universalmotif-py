@@ -134,7 +134,7 @@ def test_single_motif_polygons_reference():
             with pytest.raises(ValueError, match="non-finite"):
                 um.view_motifs(m, use_type=ut)
             continue
-        _, mats, _, _, _ = _prepare_motifs(m, ut, True, 6, False, "none", " [RC]", 1)
+        _, mats, _, _, _, _ = _prepare_motifs(m, ut, True, 6, False, "none", " [RC]", 1)
         glyphs = _panel_glyphs(mats[0], list("ACGT"), ut, 0.01, 0.04, 0.01, ut not in ("PCM", "PPM"),
                                True, 1.0 if ut == "PPM" else None, False)
         _check_glyphs(glyphs, case["polygons"], (case["idx"], ut))
@@ -143,7 +143,7 @@ def test_single_motif_polygons_reference():
 def test_multi_motif_polygons_reference():
     ms = _motifs()[:4]
     want = _ref("multi")
-    names, mats, _, _, _ = _prepare_motifs(ms, "ICM", True, 6, False, "ic", " [RC]", 1)
+    names, mats, _, _, _, _ = _prepare_motifs(ms, "ICM", True, 6, False, "ic", " [RC]", 1)
     glyphs, motif_ids = [], []
     for name, m in zip(names, mats):
         g = _panel_glyphs(m, list("ACGT"), "ICM", 0.01, 0.04, 0.01, True, True, None, False)
@@ -547,6 +547,26 @@ def test_view_motifs_alignment_and_position_labels():
     # Without rc nothing is flipped, and rc_text marks flipped motifs.
     assert list(um.view_motifs(ms, rc=False, return_raw=True)) == ["TATA-box", "AP-1", "CRE"]
     assert "TATA-box (rc)" in um.view_motifs(ms, rc_text=" (rc)", return_raw=True)
+
+
+def test_view_motifs_marks_gaps():
+    dr = um.add_gap(um.create_motif("AGGTCAAGGTCA", nsites=50), gaploc=6, mingap=1, maxgap=5)
+    fig = um.view_motifs(dr)
+    ax = fig.axes[0]
+    assert [t.get_text() for t in ax.texts] == ["1\u20135"]
+    gap_lines = [ln for ln in ax.lines if ln.get_linestyle() != "-"]
+    assert len(gap_lines) == 1 and set(gap_lines[0].get_xdata()) == {6.5}
+    plt.close(fig)
+    # A motif flipped to align is marked where its reverse complement has
+    # the gap, inside the common frame, and a fixed gap shows one size.
+    g = um.add_gap(um.create_motif("ACGTTTCCGA", nsites=50), gaploc=6, mingap=3, maxgap=3)
+    anchor = um.create_motif("ATCGGAAACGTAG", nsites=50)
+    names, _, offsets, _, gaps, _ = _prepare_motifs([anchor, g], "ICM", True, 6, False, "none", " [RC]", 1)
+    assert names[1].endswith("[RC]") and offsets[1] == 1
+    assert gaps == [[], [(5, 3, 3)]]
+    fig = um.view_motifs([anchor, g])
+    assert [t.get_text() for t in fig.axes[1].texts] == ["3"] and not fig.axes[0].texts
+    plt.close(fig)
 
 
 def test_view_motifs_display_order():
