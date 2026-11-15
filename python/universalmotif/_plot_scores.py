@@ -74,7 +74,7 @@ def _score_distribution(motif: Motif, bkg, bins: int, lo: float) -> tuple[np.nda
             # Against another background the highest score can fall a step
             # short of the estimate above; such edges correctly get 0.
             warnings.filterwarnings("ignore", message="scores above the highest possible score")
-            tail[1:-1] = motif_pvalue(motif, score=(grid[1:-1] / 1000).tolist(), bkg_probs=bkg)
+            tail[1:-1] = motif_pvalue(motif, score=(grid[1:-1] / 1000).tolist(), bkg=bkg)
     mass = np.clip(-np.diff(tail), 0.0, None)
     return grid / 1000, mass, hi_g / 1000
 
@@ -119,7 +119,7 @@ def _draw_panel(ax: Axes, motif: Motif, name: str, bkg, cutoffs: list[float], bi
     from matplotlib import patheffects
     from matplotlib.transforms import blended_transform_factory
 
-    scores = np.asarray(motif_pvalue(motif, pvalue=[1.0, *cutoffs], bkg_probs=bkg), dtype=float)
+    scores = np.asarray(motif_pvalue(motif, pvalue=[1.0, *cutoffs], bkg=bkg), dtype=float)
     edges, mass, top = _score_distribution(motif, bkg, bins, float(scores[0]))
     if log_y:
         positive = mass[mass > 0]
@@ -208,7 +208,7 @@ def plot_score_distribution(
     bkg
         Background frequencies, in any of the forms
         [`motif_pvalue()`][universalmotif.motif_pvalue] takes as
-        ``bkg_probs``. Each motif's own background by default.
+        ``bkg``. Each motif's own background by default.
     log_y
         Draw probabilities on a log scale, which shows the upper tail where
         cutoffs usually fall.

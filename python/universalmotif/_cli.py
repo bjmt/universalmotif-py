@@ -391,7 +391,7 @@ def cmd_tree(a):
     import universalmotif as um
 
     motifs = read_motifs(a.motifs, a.format)
-    tree = um.motif_tree(motifs, min_overlap=a.min_overlap, rc=a.rc, method=a.method,
+    tree = um.motif_tree(motifs, min_overlap=a.min_overlap, rc=a.rc, linkage=a.linkage,
                          nthreads=a.threads)
     if a.k is not None or a.height is not None:
         groups = tree.cutree(k=a.k, h=a.height)
@@ -523,7 +523,7 @@ def cmd_heatmap(a):
         raise CliError("at least two motifs are needed for a heatmap")
     fig = um.plot_comparison(
         motifs, labels=a.labels, value=a.value, min_overlap=a.min_overlap, rc=a.rc,
-        cluster=a.cluster, method=a.method, dendrogram=a.dendrogram, cut=a.cut,
+        cluster=a.cluster, linkage=a.linkage, dendrogram=a.dendrogram, cut=a.cut,
         cut_height=a.cut_height, cmap=a.cmap, annotate=a.annotate, logos=a.logos,
         nthreads=a.threads)
     fig.savefig(a.output, bbox_inches="tight", dpi=a.dpi)
@@ -557,8 +557,8 @@ def cmd_scan(a):
 
     motifs = read_motifs(a.motifs, a.format)
     kw = {"pvalue": a.pvalue, "rc": a.rc, "nthreads": a.threads, "no_overlaps": a.no_overlaps,
-              "no_overlaps_by": a.overlaps_by, "no_overlaps_by_strand": a.across_strands,
-              "no_overlaps_by_motif": a.across_motifs, "use_gaps": a.gaps, "correct_gaps": a.correct_gaps,
+              "no_overlaps_by": a.overlaps_by, "no_overlaps_across_strands": a.across_strands,
+              "no_overlaps_across_motifs": a.across_motifs, "use_gaps": a.gaps, "correct_gaps": a.correct_gaps,
               "first_hit": a.first_hit}
     if a.first_hit and a.no_overlaps:
         raise CliError("--first-hit keeps one hit per motif and sequence, so it cannot be used with "
@@ -822,7 +822,7 @@ def cmd_proximity(a):
     anchors = read_ranges(a.anchors)
     kw = {"method": a.method, "count": a.count, "orientation": a.orientation, "rc": a.rc,
               "scan_pvalue": a.pvalue, "dist_thresholds": a.distances, "n_perm": a.n_perm,
-              "perm_per_chrom": not a.global_perm, "ignore_strand": not a.stranded,
+              "perm_per_chrom": not a.global_perm, "across_strands": a.across_strands,
               "qvalue": a.qvalue, "seed": a.seed, "nthreads": a.threads}
     universe = None
     if a.universe:
@@ -1042,10 +1042,11 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="do not align motifs as reverse complements")
     p.add_argument("--no-cluster", dest="cluster", action="store_false",
                    help="keep the motifs in the order given")
-    p.add_argument("--method", default="complete",
+    p.add_argument("--linkage", default="complete",
                    choices=("complete", "average", "single", "ward.D", "ward.D2", "mcquitty",
                             "median", "centroid"),
-                   help="linkage method (default: complete)")
+                   help="agglomeration method (default: complete)")
+    p.add_argument("--method", dest="linkage", help=argparse.SUPPRESS)
     p.add_argument("--dendrogram", choices=("left", "top", "both", "none"), default="left",
                    help="where to draw the tree (default: left)")
     p.add_argument("--cut", type=float,
@@ -1114,10 +1115,11 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                 "or --height a table of clusters.")
     _motif_args(p)
     _out_arg(p, "the tree or clusters")
-    p.add_argument("--method", default="complete",
+    p.add_argument("--linkage", default="complete",
                    choices=("complete", "average", "single", "ward.D", "ward.D2", "mcquitty",
                             "median", "centroid"),
-                   help="linkage method (default: complete)")
+                   help="agglomeration method (default: complete)")
+    p.add_argument("--method", dest="linkage", help=argparse.SUPPRESS)
     p.add_argument("--min-overlap", type=int, default=6,
                    help="minimum overlap of aligned motifs (default: 6)")
     p.add_argument("--no-rc", dest="rc", action="store_false",
@@ -1384,8 +1386,10 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="permutations with --method permutation (default: 1000)")
     p.add_argument("--global-perm", action="store_true",
                    help="move anchors anywhere in the universe, not within their chromosome")
-    p.add_argument("--stranded", action="store_true",
-                   help="count overlapping hits on the two strands separately")
+    p.add_argument("--across-strands", action=argparse.BooleanOptionalAction, default=True,
+                   help="count overlapping hits on the two strands once, as by default; "
+                        "--no-across-strands counts each strand on its own")
+    p.add_argument("--stranded", dest="across_strands", action="store_false", help=argparse.SUPPRESS)
     p.add_argument("-q", "--qvalue", type=float,
                    help="q-value cutoff for reported motifs (default: report every motif)")
     p.add_argument("--nearest", action="store_true",

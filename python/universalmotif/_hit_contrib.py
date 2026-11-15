@@ -17,6 +17,7 @@ from ._core import Motif
 from ._deep import ContributionScores, _letters_first, _seqlet_regions, _to_numpy
 from ._plot import _pyplot
 from ._plot_seqlets import _logo_panel
+from ._renamed import renamed
 from ._threads import _nthreads
 
 if TYPE_CHECKING:
@@ -316,9 +317,11 @@ def scan_contributions(
     use_gaps: bool = True,
     no_overlaps: bool = True,
     no_overlaps_by: str = "score",
-    no_overlaps_by_strand: bool = True,
-    no_overlaps_by_motif: bool = False,
+    no_overlaps_across_strands: bool = True,
+    no_overlaps_across_motifs: bool = False,
     nthreads: int | None = None,
+    no_overlaps_by_strand: bool | None = None,
+    no_overlaps_by_motif: bool | None = None,
 ) -> pl.DataFrame:
     """Find motif hits in the contribution scores a sequence model gives its
     inputs, by matching CWMs against the scores.
@@ -345,7 +348,7 @@ def scan_contributions(
     each region's own scale. This function takes a single pass, matches
     10,000 regions of 1,000 bases against 60 CWMs in under half a second on
     two CPU threads, keeps the scale of the scores, and leaves overlaps
-    between motifs to ``no_overlaps_by_motif``. On the regions of an ENCODE
+    between motifs to ``no_overlaps_across_motifs``. On the regions of an ENCODE
     ATAC-seq model, both covered about 95% of TF-MoDISco's seqlets with a
     hit of the right pattern, while FiNeMo called over twice as many hits
     per region, many of them weak.
@@ -416,12 +419,15 @@ def scan_contributions(
         Remove overlapping hits of each motif in each sequence, keeping
         those with the highest ``no_overlaps_by``, the ``score``,
         ``similarity`` or ``importance``, as ``dedup_hits()`` does. Hits on
-        opposite strands are compared, unless ``no_overlaps_by_strand`` is
-        False, and with ``no_overlaps_by_motif``, hits of different motifs
+        opposite strands are compared, unless ``no_overlaps_across_strands`` is
+        False, and with ``no_overlaps_across_motifs``, hits of different motifs
         are compared too, so that each site keeps only its best motif.
     nthreads
         Threads to use, by default the package setting from
         [`set_nthreads()`][universalmotif.set_nthreads].
+    no_overlaps_by_strand, no_overlaps_by_motif
+        Old names of ``no_overlaps_across_strands`` and
+        ``no_overlaps_across_motifs``, which still work for now.
 
     Returns
     -------
@@ -462,6 +468,12 @@ def scan_contributions(
     ...                                           "match").rows()
     [('seq1', 2, 5, '+', 'GAT')]
     """
+    if no_overlaps_by_strand is not None:
+        no_overlaps_across_strands = renamed("scan_contributions", "no_overlaps_by_strand", no_overlaps_by_strand,
+                                             "no_overlaps_across_strands")
+    if no_overlaps_by_motif is not None:
+        no_overlaps_across_motifs = renamed("scan_contributions", "no_overlaps_by_motif", no_overlaps_by_motif,
+                                            "no_overlaps_across_motifs")
     ms = [motifs] if isinstance(motifs, Motif) else list(motifs)
     if not ms:
         raise ValueError("no motifs given")
@@ -527,8 +539,8 @@ def scan_contributions(
         "match": pl.Series(letters, dtype=pl.String),
     })
     if no_overlaps and hits.height:
-        hits = dedup_hits(hits, by=no_overlaps_by, ignore_strand=no_overlaps_by_strand,
-                          ignore_motif=no_overlaps_by_motif)
+        hits = dedup_hits(hits, by=no_overlaps_by, across_strands=no_overlaps_across_strands,
+                          across_motifs=no_overlaps_across_motifs)
     return hits
 
 

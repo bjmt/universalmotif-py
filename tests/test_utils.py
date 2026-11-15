@@ -395,9 +395,9 @@ def test_get_bkg_tables_are_backgrounds():
     for bkg in (table, letters, table.to_pandas() if _has_pandas() else table):
         assert m.replace(bkg=bkg).bkg == m.replace(bkg=as_dict).bkg
         assert um.create_motif("TGACTCA", bkg=bkg).bkg == pytest.approx(as_dict)
-        assert um.motif_pvalue(m, score=5, bkg_probs=bkg) == um.motif_pvalue(m, score=5, bkg_probs=as_dict)
-        assert um.motif_pvalue([m, m], score=[5, 5], bkg_probs=[bkg, bkg]).tolist() == \
-            um.motif_pvalue([m, m], score=[5, 5], bkg_probs=as_dict).tolist()
+        assert um.motif_pvalue(m, score=5, bkg=bkg) == um.motif_pvalue(m, score=5, bkg=as_dict)
+        assert um.motif_pvalue([m, m], score=[5, 5], bkg=[bkg, bkg]).tolist() == \
+            um.motif_pvalue([m, m], score=[5, 5], bkg=as_dict).tolist()
         assert um.ppm_to_pwm(col, bkg=bkg).tolist() == um.ppm_to_pwm(col, bkg=list(as_dict.values())).tolist()
         assert um.position_icscore(col, bkg=bkg) == um.position_icscore(col, bkg=list(as_dict.values()))
         assert um.compare_columns(col, col[::-1], "KL", bkg1=bkg, bkg2=bkg) == \

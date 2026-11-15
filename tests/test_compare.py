@@ -118,7 +118,7 @@ def test_trees_reference():
         ctx = f"tree case {i}: {case['source']} {case['method']}"
         dist = np.array([nums(r) for r in case["dist"]])
         labels = list(case["labels"])
-        tree = um.motif_tree(dist, method=case["method"], labels=labels)
+        tree = um.motif_tree(dist, linkage=case["method"], labels=labels)
         assert tree.merge.tolist() == [[int(v) for v in nums(r)] for r in case["merge"]], ctx
         assert tree.order == [int(x) - 1 for x in nums(case["order"])], ctx
         np.testing.assert_allclose(tree.height, nums(case["height"]), rtol=1e-12, err_msg=ctx)
@@ -126,7 +126,7 @@ def test_trees_reference():
         if case["source"] == "motifs":
             a = args(case["args"])
             own = um.motif_tree(motifs, min_overlap=int(a["min.overlap"]), rc=a["RC"],
-                                method=case["method"])
+                                linkage=case["method"])
             assert own.labels == labels, ctx
             assert own.merge.tolist() == tree.merge.tolist(), ctx
             assert own.order == tree.order, ctx
@@ -537,4 +537,4 @@ def test_cwm_trees():
     cwms = _cwms()
     tree = um.motif_tree(cwms)
     assert sorted(tree.labels) == sorted(m.name for m in cwms)
-    assert um.motif_tree(cwms, metric="CJACCARD", sign="ignore") is not None
+    assert um.motif_tree(cwms, method="CJACCARD", sign="ignore") is not None

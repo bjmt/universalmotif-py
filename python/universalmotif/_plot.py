@@ -14,6 +14,7 @@ from ._analysis import _make_unique, _sequence_pairs
 from ._api import _check_motif
 from ._core import Motif
 from ._logo import Glyph, matrix_glyphs, motif_glyphs
+from ._renamed import renamed
 from ._threads import _nthreads
 
 if TYPE_CHECKING:
@@ -1079,20 +1080,23 @@ def _density(x: np.ndarray, n: int = 512) -> tuple[np.ndarray, np.ndarray]:
 
 def plot_match_bkg(
     sequences: Sequence[str] | Mapping[str, str] | None = None,
-    bkg: Sequence[str] | Mapping[str, str] | None = None,
+    bkg_sequences: Sequence[str] | Mapping[str, str] | None = None,
     by: Sequence[str] | None = None,
     indices: pl.DataFrame | None = None,
     names: Sequence[str] = ("target", "matched"),
     figsize: tuple[float, float] | None = None,
+    bkg: Sequence[str] | Mapping[str, str] | None = None,
 ) -> Figure:
     """Compare the composition of targets and their matched background
     from [`match_bkg()`][universalmotif.match_bkg], as overlaid densities.
 
-    Give the targets and the background to draw their GC fraction and length,
-    or the ``indices`` table from ``match_bkg(..., return_indices=True)`` to
-    also see any covariates. ``by`` picks the axes to draw, and ``names``
-    gives the two sets their names in the legend, such as
-    ``("peaks", "shuffled")`` for a background that was not matched.
+    Give the targets and the background, as ``sequences`` and
+    ``bkg_sequences``, to draw their GC fraction and length, or the
+    ``indices`` table from ``match_bkg(..., return_indices=True)`` to also
+    see any covariates. ``by`` picks the axes to draw, and ``names`` gives
+    the two sets their names in the legend, such as ``("peaks",
+    "shuffled")`` for a background that was not matched. ``bkg`` is the old
+    name of ``bkg_sequences``, which still works for now.
 
     Examples
     --------
@@ -1105,6 +1109,8 @@ def plot_match_bkg(
     'Figure'
     >>> plt.close(fig)
     """
+    if bkg is not None:
+        bkg_sequences = renamed("plot_match_bkg", "bkg", bkg, "bkg_sequences")
     names = [names] if isinstance(names, str) else list(names)
     if len(names) != 2:
         raise ValueError("names must give two names, for the targets and the background")
@@ -1122,10 +1128,10 @@ def plot_match_bkg(
             panels.append((labels.get(a, a), indices[f"target_{a}"].to_numpy(),
                            indices[f"universe_{a}"].to_numpy()))
     else:
-        if sequences is None or bkg is None:
+        if sequences is None or bkg_sequences is None:
             raise ValueError("give the targets and the background, or indices")
         _, t = _sequence_pairs(sequences)
-        _, b = _sequence_pairs(bkg)
+        _, b = _sequence_pairs(bkg_sequences)
         chosen = list(by) if by is not None else ["gc", "length"]
         if set(chosen) - {"gc", "length"}:
             raise ValueError("by must name 'gc' and/or 'length'")

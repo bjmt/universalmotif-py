@@ -130,7 +130,7 @@ def test_presence_with_long_and_gapped_sequences(no_overlaps):
     seqs = um.create_sequences(seqnum=300, seqlen=400, seed=7)
     seqs += ["AC" * 70_000 + s for s in um.create_sequences(seqnum=2, seqlen=100_000, seed=8)]
     hits = um.scan_sequences(motifs, seqs, pvalue=1e-3, no_overlaps=no_overlaps,
-                             no_overlaps_by_strand=True, nthreads=2)
+                             no_overlaps_across_strands=True, nthreads=2)
     want = _expected(hits, len(seqs), len(motifs), "matches")
     for nthreads in (1, 2):
         got = um.match_motifs(motifs, seqs, pvalue=1e-3, no_overlaps=no_overlaps, nthreads=nthreads)

@@ -12,7 +12,14 @@ import polars as pl
 from . import _core
 from ._analysis import _make_unique
 from ._api import _check_motif, motif_rc
-from ._compare import _CWM_METHODS, MotifTree, _comparison_method, _tree, compare_motifs
+from ._compare import (
+    _CWM_METHODS,
+    MotifTree,
+    _comparison_method,
+    _tree,
+    _tree_args,
+    compare_motifs,
+)
 from ._core import Motif
 from ._plot import _anchor_ic, _pyplot, draw_logo
 from ._threads import _nthreads
@@ -182,7 +189,7 @@ def plot_comparison(
     min_overlap: int = 6,
     rc: bool = True,
     cluster: bool | MotifTree = True,
-    method: str = "complete",
+    linkage: str = "complete",
     dendrogram: str = "left",
     cut: float | None = None,
     cut_height: float | None = None,
@@ -196,8 +203,9 @@ def plot_comparison(
     text_size: float = 10,
     figsize: tuple[float, float] | None = None,
     nthreads: int | None = None,
-    metric: str | None = None,
+    method: str | None = None,
     sign: str = "match",
+    metric: str | None = None,
 ) -> Figure:
     """Draw motif similarities as a clustered heatmap.
 
@@ -228,7 +236,7 @@ def plot_comparison(
     value
         What is drawn: ``"score"``, the mean column correlation, or
         ``"pvalue"`` or ``"qvalue"``.
-    metric, sign
+    method, sign
         How motifs are compared: by default the cosine of
         [`compare_motifs()`][universalmotif.compare_motifs] when every motif
         is a CWM, keeping the sign of their contributions, and column
@@ -242,8 +250,9 @@ def plot_comparison(
         ``min_overlap`` follows the default of 6 of
         [`motif_tree()`][universalmotif.motif_tree], so the scores can differ
         slightly from those of ``compare_motifs()`` with its default of 5.
-    cluster, method
-        Order the motifs by clustering them with ``method``, as in
+    cluster, linkage
+        Order the motifs by clustering them with the agglomeration method
+        ``linkage``, as in
         [`motif_tree()`][universalmotif.motif_tree], or keep them in input
         order with ``False``. A tree from ``motif_tree()`` can be given
         instead. Motifs are clustered on their scores, with distances of
@@ -289,6 +298,11 @@ def plot_comparison(
         larger heatmaps and are left out once they would be unreadable.
     figsize
         The figure size, by default worked out from the number of motifs.
+    metric
+        The old name of ``method``. ``method`` used to name the
+        agglomeration method, and an agglomeration method given as
+        ``method``, such as ``"average"``, is still taken as ``linkage`` for
+        now.
 
     Returns
     -------
@@ -316,13 +330,14 @@ def plot_comparison(
     ...                       dendrogram="both")
     >>> plt.close(fig)
     """
+    linkage, method = _tree_args("plot_comparison", linkage, method, metric)
     nthreads = _nthreads(nthreads)
     if value not in _VALUE_LABELS:
         raise ValueError("value must be 'score', 'pvalue' or 'qvalue'")
     if dendrogram not in ("left", "top", "both", "none"):
         raise ValueError("dendrogram must be 'left', 'top', 'both' or 'none'")
     ms, vals, scores, labs = _comparison_input(motifs, matrix, labels, value, min_overlap, rc, nthreads,
-                                               metric, sign)
+                                               method, sign)
     n = len(labs)
     if logos and ms is None:
         raise ValueError("logos need the motifs")
@@ -334,7 +349,7 @@ def plot_comparison(
         tree = cluster
     elif cluster:
         dist = _distances(vals, scores)
-        tree = _tree(_core._hclust(dist.tolist(), method, labs), labs, method)
+        tree = _tree(_core._hclust(dist.tolist(), linkage, labs), labs, linkage)
     order = list(tree.order) if tree is not None else list(range(n))
     cut_at = None
     if cut is not None and cut_height is not None:
@@ -368,7 +383,7 @@ def plot_comparison(
         annotate = n <= _MAX_ANNOTATED
     if logos is None:
         logos = ms is not None and n <= _MAX_LOGOS
-    placements = _logo_placements(ms, order, groups if cut_at is not None else None, metric, sign, min_overlap,
+    placements = _logo_placements(ms, order, groups if cut_at is not None else None, method, sign, min_overlap,
                                   rc, nthreads) if logos and align_logos else None
     left_tree = tree is not None and dendrogram in ("left", "both")
     top_tree = tree is not None and dendrogram in ("top", "both")

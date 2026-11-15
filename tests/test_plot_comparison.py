@@ -36,8 +36,8 @@ def _cells(fig):
 
 def test_order_matches_motif_tree(motifs):
     for method in ("complete", "average"):
-        tree = um.motif_tree(motifs, min_overlap=6, method=method)
-        fig = plot_comparison(motifs, method=method)
+        tree = um.motif_tree(motifs, min_overlap=6, linkage=method)
+        fig = plot_comparison(motifs, linkage=method)
         want = [tree.labels[i] for i in tree.order]
         assert _row_labels(fig) == want
         ticks = [t.get_text() for t in _axes(fig)["heatmap"].get_xticklabels()]
@@ -171,7 +171,7 @@ def test_cluster_choices(motifs):
     assert _row_labels(fig) == [m.name for m in ms]
     assert "dendrogram left" not in _axes(fig)
 
-    tree = um.motif_tree(ms, method="single")
+    tree = um.motif_tree(ms, linkage="single")
     fig = plot_comparison(ms, cluster=tree)
     assert _row_labels(fig) == [tree.labels[i] for i in tree.order]
 
@@ -286,7 +286,7 @@ def test_errors(motifs):
     with pytest.raises(ValueError, match="one tip per motif"):
         plot_comparison(motifs[:4], cluster=um.motif_tree(motifs[:3]))
     with pytest.raises(ValueError, match="unknown clustering method"):
-        plot_comparison(motifs[:4], method="ward")
+        plot_comparison(motifs[:4], linkage="ward")
     with pytest.raises(ValueError, match="min_overlap"):
         plot_comparison(motifs[:4], min_overlap=0)
     with pytest.raises(ValueError, match="cut or cut_height, not both"):
@@ -308,8 +308,8 @@ def test_cwms_are_drawn_by_cosine():
     fig = plot_comparison(cwms)
     np.testing.assert_allclose(_cells(fig), scores[np.ix_(order, order)], rtol=1e-12)
     ignored = um.compare_motifs(cwms, min_overlap=6, method="CJACCARD", sign="ignore")
-    order = um.motif_tree(cwms, min_overlap=6, metric="CJACCARD", sign="ignore").order
-    fig = plot_comparison(cwms, metric="CJACCARD", sign="ignore")
+    order = um.motif_tree(cwms, min_overlap=6, method="CJACCARD", sign="ignore").order
+    fig = plot_comparison(cwms, method="CJACCARD", sign="ignore")
     np.testing.assert_allclose(_cells(fig), ignored[np.ix_(order, order)], rtol=1e-12)
 
 

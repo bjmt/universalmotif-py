@@ -121,7 +121,7 @@ def test_overlaps():
     hits = um.scan_contributions([gat, half], x)
     assert hits.group_by("motif").len().sort("motif")["len"].to_list() == [1, 1]
     assert hits.filter(pl.col("motif") == "gataag")["start"].item() == 4
-    best = um.scan_contributions([gat, half], x, no_overlaps_by_motif=True)
+    best = um.scan_contributions([gat, half], x, no_overlaps_across_motifs=True)
     assert best["motif"].to_list() == ["gataag"]
     # Downstream functions take the table.
     assert um.dedup_hits(hits).height == hits.height

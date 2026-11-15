@@ -12,7 +12,7 @@ Changes in behaviour:
   `enrich_motifs()`, `motif_coocc()` and `motif_proximity()`.
 - `no_overlaps` compares hits on both strands by default in
   `scan_sequences()` and `motif_coocc()`, and so does `dedup_hits()`
-  (`ignore_strand=True`), so a palindromic site counts once.
+  (`across_strands=True`), so a palindromic site counts once.
 - A motif for the `+` or `-` strand is scanned on that strand only, and
   RNA is scanned on one strand by default (`rc=None`).
 - `read_meme()` gives DNA and RNA motifs both strands when the file has no
@@ -48,6 +48,24 @@ Changes in behaviour:
 - Writers gzip `.gz` paths at level 6, as the `gzip` command does, which
   is about four times faster than before for files 3% larger.
 
+Renamed, with the old names still working for now and warning:
+
+- `no_overlaps_by_strand` and `no_overlaps_by_motif` are
+  `no_overlaps_across_strands` and `no_overlaps_across_motifs` in
+  `scan_sequences()`, `motif_coocc()` and `scan_contributions()`, and
+  `dedup_hits(ignore_strand=, ignore_motif=)` and
+  `motif_proximity(ignore_strand=)` are `across_strands` and
+  `across_motifs`, as the command line's `--across-strands` already was;
+  `umotif proximity` takes `--across-strands` too.
+- `motif_tree()` and `plot_comparison()` take the agglomeration method as
+  `linkage` and the comparison method as `method`, as `merge_similar()`
+  and `compare_motifs()` do, where `method` named the agglomeration method
+  and `metric` the comparison; `umotif tree` and `umotif heatmap` take
+  `--linkage`.
+- `motif_pvalue(bkg_probs=)` is `bkg`, and `plot_match_bkg(bkg=)` is
+  `bkg_sequences`, as background letter frequencies and sequences are
+  named elsewhere.
+
 New:
 
 - `gapped_motif_finder()` discovers motifs made of two parts with a spacer
@@ -78,7 +96,7 @@ New:
   symmetric DUST, giving the same regions as dustmasker, and lowercase
   letters too with `lowercase=True`; `return_ranges=True` gives the
   regions instead.
-- `match_motifs(correct_gaps=)`, `motif_coocc(no_overlaps_by_strand=)` and
+- `match_motifs(correct_gaps=)`, `motif_coocc(no_overlaps_across_strands=)` and
   `scan_sequences(trim_names=)`, and the `--no-correct-gaps` and
   `--no-across-strands` options of the command line.
 - `compare_motifs(method="CJACCARD")` compares CWMs by TF-MoDISco's

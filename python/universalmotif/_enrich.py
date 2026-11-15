@@ -18,6 +18,7 @@ from ._analysis import (
 )
 from ._api import _check_motif
 from ._core import Motif
+from ._renamed import renamed
 from ._sequences import _seed
 from ._threads import _nthreads
 
@@ -238,12 +239,13 @@ def motif_coocc(
     rc: bool | None = None,
     no_overlaps: bool = False,
     no_overlaps_by: str = "pvalue",
-    no_overlaps_by_strand: bool = True,
+    no_overlaps_across_strands: bool = True,
     max_distance: int | None = None,
     min_coocc: int = 1,
     pseudocount: int = 0,
     self_pairs: bool = False,
     nthreads: int | None = None,
+    no_overlaps_by_strand: bool | None = None,
 ) -> pl.DataFrame:
     """Find motif pairs that share sequences more often than expected.
 
@@ -286,7 +288,7 @@ def motif_coocc(
         ``max_distance`` columns.
     no_overlaps_by
         Which overlapping hit to keep, ``"pvalue"`` or ``"score"``.
-    no_overlaps_by_strand
+    no_overlaps_across_strands
         Compare hits on opposite strands as well when removing overlaps, so
         that a palindromic site counts once; if false, the strands are kept
         apart.
@@ -309,6 +311,9 @@ def motif_coocc(
         Threads for the scan and for testing the pairs, with 0 for all
         available; by default the package setting from
         [`set_nthreads()`][universalmotif.set_nthreads].
+    no_overlaps_by_strand
+        The old name of ``no_overlaps_across_strands``, which still works
+        for now.
 
     Returns
     -------
@@ -337,6 +342,9 @@ def motif_coocc(
     >>> round(res["pvalue"][0], 3)
     0.256
     """
+    if no_overlaps_by_strand is not None:
+        no_overlaps_across_strands = renamed("motif_coocc", "no_overlaps_by_strand", no_overlaps_by_strand,
+                                             "no_overlaps_across_strands")
     nthreads = _nthreads(nthreads)
     if (sequences is None) == (hits is None):
         raise ValueError("give exactly one of sequences and hits")
@@ -363,7 +371,7 @@ def motif_coocc(
         else:
             h = scan_sequences(ms, seqs, pvalue=pvalue, rc=rc, nthreads=nthreads,
                                no_overlaps=no_overlaps, no_overlaps_by=no_overlaps_by,
-                               no_overlaps_by_strand=no_overlaps_by_strand)
+                               no_overlaps_across_strands=no_overlaps_across_strands)
         motif, sequence, start = (h[c].cast(pl.Int64).to_numpy() for c in ("motif_i", "sequence_i", "start"))
     else:
         if n_sequences is None or n_sequences < 1:

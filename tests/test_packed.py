@@ -26,8 +26,8 @@ def test_three_inputs_scan_alike():
             rc=a.get("RC", True),
             no_overlaps=a.get("no.overlaps", False),
             no_overlaps_by=a.get("no.overlaps.by", "pvalue"),
-            no_overlaps_by_strand=a.get("no.overlaps.by.strand", False),
-            no_overlaps_by_motif=a.get("no.overlaps.by.motif", False),
+            no_overlaps_across_strands=a.get("no.overlaps.by.strand", False),
+            no_overlaps_across_motifs=a.get("no.overlaps.by.motif", False),
         )
         want = um.scan_sequences(motifs, um.read_fasta(path), **opts)
         assert want.height > 0, ctx

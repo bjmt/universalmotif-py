@@ -100,10 +100,10 @@ def test_bkg_argument_scores_against_that_background():
     fig = plot_score_distribution(m, bkg=bkg, pvalues=1e-4, bins=60)
     edges, mass = _bars(fig.axes[0])
     assert mass.sum() == pytest.approx(1.0, abs=1e-12)
-    tail = um.motif_pvalue(m, score=edges[1:-1].tolist(), bkg_probs=bkg)
+    tail = um.motif_pvalue(m, score=edges[1:-1].tolist(), bkg=bkg)
     np.testing.assert_allclose(mass, -np.diff(np.r_[1.0, tail, 0.0]), atol=1e-15)
     assert mass[-1] > 0
-    assert _cutoff_lines(fig.axes[0]) == [um.motif_pvalue(m, pvalue=1e-4, bkg_probs=bkg)]
+    assert _cutoff_lines(fig.axes[0]) == [um.motif_pvalue(m, pvalue=1e-4, bkg=bkg)]
     # A background mapping, and one per motif, give the same picture.
     by_letter = dict(zip("ACGT", bkg))
     fig2 = plot_score_distribution([m, m], bkg=[by_letter, bkg], pvalues=1e-4, bins=60)

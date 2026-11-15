@@ -4,7 +4,8 @@ Motif classes, file formats, scanning, comparison and statistics, built on
 a Rust crate of the same name.
 """
 
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _version
 
 from ._analysis import dedup_hits, motif_pvalue, scan_sequences
 from ._biopython import from_biopython, to_biopython
@@ -147,7 +148,7 @@ from ._sequences import (
 from ._threads import get_nthreads, set_nthreads
 
 try:
-    __version__ = version("universalmotif")
+    __version__ = _version("universalmotif")
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 

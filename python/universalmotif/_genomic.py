@@ -18,12 +18,13 @@ from ._analysis import (
     _warn_unreachable,
     scan_sequences,
 )
-from ._genome import Genome, signal_stats
-from ._packed import PackedSequences
 from ._api import _check_motif
 from ._core import Motif
-from ._threads import _nthreads
+from ._genome import Genome, signal_stats
+from ._packed import PackedSequences
+from ._renamed import renamed
 from ._sequences import _seed
+from ._threads import _nthreads
 
 _CHROM_COLUMNS = ("chrom", "seqnames", "sequence", "chr", "chromosome")
 
@@ -176,10 +177,11 @@ def motif_proximity(
     dist_thresholds: Sequence[int] | None = None,
     n_perm: int = 1000,
     perm_per_chrom: bool = True,
-    ignore_strand: bool = True,
+    across_strands: bool = True,
     qvalue: float | None = None,
     seed: int | None = None,
     nthreads: int | None = None,
+    ignore_strand: bool | None = None,
 ) -> pl.DataFrame:
     """Test whether motif hits sit closer to genomic anchors than chance.
 
@@ -234,7 +236,7 @@ def motif_proximity(
     count
         ``"hits"`` counts hits in the zone, where overlapping hits of a
         motif count once with the best score kept, across strands unless
-        ``ignore_strand`` is false. ``"anchors"`` counts anchors with a hit
+        ``across_strands`` is false. ``"anchors"`` counts anchors with a hit
         nearby; its binomial null is a Poisson approximation, so the
         permutation test is preferred.
     orientation
@@ -243,6 +245,12 @@ def motif_proximity(
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    across_strands
+        When counting hits, compare overlapping hits on opposite strands, so
+        that a palindromic site counts once; if false, each strand counts on
+        its own.
+    ignore_strand
+        The old name of ``across_strands``, which still works for now.
 
     Returns
     -------
@@ -275,6 +283,8 @@ def motif_proximity(
     >>> f"{res['pvalue'][0]:.1e}"
     '2.2e-05'
     """
+    if ignore_strand is not None:
+        across_strands = renamed("motif_proximity", "ignore_strand", ignore_strand, "across_strands")
     nthreads = _nthreads(nthreads)
     if method not in ("binomial", "permutation", "ks"):
         raise ValueError("method must be 'binomial', 'permutation' or 'ks'")
@@ -372,7 +382,7 @@ def motif_proximity(
         None if dist_thresholds is None else [int(d) for d in dist_thresholds],
         n_perm,
         perm_per_chrom,
-        ignore_strand,
+        across_strands,
         _seed(seed),
         nthreads,
     )

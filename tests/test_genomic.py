@@ -63,7 +63,7 @@ def test_proximity_reference():
             count=count,
             orientation=a.get("orientation", "undirected"),
             dist_thresholds=a.get("dist.thresholds"),
-            ignore_strand=a.get("ignore.strand", True),
+            across_strands=a.get("ignore.strand", True),
             qvalue=1,
         )
         t = case["table"]
@@ -397,13 +397,13 @@ def test_proximity_counts_anchors():
 
 def test_proximity_overlapping_hits():
     # Overlapping hits of a motif count once with the best score, across
-    # strands unless ignore_strand is false.
+    # strands unless across_strands is false.
     hits = _hit_table([("a", "c1", 495, 505, "+", 1.0), ("a", "c1", 497, 507, "-", 3.0),
                        ("a", "c1", 800, 810, "+", 1.0)])
     merged = _prox(hits, [("c1", 500, 501)])
     assert merged["nhits"].to_list() == [2]
     assert merged["dist_to_nearest"][0].to_list() == [1, 304]
-    apart = _prox(hits, [("c1", 500, 501)], ignore_strand=False)
+    apart = _prox(hits, [("c1", 500, 501)], across_strands=False)
     assert apart["nhits"].to_list() == [3]
     assert apart["dist_to_nearest"][0].to_list() == [-1, 1, 304]
 

@@ -14,6 +14,7 @@ from . import _core
 from ._api import _check_motif
 from ._core import Motif
 from ._packed import PackedSequences
+from ._renamed import renamed
 from ._threads import _nthreads
 
 
@@ -25,8 +26,9 @@ def motif_pvalue(
     motifs: Motif | Iterable[Motif],
     score: float | Sequence[float] | Sequence[Sequence[float]] | None = None,
     pvalue: float | Sequence[float] | Sequence[Sequence[float]] | None = None,
-    bkg_probs: Sequence[float] | Mapping[str, float] | Sequence[object] | None = None,
+    bkg: Sequence[float] | Mapping[str, float] | Sequence[object] | None = None,
     nthreads: int | None = None,
+    bkg_probs: Sequence[float] | Mapping[str, float] | Sequence[object] | None = None,
 ):
     """P-values for motif scores, or score thresholds for P-values.
 
@@ -51,7 +53,7 @@ def motif_pvalue(
         For a single motif, a number or a sequence of numbers. For a list of
         motifs, a number used for every motif, one number per motif, or a
         list of sequences with either one per motif or a single one for all.
-    bkg_probs
+    bkg
         Background frequencies, either one set for all motifs or a list with
         one per motif, where a set is a sequence in alphabet order, a
         mapping from letters or a [`get_bkg()`][universalmotif.get_bkg]
@@ -59,6 +61,8 @@ def motif_pvalue(
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    bkg_probs
+        The old name of ``bkg``, which still works for now.
 
     Returns
     -------
@@ -81,6 +85,8 @@ def motif_pvalue(
     >>> um.motif_pvalue(motifs[:3], pvalue=1e-4).round(3).tolist()
     [10.252, 10.419, 10.806]
     """
+    if bkg_probs is not None:
+        bkg = renamed("motif_pvalue", "bkg_probs", bkg_probs, "bkg")
     nthreads = _nthreads(nthreads)
     if (score is None) == (pvalue is None):
         raise ValueError("give exactly one of score and pvalue")
@@ -93,7 +99,7 @@ def motif_pvalue(
 
     def run(queries):
         out = np.array(
-            _core._motif_pvalue(ms, queries, bkg_probs, nthreads, score is None), dtype=float
+            _core._motif_pvalue(ms, queries, bkg, nthreads, score is None), dtype=float
         )
         if score is not None:
             # A P-value of 0 only comes from a score that no site can reach.
@@ -283,13 +289,15 @@ def scan_sequences(
     nthreads: int | None = None,
     no_overlaps: bool = False,
     no_overlaps_by: str = "pvalue",
-    no_overlaps_by_strand: bool = True,
-    no_overlaps_by_motif: bool = False,
+    no_overlaps_across_strands: bool = True,
+    no_overlaps_across_motifs: bool = False,
     use_gaps: bool = True,
     correct_gaps: bool = True,
     first_hit: bool = False,
     trim_names: bool = True,
     ranges=None,
+    no_overlaps_by_strand: bool | None = None,
+    no_overlaps_by_motif: bool | None = None,
 ) -> pl.DataFrame:
     """Scan sequences for motif hits.
 
@@ -339,11 +347,11 @@ def scan_sequences(
     no_overlaps_by
         How ``no_overlaps`` ranks overlapping hits, ``"pvalue"`` to keep the
         lowest P-value or ``"score"`` to keep the highest score.
-    no_overlaps_by_strand
+    no_overlaps_across_strands
         With ``no_overlaps``, compare hits on opposite strands too, so that
         a palindromic site is kept once; if false, each strand is
         deduplicated on its own.
-    no_overlaps_by_motif
+    no_overlaps_across_motifs
         With ``no_overlaps``, also compare hits of different motifs, so that
         only the best of overlapping hits of any motif is kept.
     use_gaps
@@ -391,6 +399,9 @@ def scan_sequences(
         pad them, for example with
         [`resize_ranges()`][universalmotif.resize_ranges], when sites at
         their edges matter.
+    no_overlaps_by_strand, no_overlaps_by_motif
+        Old names of ``no_overlaps_across_strands`` and
+        ``no_overlaps_across_motifs``, which still work for now.
 
     Returns
     -------
@@ -435,21 +446,27 @@ def scan_sequences(
     >>> first.select("sequence", "start", "strand").row(0)
     ('target_015', 187, '+')
     """
+    if no_overlaps_by_strand is not None:
+        no_overlaps_across_strands = renamed("scan_sequences", "no_overlaps_by_strand", no_overlaps_by_strand,
+                                             "no_overlaps_across_strands")
+    if no_overlaps_by_motif is not None:
+        no_overlaps_across_motifs = renamed("scan_sequences", "no_overlaps_by_motif", no_overlaps_by_motif,
+                                            "no_overlaps_across_motifs")
     nthreads = _nthreads(nthreads)
     if ranges is not None:
         from ._intervals import _scan_ranges
 
         return _scan_ranges(motifs, sequences, ranges, nthreads, {
             "pvalue": pvalue, "rc": rc, "nthreads": nthreads, "no_overlaps": no_overlaps,
-            "no_overlaps_by": no_overlaps_by, "no_overlaps_by_strand": no_overlaps_by_strand,
-            "no_overlaps_by_motif": no_overlaps_by_motif, "use_gaps": use_gaps,
+            "no_overlaps_by": no_overlaps_by, "no_overlaps_across_strands": no_overlaps_across_strands,
+            "no_overlaps_across_motifs": no_overlaps_across_motifs, "use_gaps": use_gaps,
             "correct_gaps": correct_gaps, "first_hit": first_hit})
     ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
     rc = _default_rc(rc, ms)
     if first_hit and no_overlaps:
         raise ValueError("first_hit keeps one hit per motif and sequence, so it cannot be combined "
                          "with no_overlaps")
-    overlaps = (no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif) if no_overlaps else None
+    overlaps = (no_overlaps_by, no_overlaps_across_strands, no_overlaps_across_motifs) if no_overlaps else None
     motif_names = _make_unique([m.name for m in ms])
     if isinstance(sequences, str) and len(sequences) < 4096 and os.path.isfile(sequences):
         warnings.warn(
@@ -495,11 +512,13 @@ def dedup_hits(
     hits: pl.DataFrame,
     by: str = "pvalue",
     reverse: bool = False,
-    ignore_strand: bool = True,
-    ignore_motif: bool = False,
+    across_strands: bool = True,
+    across_motifs: bool = False,
     seq: str = "sequence",
     motif: str = "motif",
     strand: str = "strand",
+    ignore_strand: bool | None = None,
+    ignore_motif: bool | None = None,
 ) -> pl.DataFrame:
     """Remove overlapping hits.
 
@@ -510,12 +529,14 @@ def dedup_hits(
     and ties go to the earlier row. Hits on opposite strands are compared by
     default, so that a palindromic site is kept once, as
     [`scan_sequences()`][universalmotif.scan_sequences] does with
-    ``no_overlaps``; ``ignore_strand=False`` keeps the strands apart, and
-    ``ignore_motif`` compares hits of different motifs too. ``start`` and
+    ``no_overlaps``; ``across_strands=False`` keeps the strands apart, and
+    ``across_motifs`` compares hits of different motifs too. ``start`` and
     ``end`` columns are required, with the end left out as in a slice. Hits
     without a ``pvalue`` column, such as seqlets from
     [`read_seqlets()`][universalmotif.read_seqlets], are ranked by ``score``
-    instead when ``by`` is left at its default.
+    instead when ``by`` is left at its default. ``ignore_strand`` and
+    ``ignore_motif`` are the old names of ``across_strands`` and
+    ``across_motifs``, which still work for now.
 
     Examples
     --------
@@ -528,9 +549,13 @@ def dedup_hits(
     [(2, 10, '+'), (2, 10, '-'), (14, 22, '+'), (14, 22, '-')]
     >>> um.dedup_hits(hits).select("start", "end", "strand").rows()
     [(2, 10, '+'), (14, 22, '+')]
-    >>> um.dedup_hits(hits, ignore_strand=False).height
+    >>> um.dedup_hits(hits, across_strands=False).height
     4
     """
+    if ignore_strand is not None:
+        across_strands = renamed("dedup_hits", "ignore_strand", ignore_strand, "across_strands")
+    if ignore_motif is not None:
+        across_motifs = renamed("dedup_hits", "ignore_motif", ignore_motif, "across_motifs")
     if by == "pvalue" and "pvalue" not in hits.columns and "score" in hits.columns:
         by = "score"
     for col in (seq, motif, strand, "start", "end", by):
@@ -563,8 +588,8 @@ def dedup_hits(
         start.to_numpy(),
         end.to_numpy(),
         priority.to_numpy(),
-        ignore_strand,
-        ignore_motif,
+        across_strands,
+        across_motifs,
     )
     return hits.filter(pl.Series(keep))
 

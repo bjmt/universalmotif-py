@@ -18,9 +18,9 @@ def test_motif_pvalue_reference():
         bkg = args(case["args"]).get("bkg")
         bkg = None if bkg is None else nums(bkg)
         ctx = f"case {i}: {m.name} {bkg}"
-        got = um.motif_pvalue(m, score=nums(case["scores"]), bkg_probs=bkg)
+        got = um.motif_pvalue(m, score=nums(case["scores"]), bkg=bkg)
         np.testing.assert_allclose(got, nums(case["pvalues"]), rtol=1e-12, err_msg=ctx)
-        got = um.motif_pvalue(m, pvalue=nums(case["pvalue_in"]), bkg_probs=bkg)
+        got = um.motif_pvalue(m, pvalue=nums(case["pvalue_in"]), bkg=bkg)
         np.testing.assert_allclose(got, nums(case["score_out"]), rtol=1e-12, err_msg=ctx)
 
 
@@ -44,8 +44,8 @@ def test_scan_sequences_reference():
             rc=a.get("RC", True),
             no_overlaps=a.get("no.overlaps", False),
             no_overlaps_by=a.get("no.overlaps.by", "pvalue"),
-            no_overlaps_by_strand=a.get("no.overlaps.by.strand", False),
-            no_overlaps_by_motif=a.get("no.overlaps.by.motif", False),
+            no_overlaps_across_strands=a.get("no.overlaps.by.strand", False),
+            no_overlaps_across_motifs=a.get("no.overlaps.by.motif", False),
         )
         w = case["hits"]
         assert got.height == len(w["start"]), ctx
@@ -70,11 +70,11 @@ def test_dedup_hits_matches_scan_option():
         a = um.dedup_hits(hits, by=by)
         b = um.scan_sequences(motifs, seqs, pvalue=1e-3, no_overlaps=True, no_overlaps_by=by)
         assert a.equals(b)
-        a = um.dedup_hits(hits, by=by, ignore_strand=False)
+        a = um.dedup_hits(hits, by=by, across_strands=False)
         b = um.scan_sequences(motifs, seqs, pvalue=1e-3, no_overlaps=True, no_overlaps_by=by,
-                              no_overlaps_by_strand=False)
+                              no_overlaps_across_strands=False)
         assert a.equals(b)
-    both = um.dedup_hits(hits, ignore_motif=True)
+    both = um.dedup_hits(hits, across_motifs=True)
     assert both.height < hits.height
     starts = both.group_by("sequence").agg("start", "end")
     for row in starts.iter_rows(named=True):
@@ -99,7 +99,7 @@ def test_motif_pvalue_shapes():
     with pytest.raises(ValueError):
         um.motif_pvalue(motifs, pvalue=[0.1, 0.2])
     bkg = {"A": 0.3, "C": 0.2, "G": 0.2, "T": 0.3}
-    assert um.motif_pvalue(motifs[0], score=5, bkg_probs=bkg) != um.motif_pvalue(motifs[0], score=5)
+    assert um.motif_pvalue(motifs[0], score=5, bkg=bkg) != um.motif_pvalue(motifs[0], score=5)
 
 
 def test_scan_inputs():

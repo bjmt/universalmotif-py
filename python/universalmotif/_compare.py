@@ -13,6 +13,7 @@ from . import _core
 from ._analysis import _make_unique
 from ._api import _bkg_table, _check_motif, summarize_motifs
 from ._core import Motif
+from ._renamed import renamed
 from ._threads import _nthreads
 
 
@@ -725,15 +726,32 @@ def _tree(d: dict, labels: list[str], method: str, motifs: list[Motif] | None = 
     )
 
 
+_LINKAGES = ("complete", "average", "single", "ward.D", "ward.D2", "mcquitty", "median", "centroid")
+
+
+def _tree_args(func: str, linkage: str, method: str | None, metric: str | None) -> tuple[str, str | None]:
+    """The agglomeration and comparison methods of motif_tree() and
+    plot_comparison(), whose ``method`` once named the agglomeration method
+    and ``metric`` the comparison."""
+    if method is not None and str(method) in _LINKAGES:
+        warnings.warn(f"{func}(): method now names how motifs are compared; give the agglomeration method "
+                      f"{method!r} as linkage", FutureWarning, stacklevel=3)
+        linkage, method = method, None
+    if metric is not None:
+        method = renamed(func, "metric", metric, "method", stacklevel=4)
+    return linkage, method
+
+
 def motif_tree(
     motifs,
     min_overlap: int = 6,
     rc: bool = True,
-    method: str = "complete",
+    linkage: str = "complete",
     labels: str | Sequence[str] = "name",
     nthreads: int | None = None,
-    metric: str | None = None,
+    method: str | None = None,
     sign: str = "match",
+    metric: str | None = None,
 ) -> MotifTree:
     """Cluster motifs into a tree.
 
@@ -754,7 +772,7 @@ def motif_tree(
         The fewest columns two motifs must overlap when they are compared.
     rc
         Also compare DNA and RNA motifs on the reverse strand.
-    method
+    linkage
         The agglomeration method: ``"complete"``, ``"average"``,
         ``"single"``, ``"ward.D"``, ``"ward.D2"``, ``"mcquitty"``,
         ``"median"`` or ``"centroid"``. ``"ward.D"`` applies Ward's
@@ -769,7 +787,7 @@ def motif_tree(
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
-    metric
+    method
         How motifs are compared: ``"PCC"``, by column correlation, or for
         CWMs ``"COSINE"`` or ``"CJACCARD"``. By default ``"COSINE"`` when
         every motif is a CWM and ``"PCC"`` otherwise. Not used with a
@@ -778,6 +796,11 @@ def motif_tree(
         For CWMs, ``"match"`` to compare contributions with their signs or
         ``"ignore"`` to compare their absolute values, as
         [`compare_motifs()`][universalmotif.compare_motifs] describes it.
+    metric
+        The old name of ``method``. ``method`` used to name the
+        agglomeration method, and an agglomeration method given as
+        ``method``, such as ``"average"``, is still taken as ``linkage`` for
+        now.
 
     Returns
     -------
@@ -795,6 +818,7 @@ def motif_tree(
     >>> tree.height.round(3).tolist()
     [0.096, 0.211, 0.354, 0.384, 0.447]
     """
+    linkage, method = _tree_args("motif_tree", linkage, method, metric)
     nthreads = _nthreads(nthreads)
     if isinstance(motifs, np.ndarray) or (
         isinstance(motifs, Sequence) and motifs and not isinstance(motifs[0], Motif)
@@ -806,7 +830,7 @@ def motif_tree(
         labs = [str(i + 1) for i in range(n)] if isinstance(labels, str) else list(labels)
         if len(labs) != n:
             raise ValueError("give one label per row of the distance matrix")
-        return _tree(_core._hclust(dist.tolist(), method, labs), labs, method)
+        return _tree(_core._hclust(dist.tolist(), linkage, labs), labs, linkage)
 
     ms = _motif_list(motifs)
     if isinstance(labels, str):
@@ -818,16 +842,16 @@ def motif_tree(
         labs = list(labels)
     if len(labs) != len(ms):
         raise ValueError("give one label per motif")
-    metric = _comparison_method(ms, metric)
-    if metric not in ("PCC", *_CWM_METHODS):
-        raise ValueError("metric must be 'PCC', 'COSINE' or 'CJACCARD'")
-    _check_sign(sign, metric in _CWM_METHODS)
-    if metric in _CWM_METHODS:
-        s = np.asarray(_core._cwm_matrix(ms, metric, sign == "ignore", min_overlap, rc, nthreads))
+    method = _comparison_method(ms, method)
+    if method not in ("PCC", *_CWM_METHODS):
+        raise ValueError("method must be 'PCC', 'COSINE' or 'CJACCARD'")
+    _check_sign(sign, method in _CWM_METHODS)
+    if method in _CWM_METHODS:
+        s = np.asarray(_core._cwm_matrix(ms, method, sign == "ignore", min_overlap, rc, nthreads))
         dist = np.clip((1 - np.maximum(s, s.T)) / 2, 0.0, 1.0)
-        return _tree(_core._hclust(dist.tolist(), method, labs), labs, method, ms)
-    d = _core._motif_tree(ms, min_overlap, rc, method, labs, nthreads)
-    return _tree(d, labs, method, ms)
+        return _tree(_core._hclust(dist.tolist(), linkage, labs), labs, linkage, ms)
+    d = _core._motif_tree(ms, min_overlap, rc, linkage, labs, nthreads)
+    return _tree(d, labs, linkage, ms)
 
 
 __all__ = ["MotifTree", "compare_motifs", "merge_motifs", "merge_similar", "motif_tree"]

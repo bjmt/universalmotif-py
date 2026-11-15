@@ -143,7 +143,7 @@ def test_palindromes_count_once_without_overlaps(monkeypatch):
     once = um.scan_sequences(gbox, seqs, pvalue=1e-3, no_overlaps=True)
     assert once.height == 3 and set(once["strand"]) == {"+"}
     per_strand = um.scan_sequences(gbox, seqs, pvalue=1e-3, no_overlaps=True,
-                                   no_overlaps_by_strand=False)
+                                   no_overlaps_across_strands=False)
     assert per_strand.height == 6
     # motif_coocc removes overlaps across strands too.
     seen = []
@@ -156,8 +156,8 @@ def test_palindromes_count_once_without_overlaps(monkeypatch):
     monkeypatch.setattr(um._enrich, "scan_sequences", spy)
     um.motif_coocc([gbox, _site("TTGACC")], seqs, pvalue=1e-3, no_overlaps=True, max_distance=10)
     um.motif_coocc([gbox, _site("TTGACC")], seqs, pvalue=1e-3, no_overlaps=True, max_distance=10,
-                   no_overlaps_by_strand=False)
-    assert [k["no_overlaps_by_strand"] for k in seen] == [True, False]
+                   no_overlaps_across_strands=False)
+    assert [k["no_overlaps_across_strands"] for k in seen] == [True, False]
 
 
 def test_one_stranded_motifs_are_scanned_on_their_strand():

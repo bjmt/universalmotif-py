@@ -67,3 +67,23 @@ def test_compare_against_a_database_corrects_within_its_rows(tmp_path):
         q = np.minimum(np.minimum.accumulate((p * m / np.arange(1, m + 1))[::-1])[::-1], 1)
         assert np.allclose(np.sort(rows["qvalue"].to_numpy()), q)
         assert m == len(ms) - 2
+
+
+def test_old_argument_names_still_work_with_a_warning():
+    gbox = um.example_motifs()[3]
+    seqs = um.example_sequences()
+    new = um.scan_sequences(gbox, seqs, no_overlaps=True, no_overlaps_across_strands=False)
+    with pytest.warns(FutureWarning, match="no_overlaps_across_strands"):
+        old = um.scan_sequences(gbox, seqs, no_overlaps=True, no_overlaps_by_strand=False)
+    assert old.equals(new)
+    hits = um.scan_sequences(gbox, seqs)
+    with pytest.warns(FutureWarning, match="across_strands"):
+        assert um.dedup_hits(hits, ignore_strand=False).equals(um.dedup_hits(hits, across_strands=False))
+    with pytest.warns(FutureWarning, match="bkg"):
+        um.motif_pvalue(gbox, score=5, bkg_probs=[0.25] * 4)
+    ms = um.example_motifs()[:5]
+    with pytest.warns(FutureWarning, match="linkage"):
+        old_tree = um.motif_tree(ms, method="average")
+    assert old_tree.order == um.motif_tree(ms, linkage="average").order
+    with pytest.warns(FutureWarning, match="method"):
+        um.motif_tree(ms, metric="PCC")
