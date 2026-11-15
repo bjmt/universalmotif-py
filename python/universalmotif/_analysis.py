@@ -293,6 +293,8 @@ def scan_sequences(
 
     Parameters
     ----------
+    motifs
+        A motif or a list of motifs.
     sequences
         A sequence, a list of sequences, or a mapping from names to
         sequences such as the result of
@@ -305,21 +307,31 @@ def scan_sequences(
         a time, so a genome can be scanned in a few hundred MB. A
         [`Genome`][universalmotif.Genome] is scanned a few chromosomes at a
         time, about 64 Mb of them or one if it is longer.
+    pvalue
+        The P-value a window's score must reach to be reported, which sets
+        each motif's score threshold.
     rc
         Also scan the reverse strand, for motifs whose ``strand`` is
         ``"+-"``, as it is for motifs created or read from most files. By
         default it is on for DNA and off for RNA, which is usually read on
         one strand.
-    no_overlaps
-        Remove overlapping hits with
-        [`dedup_hits()`][universalmotif.dedup_hits], keeping the best by
-        ``no_overlaps_by``, which is ``"pvalue"`` or ``"score"``. Hits on
-        opposite strands are compared too, so that a palindromic site is
-        kept once, unless ``no_overlaps_by_strand`` is false, and
-        ``no_overlaps_by_motif`` also compares hits of different motifs.
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    no_overlaps
+        Remove overlapping hits with
+        [`dedup_hits()`][universalmotif.dedup_hits], keeping the best of
+        each group of overlapping hits of a motif in a sequence.
+    no_overlaps_by
+        How ``no_overlaps`` ranks overlapping hits, ``"pvalue"`` to keep the
+        lowest P-value or ``"score"`` to keep the highest score.
+    no_overlaps_by_strand
+        With ``no_overlaps``, compare hits on opposite strands too, so that
+        a palindromic site is kept once; if false, each strand is
+        deduplicated on its own.
+    no_overlaps_by_motif
+        With ``no_overlaps``, also compare hits of different motifs, so that
+        only the best of overlapping hits of any motif is kept.
     use_gaps
         Scan gapped motifs, such as those made with
         [`add_gap()`][universalmotif.add_gap], with every combination of

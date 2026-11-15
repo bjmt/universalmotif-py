@@ -19,6 +19,8 @@ The functions are grouped by what they do:
   motif discovery.
 - [Sequences](sequences.md): random and shuffled sequences, backgrounds,
   complexity and masking.
+- [Genomes and signal](genomes.md): genomes read from disk a piece at a
+  time, the sequences of genomic ranges, and bigWig signal over them.
 - [Genomic intervals](genomic.md): matched backgrounds and proximity to
   anchors.
 - [Plotting](plotting.md): logos, trees and plots of results.

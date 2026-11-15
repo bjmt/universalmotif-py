@@ -13,30 +13,30 @@ umotif scan --help
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `convert` | Convert motifs between formats and types, or reverse complement them. |
-| `fetch` | Download motifs from JASPAR, HOCOMOCO or CIS-BP, keeping a local cache. |
-| `create` | Make motifs from consensus sequences, or from aligned sites in a FASTA file, a list or the hits of `umotif scan`. |
-| `summary` | Summarize motifs as a table. |
-| `filter` | Keep the motifs that pass every filter given. |
-| `trim` | Trim low-information positions from motif edges. |
-| `merge` | Merge similar motifs, or all of them into one. |
-| `tree` | Cluster motifs into a tree, written as Newick, or cut it into clusters. |
-| `logo` | Draw logos, in one aligned figure or one file per motif. |
-| `heatmap` | Draw motif similarities as a clustered heatmap, optionally with the tree cut at a score. |
-| `scan` | Scan sequences, whole genomes or genomic ranges for motif hits. |
-| `compare` | Compare motifs with each other or with a database. |
-| `enrich` | Test motifs for enrichment in target sequences. |
-| `find` | Discover motifs *de novo*. |
-| `find-gapped` | Discover gapped motifs *de novo*: two parts with a spacer of varying length. |
-| `shuffle` | Shuffle sequences, keeping their k-mer counts. |
-| `extract` | Write the sequences of genomic ranges as FASTA. |
-| `bkg` | Draw background sequences matched to targets on GC content, length and bigWig signal. |
-| `matrix` | Make a peak by motif matrix of matches for single-cell ATAC analyses. |
-| `proximity` | Test whether motif hits sit closer to genomic anchors than chance. |
-| `coocc` | Test pairs of motifs for co-occurrence. |
-| `posenr` | Test motifs for positional enrichment within sequences. |
+| Command | What it does | Python function |
+| --- | --- | --- |
+| `convert` | Convert motifs between formats and types, or reverse complement them. | [`convert_type()`][universalmotif.convert_type], [`motif_rc()`][universalmotif.motif_rc], [`switch_alph()`][universalmotif.switch_alph] |
+| `fetch` | Download motifs from JASPAR, HOCOMOCO or CIS-BP, keeping a local cache. | [`databases.jaspar()`][universalmotif.databases.jaspar], [`databases.hocomoco()`][universalmotif.databases.hocomoco], [`databases.cisbp()`][universalmotif.databases.cisbp] |
+| `create` | Make motifs from consensus sequences, or from aligned sites in a FASTA file, a list or the hits of `umotif scan`. | [`create_motif()`][universalmotif.create_motif] |
+| `summary` | Summarize motifs as a table. | [`summarize_motifs()`][universalmotif.summarize_motifs] |
+| `filter` | Keep the motifs that pass every filter given. | [`filter_motifs()`][universalmotif.filter_motifs] |
+| `trim` | Trim low-information positions from motif edges. | [`trim_motifs()`][universalmotif.trim_motifs] |
+| `merge` | Merge similar motifs, or all of them into one. | [`merge_similar()`][universalmotif.merge_similar], [`merge_motifs()`][universalmotif.merge_motifs] |
+| `tree` | Cluster motifs into a tree, written as Newick, or cut it into clusters. | [`motif_tree()`][universalmotif.motif_tree] |
+| `logo` | Draw logos, in one aligned figure or one file per motif. | [`view_motifs()`][universalmotif.view_motifs], [`logo_svg()`][universalmotif.logo_svg] |
+| `heatmap` | Draw motif similarities as a clustered heatmap, optionally with the tree cut at a score. | [`plot_comparison()`][universalmotif.plot_comparison] |
+| `scan` | Scan sequences, whole genomes or genomic ranges for motif hits. | [`scan_sequences()`][universalmotif.scan_sequences] |
+| `compare` | Compare motifs with each other or with a database. | [`compare_motifs()`][universalmotif.compare_motifs] |
+| `enrich` | Test motifs for enrichment in target sequences. | [`enrich_motifs()`][universalmotif.enrich_motifs] |
+| `find` | Discover motifs *de novo*. | [`motif_finder()`][universalmotif.motif_finder] |
+| `find-gapped` | Discover gapped motifs *de novo*: two parts with a spacer of varying length. | [`gapped_motif_finder()`][universalmotif.gapped_motif_finder] |
+| `shuffle` | Shuffle sequences, keeping their k-mer counts. | [`shuffle_sequences()`][universalmotif.shuffle_sequences] |
+| `extract` | Write the sequences of genomic ranges as FASTA. | [`extract_ranges()`][universalmotif.extract_ranges] |
+| `bkg` | Draw background sequences matched to targets on GC content, length and bigWig signal. | [`match_bkg()`][universalmotif.match_bkg] |
+| `matrix` | Make a peak by motif matrix of matches for single-cell ATAC analyses. | [`match_motifs()`][universalmotif.match_motifs] |
+| `proximity` | Test whether motif hits sit closer to genomic anchors than chance. | [`motif_proximity()`][universalmotif.motif_proximity] |
+| `coocc` | Test pairs of motifs for co-occurrence. | [`motif_coocc()`][universalmotif.motif_coocc] |
+| `posenr` | Test motifs for positional enrichment within sequences. | [`motif_peaks()`][universalmotif.motif_peaks] |
 
 ## Inputs and outputs
 
@@ -102,9 +102,9 @@ umotif bkg -g genome.fa.gz -r peaks.narrowPeak --seed 1 -o bkg.fa
 ```
 
 Now the enrichment test, which lists every motif in order of significance,
-or with `-q` only those passing a q-value cutoff. Broad peaks can have hundreds of enriched motifs, so here we
-keep the twenty most significant, and then find their hits on the genome and
-draw their logos:
+or with `-q` only those passing a q-value cutoff. Broad peaks can have
+hundreds of enriched motifs, so here we keep the twenty most significant,
+and then find their hits on the genome and draw their logos:
 
 ```sh
 umotif enrich jaspar.meme -s peaks.fa -b bkg.fa -p 4 -o enriched.tsv

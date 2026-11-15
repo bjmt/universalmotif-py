@@ -8,7 +8,7 @@ time and keep it in a cache, so later calls work offline. The conversion
 functions need the `biopython` extra:
 
 ```sh
-pip install universalmotif[biopython]
+pip install "universalmotif[biopython]"
 ```
 
 ## Databases

@@ -403,28 +403,56 @@ def shuffle_sequences(
     By default ``k`` is 2, keeping dinucleotide counts, since the
     dinucleotide make-up of DNA, CpG depletion above all, changes how often
     motifs match, and shuffled sequences mostly serve as backgrounds for
-    them. Each sequence must be at least ``k`` letters long. The default
-    ``method``, ``"euler"``, keeps k-mer counts exactly, along with the
-    first and last k-1 letters. ``"linear"`` shuffles
-    non-overlapping blocks of k letters, keeping only those blocks' counts,
-    and ``"markov"`` draws a new sequence from the k-mer frequencies,
-    keeping them only approximately. With ``window``, each
-    sliding window is shuffled in turn; ``window_size`` below 1 and
-    ``window_overlap`` between 0 and 1 are fractions of each sequence's
-    length.
+    them. Results depend on ``seed`` but not on ``nthreads``.
 
-    Results depend on ``seed`` but not on ``nthreads``, which defaults to
-    the package setting from [`set_nthreads()`][universalmotif.set_nthreads].
-
-    Returns new sequences in the same form as the input, whether a string, a
-    list or a dict with the same keys, or one-hot sequences, given as for
-    [`insert_sites()`][universalmotif.insert_sites] with the letters in the
-    order of ``alphabet``. These are shuffled as the sequences they encode,
-    with positions holding no letter read as N, so that the result is the
-    one-hot encoding of shuffling the sequences as text, in the same layout
-    and dtype. For several shuffles of each sequence that keep any Ns in
-    place, as references for attribution, see
+    One-hot sequences are shuffled as the sequences they encode, with
+    positions holding no letter read as N, so that the result is the one-hot
+    encoding of shuffling the sequences as text, in the same layout and
+    dtype. For several shuffles of each sequence that keep any Ns in place,
+    as references for attribution, see
     [`shuffled_references()`][universalmotif.shuffled_references].
+
+    Parameters
+    ----------
+    sequences
+        A sequence, a list of sequences, a mapping from names to sequences,
+        or one-hot sequences given as for
+        [`insert_sites()`][universalmotif.insert_sites]. Each sequence must
+        be at least ``k`` letters long.
+    k
+        The size of the k-mers whose counts are kept, at least 1.
+    method
+        ``"euler"`` keeps k-mer counts exactly, along with the first and
+        last k-1 letters. ``"linear"`` shuffles non-overlapping blocks of k
+        letters, keeping only those blocks' counts, and ``"markov"`` draws a
+        new sequence from the k-mer frequencies, keeping them only
+        approximately.
+    seed
+        Seed for the shuffles; a fresh one by default.
+    window
+        Shuffle each sliding window of each sequence in turn, rather than
+        whole sequences, which keeps changes in composition along them. A
+        sequence shorter than the window is shuffled whole.
+    window_size
+        The width of the windows, as a fraction of each sequence's length
+        when below 1 and as a number of letters otherwise. It must come to
+        at least ``k`` letters.
+    window_overlap
+        How much consecutive windows overlap, as a fraction of each
+        sequence's length when below 1 and as a number of letters otherwise.
+        It must be smaller than the windows.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    alphabet
+        The letters of one-hot sequences, in the order of their rows or
+        columns. Not used for sequences given as text.
+
+    Returns
+    -------
+    str | list[str] | dict[str, str] | numpy.ndarray
+        New sequences in the same form as the input, whether a string, a
+        list, a dict with the same keys, or one-hot sequences.
 
     References
     ----------
@@ -552,19 +580,44 @@ def create_sequences(
 ):
     """Random sequences.
 
-    ``alphabet`` is ``"DNA"``, ``"RNA"``, ``"AA"`` or a string of letters.
-    ``freqs`` gives the frequency of every k-mer of the alphabet, either as a
-    mapping from k-mers, as a table from [`get_bkg()`][universalmotif.get_bkg]
-    (whose largest k-mers are used), or in the sorted order that
-    [`get_kmers()`][universalmotif.get_kmers] gives; their number sets k, and
-    sequences are drawn from the Markov model of order k-1 they define. Letters
-    are uniform by default.
+    Letters are drawn independently and uniformly by default. With
+    ``freqs``, sequences are drawn from the Markov model of order k-1
+    defined by the frequencies of every k-mer of the alphabet, so that
+    frequencies of single letters give independent letters with those
+    frequencies, and those of dinucleotides keep features such as CpG
+    depletion.
 
-    ``nthreads`` defaults to the package setting from
-    [`set_nthreads()`][universalmotif.set_nthreads]. With
-    ``output="onehot"``, the sequences come as an array of shape (seqnum,
-    letters, seqlen) and type ``dtype``, as from
-    [`one_hot()`][universalmotif.one_hot], ready for a model.
+    Parameters
+    ----------
+    alphabet
+        ``"DNA"``, ``"RNA"``, ``"AA"`` or a string of letters, which are
+        used in sorted order.
+    seqnum
+        The number of sequences, 0 or more.
+    seqlen
+        The length of each sequence, at least 1.
+    freqs
+        The frequency of every k-mer of the alphabet, either as a mapping
+        from k-mers, as a table from [`get_bkg()`][universalmotif.get_bkg],
+        whose largest k-mers are used, or in the sorted order that
+        [`get_kmers()`][universalmotif.get_kmers] gives. Their number sets
+        k. Uniform letters by default.
+    seed
+        Seed for drawing the sequences; a fresh one by default.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    output
+        ``"strings"`` for a list of strings, or ``"onehot"`` for an array as
+        from [`one_hot()`][universalmotif.one_hot], ready for a model.
+    dtype
+        The numpy dtype of the one-hot array. Not used for strings.
+
+    Returns
+    -------
+    list[str] | numpy.ndarray
+        A list of ``seqnum`` strings, or with ``output="onehot"`` an array
+        of shape (seqnum, letters, seqlen).
 
     Examples
     --------
@@ -782,20 +835,16 @@ def motif_finder(
 ) -> pl.DataFrame:
     """Discover motifs enriched in DNA or RNA sequences.
 
-    A minimal STREME-like search (Bailey 2021). At each width from
-    ``min_width`` to ``max_width``, which is at most 30, k-mers that a
+    A minimal STREME-like search (Bailey 2021). At each width, k-mers that a
     one-sided Fisher's exact test finds in more positive than background
     sequences seed PPMs built from their Hamming-1 neighbours, which are
-    refined over two rescans. A motif whose hits, the sites scoring with a
-    P-value below ``hit_pvalue``, are enriched with a P-value of at most
-    ``stop_pvalue`` is kept and its sites masked, up to ``nmotifs`` per width.
-    Motifs from different widths sharing more than ``dedup_overlap`` of their
-    sites are deduplicated, Benjamini-Hochberg q-values are computed,
-    low-information flanks are trimmed, and motifs with q-values above
-    ``qvalue`` are dropped. Both strands are searched with ``rc``, which by
-    default is on for DNA and off for RNA, recognized by a ``U`` in any
-    sequence; motifs found on one strand have the ``strand`` ``"+"``, so
-    that they are scanned on that strand alone.
+    refined over two rescans. A motif whose hits are enriched with a P-value
+    of at most ``stop_pvalue`` is kept and its sites masked, and the search
+    at that width goes on for the next. Motifs from different widths that
+    share too many sites are deduplicated, Benjamini-Hochberg q-values are
+    computed, low-information flanks are trimmed, and motifs with q-values
+    above ``qvalue`` are dropped. Motifs found on one strand have the
+    ``strand`` ``"+"``, so that they are scanned on that strand alone.
 
     Each motif is the best of many candidate words, so its P-value, from
     Fisher's exact test on the sequences with hits, is multiplied by the
@@ -803,30 +852,70 @@ def motif_finder(
     ``candidates``, and the q-values count every word tested at every width.
     This keeps random sequences from giving motifs, though the refinement of
     each motif from its word is not accounted for, so the P-values are still
-    somewhat optimistic. ``log10_pvalue`` and ``log10_qvalue`` stay finite
-    when the P-values are too small for a double.
+    somewhat optimistic.
 
-    Without ``bkg_sequences``, the background is the positives shuffled
-    with [`shuffle_sequences()`][universalmotif.shuffle_sequences] using the
-    Euler method with ``k=shuffle_k`` and ``seed``. Parallelism is across
-    widths. Shuffles suit sequences without much structure, but genomic
-    sequences hold many loose repeats, such as GA-rich stretches, that
-    shuffling breaks up, so such repeats come back as motifs enriched over
-    the shuffles even in regions with nothing to find. For genomic sequences,
-    a background drawn from the genome and matched for composition, as from
+    Shuffles suit sequences without much structure, but genomic sequences
+    hold many loose repeats, such as GA-rich stretches, that shuffling breaks
+    up, so such repeats come back as motifs enriched over the shuffles even
+    in regions with nothing to find. For genomic sequences, a background
+    drawn from the genome and matched for composition, as from
     [`match_bkg()`][universalmotif.match_bkg], gives far fewer false motifs.
 
-    Returns a DataFrame in order of P-value, with the motifs in an object
-    column ``motif`` alongside ``name``, ``consensus``, ``rank``, ``width``,
-    ``nsites``, ``seqs_pos``, ``seqs_neg``, ``sites_pos``, ``sites_neg``,
-    ``n_pos``, ``n_neg``, ``candidates``, ``pvalue``, ``log10_pvalue``,
-    ``qvalue`` and ``log10_qvalue``. The motifs are PPMs
-    named ``motif_1``, ``motif_2`` and so on, with their q-values as
-    E-values. ``seqs_pos`` and ``seqs_neg`` count sequences with a hit, and
-    ``sites_pos`` and ``sites_neg`` count hits.
+    Parameters
+    ----------
+    sequences
+        The positive sequences, as a list or a mapping from names to
+        sequences.
+    bkg_sequences
+        The background sequences, given in the same way. Without them, the
+        background is the positives shuffled with
+        [`shuffle_sequences()`][universalmotif.shuffle_sequences] using the
+        Euler method, keeping their ``shuffle_k``-mer counts.
+    min_width, max_width
+        The narrowest and widest motifs to search for, with
+        ``3 <= min_width <= max_width <= 30``. Every width in between is
+        searched.
+    nmotifs
+        The most motifs to keep at each width.
+    hit_pvalue
+        The P-value a site must reach to count as a hit.
+    stop_pvalue
+        Keep a motif if its hits are enriched with a P-value of at most
+        this; the search at a width stops when no seed gives such a motif.
+    qvalue
+        Drop motifs with q-values above this.
+    dedup_overlap
+        The fraction of shared site positions above which the less
+        significant of two motifs from different widths is dropped.
+    rc
+        Search both strands. By default on for DNA and off for RNA, which is
+        recognized by a ``U`` in any sequence.
+    shuffle_k
+        The size of the k-mers whose counts the shuffled background keeps,
+        at least 1. Only used without ``bkg_sequences``.
+    seed
+        Seed for shuffling the background; a fresh one by default.
+    pseudocount
+        A non-negative pseudocount added to the motifs' counts when scoring
+        sites, which the motifs found keep as their ``pseudocount``.
+    nthreads
+        Threads to use, with 0 for all available, each searching one width
+        at a time; by default the package setting from
+        [`set_nthreads()`][universalmotif.set_nthreads].
 
-    ``nthreads`` defaults to the package setting from
-    [`set_nthreads()`][universalmotif.set_nthreads].
+    Returns
+    -------
+    polars.DataFrame
+        A DataFrame in order of P-value, with the motifs in an object column
+        ``motif`` alongside ``name``, ``consensus``, ``rank``, ``width``,
+        ``nsites``, ``seqs_pos``, ``seqs_neg``, ``sites_pos``,
+        ``sites_neg``, ``n_pos``, ``n_neg``, ``candidates``, ``pvalue``,
+        ``log10_pvalue``, ``qvalue`` and ``log10_qvalue``. The motifs are
+        PPMs named ``motif_1``, ``motif_2`` and so on, with their q-values
+        as E-values. ``seqs_pos`` and ``seqs_neg`` count sequences with a
+        hit, and ``sites_pos`` and ``sites_neg`` count hits.
+        ``log10_pvalue`` and ``log10_qvalue`` stay finite when the P-values
+        are too small for a double.
 
     References
     ----------

@@ -128,18 +128,9 @@ def match_motifs(
     [`scan_sequences()`][universalmotif.scan_sequences] with the ``pvalue``
     cutoff, and only a summary of the hits is kept for each sequence and
     motif, so that hundreds of thousands of peaks and hundreds of motifs
-    take no more memory than the matrix itself. ``value`` is ``"matches"``
-    for 1 where a motif has a hit, ``"counts"`` for the number of hits, or
-    ``"scores"`` for the best score of any hit. For ``"matches"``, scanning
-    a sequence stops for a motif soon after its first hit, which saves time
-    when many sequences contain it. Palindromic sites are hit on
-    both strands, so ``no_overlaps`` drops overlapping hits of each motif,
-    on either strand, before they are counted, keeping the one with the
-    lowest P-value. ``rc``, ``use_gaps`` and ``correct_gaps`` are as for
-    ``scan_sequences()``, so the reverse strand is scanned by default for
-    DNA but not for RNA, motifs whose ``strand`` is ``"+"`` or ``"-"`` are
-    scanned on that strand only, and gapped motifs' P-values are corrected
-    for the combinations of gap sizes tried.
+    take no more memory than the matrix itself. As in ``scan_sequences()``,
+    motifs whose ``strand`` is ``"+"`` or ``"-"`` are scanned on that strand
+    only.
 
     Short or degenerate motifs cannot always reach the default ``pvalue``
     of 5e-5: about a quarter of JASPAR motifs have a best possible match
@@ -151,8 +142,37 @@ def match_motifs(
 
     Needs the ``scipy`` extra.
 
-    ``nthreads`` defaults to the package setting from
-    [`set_nthreads()`][universalmotif.set_nthreads].
+    Parameters
+    ----------
+    motifs
+        A motif or a list of motifs, at least one.
+    sequences
+        A sequence, a list of sequences, a mapping from names to sequences,
+        or [`PackedSequences`][universalmotif.PackedSequences]. Sequences
+        without names are named ``seq1``, ``seq2`` and so on.
+    pvalue
+        The P-value a site must reach to count as a hit.
+    value
+        What the matrix holds: ``"matches"`` for 1 where a motif has a hit,
+        ``"counts"`` for the number of hits, or ``"scores"`` for the best
+        score of any hit. For ``"matches"``, scanning a sequence stops for a
+        motif soon after its first hit, which saves time when many
+        sequences contain it.
+    rc
+        Also scan the reverse strand; by default on for DNA and off for RNA.
+    no_overlaps
+        Drop overlapping hits of each motif, on either strand, before they
+        are counted, keeping the one with the lowest P-value, since
+        palindromic sites are hit on both strands.
+    use_gaps
+        Scan gapped motifs with every combination of their gap sizes, as
+        for ``scan_sequences()``; otherwise their gaps are ignored.
+    correct_gaps
+        Bonferroni-correct gapped motifs' P-values for the combinations of
+        gap sizes tried, as for ``scan_sequences()``.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
     -------

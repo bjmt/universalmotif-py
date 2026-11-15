@@ -63,32 +63,60 @@ def enrich_motifs(
     Target and background sequences of any alphabet are scanned with
     [`scan_sequences()`][universalmotif.scan_sequences], keeping hits with
     P-values below ``pvalue``, and each motif gets a one-sided Fisher's exact
-    test with ``pseudocount`` added to every cell. With ``test="seqs"`` it
-    tests the number of sequences with a hit, and with ``test="sites"`` the
-    number of hits out of all the positions the motif could occupy.
-    Q-values are Benjamini-Hochberg adjusted across all motifs. As in
-    ``scan_sequences()``, the reverse strand is scanned with ``rc``, by
-    default for DNA but not for RNA, motifs whose ``strand`` is ``"+"`` or
-    ``"-"`` are scanned on that strand only, and gapped motifs' P-values are
-    corrected for the combinations of gap sizes tried.
+    test with ``pseudocount`` added to every cell. Q-values are
+    Benjamini-Hochberg adjusted across all motifs. As in
+    ``scan_sequences()``, motifs whose ``strand`` is ``"+"`` or ``"-"`` are
+    scanned on that strand only, and gapped motifs' P-values are corrected
+    for the combinations of gap sizes tried.
 
-    Without ``bkg_sequences``, the background is the targets shuffled with
-    [`shuffle_sequences()`][universalmotif.shuffle_sequences] using the
-    Euler method with ``k=shuffle_k`` and ``seed``.
+    Parameters
+    ----------
+    motifs
+        A motif or a list of motifs to test.
+    sequences
+        The target sequences, as a list or a mapping from names to
+        sequences such as the result of
+        [`read_fasta()`][universalmotif.read_fasta].
+    bkg_sequences
+        The background sequences, given in the same way. Without them, the
+        background is the targets shuffled with
+        [`shuffle_sequences()`][universalmotif.shuffle_sequences] using the
+        Euler method, keeping their ``shuffle_k``-mer counts.
+    pvalue
+        The P-value a site must reach to count as a hit.
+    qvalue
+        Keep only motifs with q-values up to this, in (0, 1]; by default
+        every motif is returned.
+    test
+        ``"seqs"`` to test the number of sequences with a hit, or
+        ``"sites"`` to test the number of hits out of all the positions the
+        motif could occupy.
+    rc
+        Also scan the reverse strand; by default on for DNA and off for RNA.
+    shuffle_k
+        The size of the k-mers whose counts the shuffled background keeps,
+        at least 1. Only used without ``bkg_sequences``.
+    seed
+        Seed for shuffling the background; a fresh one by default.
+    pseudocount
+        A non-negative count added to every cell of each Fisher's exact
+        test.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
-    Returns a DataFrame of every motif in order of P-value, or with
-    ``qvalue`` only those with q-values up to it, with the columns
-    ``motif``, ``motif_i``, ``consensus``, ``target_seq_n``,
-    ``target_seq_hits``, ``target_site_hits``, ``bkg_seq_n``,
-    ``bkg_seq_hits``, ``bkg_site_hits``, ``enrichment``,
-    ``log2_enrichment``, ``pvalue``, ``log10_pvalue``, ``qvalue`` and
-    ``log10_qvalue``. ``motif_i`` is 0-based, ``enrichment``
-    is the ratio of hit rates, with a floor of half a hit on the background
-    rate, and the log columns stay finite when the P-values are too small
-    for a double.
-
-    ``nthreads`` defaults to the package setting from
-    [`set_nthreads()`][universalmotif.set_nthreads].
+    Returns
+    -------
+    polars.DataFrame
+        A DataFrame of every motif in order of P-value, or with ``qvalue``
+        only those with q-values up to it, with the columns ``motif``,
+        ``motif_i``, ``consensus``, ``target_seq_n``, ``target_seq_hits``,
+        ``target_site_hits``, ``bkg_seq_n``, ``bkg_seq_hits``,
+        ``bkg_site_hits``, ``enrichment``, ``log2_enrichment``, ``pvalue``,
+        ``log10_pvalue``, ``qvalue`` and ``log10_qvalue``. ``motif_i`` is
+        0-based, ``enrichment`` is the ratio of hit rates, with a floor of
+        half a hit on the background rate, and the log columns stay finite
+        when the P-values are too small for a double.
 
     References
     ----------
@@ -225,33 +253,71 @@ def motif_coocc(
     ``min_coocc`` sequences are not tested. Q-values are Benjamini-Hochberg
     adjusted across the tested pairs.
 
-    Give either ``sequences`` or a ``hits`` table plus ``n_sequences``.
-    Sequences are scanned with
-    [`scan_sequences()`][universalmotif.scan_sequences] using ``pvalue`` and
-    ``rc``, which by default is on for DNA and off for RNA, and
-    ``no_overlaps`` removes overlapping hits of the same motif, keeping the
-    best by ``no_overlaps_by``. Hits on opposite strands are compared too,
-    so that a palindromic site counts once, unless
-    ``no_overlaps_by_strand`` is false. A
-    hits table, which works for any alphabet, needs a 0-based
-    ``sequence_i`` column and either a 0-based ``motif_i`` column or a
-    ``motif`` column of names. With a hits table, ``motifs`` can be left
-    out, and the motifs are then those named in its ``motif`` column, such as
-    the patterns of seqlets from
-    [`read_seqlets()`][universalmotif.read_seqlets].
+    The hits come either from scanning ``sequences`` with
+    [`scan_sequences()`][universalmotif.scan_sequences] or from a ``hits``
+    table given with ``n_sequences``, which works for any alphabet, such as
+    seqlets from [`read_seqlets()`][universalmotif.read_seqlets].
 
-    With ``max_distance``, two descriptive columns that do not affect the
-    test are added: ``both_clustered``, the number of shared sequences whose
-    nearest pair of hits by start position is within
-    ``max_distance``, and ``median_distance``, the median of those nearest
-    distances. ``self_pairs`` also pairs each motif with itself.
-    ``nthreads`` applies to the scan and to testing the pairs, and defaults
-    to the package setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    Parameters
+    ----------
+    motifs
+        A motif or a list of motifs. With a ``hits`` table they can be left
+        out, and the motifs are then those named in its ``motif`` column.
+    sequences
+        The sequences to scan, as a list or a mapping from names to
+        sequences. Give either these or ``hits``.
+    hits
+        A table of hits instead of ``sequences``, with a 0-based
+        ``sequence_i`` column and either a 0-based ``motif_i`` column or a
+        ``motif`` column of names, plus a ``start`` column with
+        ``max_distance``.
+    n_sequences
+        With ``hits``, the number of sequences they came from, counting
+        those without hits.
+    pvalue
+        When scanning, the P-value a site must reach to count as a hit.
+    rc
+        When scanning, also scan the reverse strand; by default on for DNA
+        and off for RNA.
+    no_overlaps
+        When scanning, remove overlapping hits of the same motif, keeping
+        the best by ``no_overlaps_by``. Since pairs of different motifs are
+        tested on presence alone, this changes only self pairs and the
+        ``max_distance`` columns.
+    no_overlaps_by
+        Which overlapping hit to keep, ``"pvalue"`` or ``"score"``.
+    no_overlaps_by_strand
+        Compare hits on opposite strands as well when removing overlaps, so
+        that a palindromic site counts once; if false, the strands are kept
+        apart.
+    max_distance
+        Add two descriptive columns that do not affect the test:
+        ``both_clustered``, the number of shared sequences whose nearest
+        pair of hits by start position is within this many letters, and
+        ``median_distance``, the median of those nearest distances.
+    min_coocc
+        The fewest sequences a pair must share to be tested.
+    pseudocount
+        A non-negative count added to every cell of each Fisher's exact
+        test.
+    self_pairs
+        Also pair each motif with itself. Such a pair is not tested:
+        ``both`` counts the sequences with hits at two or more positions
+        and ``a_only`` those with a hit at only one, and distances are
+        between a motif's own hits.
+    nthreads
+        Threads for the scan and for testing the pairs, with 0 for all
+        available; by default the package setting from
+        [`set_nthreads()`][universalmotif.set_nthreads].
 
-    Returns a DataFrame with the columns ``motif_a``, ``motif_b``,
-    ``a_only``, ``b_only``, ``both``, ``neither``, ``odds_ratio``,
-    ``pvalue`` and ``qvalue``, sorted by q-value then P-value, with untested
-    pairs and their null P-values last.
+    Returns
+    -------
+    polars.DataFrame
+        A DataFrame with the columns ``motif_a``, ``motif_b``, ``a_only``,
+        ``b_only``, ``both``, ``neither``, ``odds_ratio``, ``pvalue`` and
+        ``qvalue``, and with ``max_distance`` ``both_clustered`` and
+        ``median_distance``, sorted by q-value then P-value. Untested pairs
+        come last, with their odds ratios, P-values and q-values missing.
 
     References
     ----------

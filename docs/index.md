@@ -21,9 +21,9 @@ import universalmotif as um
 ap1 = um.create_motif(["TGACTCA", "TGAGTCA", "TGACTAA"], pseudocount=1)
 print(um.convert_type(ap1, "PWM").matrix)
 
-# Read some more from a MEME file, and scan sequences with all of them.
-motifs = [ap1] + um.read_meme("motifs.meme")
-sequences = um.read_fasta("promoters.fa")
+# Add the example motifs, and scan the example sequences with all of them.
+motifs = [ap1] + um.example_motifs()
+sequences = um.example_sequences("targets")
 hits = um.scan_sequences(motifs, sequences, pvalue=1e-4)
 
 # How similar are they, and what do they look like?

@@ -9,7 +9,7 @@ Reading TF-MoDISco results and chromBPNet contribution scores needs the
 `h5py` extra:
 
 ```sh
-pip install universalmotif[h5py]
+pip install "universalmotif[h5py]"
 ```
 
 Attribution and contribution scores from a model, for each position or for

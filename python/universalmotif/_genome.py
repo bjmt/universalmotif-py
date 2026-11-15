@@ -34,9 +34,10 @@ class Genome(Mapping[str, str]):
     whole when it is looked up. [`subseq()`][universalmotif.Genome.subseq]
     and [`extract()`][universalmotif.Genome.extract] read just parts of
     them. Letters come back as they are in the file, so soft-masking is kept.
-    [`scan_sequences()`][universalmotif.scan_sequences] scans a genome one
-    chromosome at a time, and [`match_bkg()`][universalmotif.match_bkg]
-    reads only the windows it draws. A genome can be pickled, as when it is
+    [`scan_sequences()`][universalmotif.scan_sequences] scans a genome a
+    few chromosomes at a time, about 64 Mb of them or one if it is longer,
+    and [`match_bkg()`][universalmotif.match_bkg] reads only the windows it
+    draws. A genome can be pickled, as when it is
     sent to worker processes, and is opened again from its path there.
 
     Examples

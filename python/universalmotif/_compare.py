@@ -49,19 +49,18 @@ def compare_motifs(
 ):
     """Compare motifs.
 
-    Motifs of any alphabet can be compared. Each target is slid along the
-    query, and with ``rc`` along the reverse complement of a DNA or RNA
-    query too, and the alignment with the highest sum of column correlations
-    is kept, among those overlapping at least ``min_overlap`` columns, or all of
-    the shorter motif's columns when it is narrower than that. Column
-    correlations are Pearson correlations of the probabilities. Each P-value
-    comes from the exact distribution of that sum under a null model of
-    columns, Bonferroni-corrected for the alignments tried. The
-    ``"empirical"`` null uses the columns of all the motifs given, while the
-    ``"parametric"`` null, for DNA and RNA only, uses a Dirichlet grid around
-    ``bkg``. Q-values are Benjamini-Hochberg adjusted within each query.
-    P-values are worked out for each query's own columns and alignments, so
-    a P-value matrix need not be symmetric even where the scores are.
+    Motifs of any alphabet can be compared, as long as they share it. Each
+    target is slid along the query, and with ``rc`` along the reverse
+    complement of a DNA or RNA query too, and the alignment with the highest
+    sum of column correlations is kept, among those overlapping at least
+    ``min_overlap`` columns, or all of the shorter motif's columns when it
+    is narrower than that. Column correlations are Pearson correlations of
+    the probabilities. Each P-value comes from the exact distribution of
+    that sum under a null model of columns, Bonferroni-corrected for the
+    alignments tried, and q-values are Benjamini-Hochberg adjusted within
+    each query. P-values are worked out for each query's own columns and
+    alignments, so a P-value matrix need not be symmetric even where the
+    scores are.
 
     With ``method="EUCL"``, columns are compared by the Euclidean distance
     between their probabilities instead, and ``score`` is the mean distance,
@@ -73,19 +72,17 @@ def compare_motifs(
     correlations, with distances counting as negative similarities.
 
     With ``overhang="background"``, the columns of either motif that hang
-    over the ends of the other are compared with ``bkg``, which is uniform
-    by default and always for alphabets other than DNA and RNA. Every column
-    of both motifs is then scored against what faces it, a column of the
-    other motif or the background, so that each alignment counts as many
-    column scores as the two motifs have columns. The alignment with the
-    highest total is kept, ``score`` is the mean of these column scores,
-    and P-values come from the exact distribution of the total, in which
-    the target's overhanging columns are drawn from the null as well. A
-    partial overlap thus pays for however much its overhanging columns
-    differ from the background. With correlations and a uniform background,
-    overhanging columns score 0, which leaves alignments and P-values much
-    as they are and only lowers the scores of partial overlaps. Background
-    overhangs cannot be combined with ``complete``.
+    over the ends of the other are compared with ``bkg``. Every column of
+    both motifs is then scored against what faces it, a column of the other
+    motif or the background, so that each alignment counts as many column
+    scores as the two motifs have columns. The alignment with the highest
+    total is kept, ``score`` is the mean of these column scores, and
+    P-values come from the exact distribution of the total, in which the
+    target's overhanging columns are drawn from the null as well. A partial
+    overlap thus pays for however much its overhanging columns differ from
+    the background. With correlations and a uniform background, overhanging
+    columns score 0, which leaves alignments and P-values much as they are
+    and only lowers the scores of partial overlaps.
 
     By default only the overlap counts, so a short target that matches part
     of a long query can score as well as one that covers all of it. With
@@ -133,13 +130,67 @@ def compare_motifs(
     null of targets with columns drawn from all the CWMs given, in either
     orientation, Bonferroni-corrected for the alignments tried, as for
     correlations; continuous Jaccard has scores only, so with ``compare_to``
-    every match is kept, best first. ``null``, ``bkg``, ``complete`` and
-    ``overhang`` do not apply to CWM similarity. To match CWMs against a
-    database of PPMs, compare their PPMs, such as those from
+    every match is kept, best first. To match CWMs against a database of
+    PPMs, compare their PPMs, such as those from
     ``read_modisco(type="PPM")``, by correlation.
 
-    ``nthreads`` defaults to the package setting from
-    [`set_nthreads()`][universalmotif.set_nthreads].
+    Parameters
+    ----------
+    motifs
+        The motifs to compare, all of the same alphabet. Without
+        ``compare_to`` there must be at least two.
+    compare_to
+        Compare only these motifs, as queries, with every motif given,
+        themselves included, and return a table of matches instead of a
+        matrix. They are given as 0-based indices into ``motifs`` or as
+        names, one or a list of them; duplicate names are told apart by the
+        ``.1``, ``.2`` suffixes the results give them. By default every motif
+        is compared with every other.
+    qvalue
+        With ``compare_to``, keep only matches with q-values up to this, in
+        (0, 1]. It is ignored, with a warning, without ``compare_to``.
+    min_overlap
+        The fewest columns an alignment must overlap, at least 1; a motif
+        narrower than this must overlap with all of its columns.
+    rc
+        Also align targets with the reverse complement of DNA and RNA
+        queries, keeping the better strand.
+    null
+        The null model of columns behind the P-values: ``"empirical"``, the
+        columns of all the motifs given, or ``"parametric"``, a Dirichlet
+        grid around ``bkg``, for DNA and RNA only.
+    bkg
+        Background letter frequencies of DNA or RNA, used by the parametric
+        null and by background overhangs: four values in alphabet order, a
+        mapping from letters, or a table from
+        [`get_bkg()`][universalmotif.get_bkg]. Uniform by default, and
+        always for other alphabets.
+    matrix_out
+        What the all-against-all matrix holds: ``"score"``, ``"pvalue"`` or
+        ``"qvalue"``. Not used with ``compare_to``.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    complete
+        Score whole queries, as described above, rather than the overlap
+        alone. Cannot be combined with background overhangs.
+    method
+        How columns are compared: ``"PCC"``, Pearson correlation, or
+        ``"EUCL"``, Euclidean distance, for any motifs, and ``"COSINE"`` or
+        ``"CJACCARD"`` for CWMs only. By default ``"COSINE"`` when every
+        motif is a CWM and ``"PCC"`` otherwise. ``null``, ``bkg``,
+        ``complete`` and ``overhang`` do not apply to the CWM methods, and
+        ``"CJACCARD"`` has no P-values, so ``matrix_out`` must then be
+        ``"score"``.
+    overhang
+        ``"ignore"`` to score only the columns that overlap, or
+        ``"background"`` to compare overhanging columns with ``bkg`` as
+        described above.
+    sign
+        For CWMs, ``"match"`` to compare contributions with their signs, or
+        ``"ignore"`` to compare their absolute values, so that a negative
+        pattern matches a positive one with the same letters. ``"ignore"``
+        applies to ``"COSINE"`` and ``"CJACCARD"`` only.
 
     Returns
     -------
@@ -149,12 +200,12 @@ def compare_motifs(
         q-value as chosen by ``matrix_out``. Scores from ``method="EUCL"``
         are mean distances, which
         [`motif_tree()`][universalmotif.motif_tree] can cluster as they
-        are. With ``compare_to``,
-        given as 0-based motif indices or as names, a DataFrame ordered by
-        q-value with one row per match passing ``qvalue`` and the columns
-        ``subject``, ``subject_i``, ``target``, ``target_i``, ``offset``,
-        ``strand``, ``overlap``, ``score``, ``subject_consensus``,
-        ``target_consensus``, ``pvalue`` and ``qvalue``.
+        are. With ``compare_to``, a DataFrame ordered by q-value with one
+        row per match passing ``qvalue`` and the columns ``subject``,
+        ``subject_i``, ``target``, ``target_i``, ``offset``, ``strand``,
+        ``overlap``, ``score``, ``subject_consensus``,
+        ``target_consensus``, ``pvalue`` and ``qvalue``, where ``subject``
+        is the query.
 
     Notes
     -----
@@ -373,35 +424,75 @@ def merge_similar(
     Motifs are linked when [`compare_motifs()`][universalmotif.compare_motifs]
     gives them a q-value of at most ``qvalue`` in either direction, and each
     cluster of several motifs is merged with
-    [`merge_motifs()`][universalmotif.merge_motifs]. With
-    ``linkage="single"``, clusters are the connected groups, so one link to
-    any member is enough to join a cluster, and motifs that are only alike in
-    part, such as those of one family of transcription factors, can chain
-    into one large cluster. With ``linkage="complete"``, every pair of motifs
-    in a cluster is linked: the clusters come from complete-linkage
-    clustering of the q-values cut at ``qvalue``, which joins the closest
-    clusters first and breaks ties by input order, so the result does not
-    depend on chance. A cluster of more than two motifs that holds over a
-    quarter of them is named in a warning, as a sign that unlike motifs were
-    joined.
+    [`merge_motifs()`][universalmotif.merge_motifs]. With single linkage,
+    clusters are the connected groups, so one link to any member is enough
+    to join a cluster, and motifs that are only alike in part, such as those
+    of one family of transcription factors, can chain into one large
+    cluster. With complete linkage, every pair of motifs in a cluster is
+    linked: the clusters come from complete-linkage clustering of the
+    q-values cut at ``qvalue``, which joins the closest clusters first and
+    breaks ties by input order, so the result does not depend on chance. A
+    cluster of more than two motifs that holds over a quarter of them is
+    named in a warning, as a sign that unlike motifs were joined.
 
-    When every motif is a CWM, they are linked instead when their similarity,
-    by ``method``, ``"COSINE"`` by default or ``"CJACCARD"``, and ``sign``,
-    as [`compare_motifs()`][universalmotif.compare_motifs] describes them,
-    reaches ``min_score``, and ``qvalue`` and ``null`` are not used. By
-    default ``min_score`` is 0.8 for the cosine and 0.45 for continuous
-    Jaccard, about where duplicate patterns of one TF-MoDISco run begin:
-    among the 60 patterns of an ENCODE K562 ATAC-seq model, pairs that are
-    clearly the same motif scored 0.82 to 0.95 by cosine, while only 1% of
-    all pairs scored above 0.79. The merged motifs stay CWMs, as
+    When every motif is a CWM, they are linked instead when their similarity
+    reaches ``min_score``, and ``qvalue`` and ``null`` are not used. The
+    default cutoffs sit about where duplicate patterns of one TF-MoDISco run
+    begin: among the 60 patterns of an ENCODE K562 ATAC-seq model, pairs
+    that are clearly the same motif scored 0.82 to 0.95 by cosine, while
+    only 1% of all pairs scored above 0.79. The merged motifs stay CWMs, as
     [`merge_motifs()`][universalmotif.merge_motifs] makes them.
 
-    Returns one motif per cluster, or with ``return_clusters`` a summary
-    DataFrame of the input motifs with 0-based ``motif_i`` and ``cluster``
-    columns.
+    Parameters
+    ----------
+    motifs
+        The motifs to cluster, all of the same alphabet.
+    qvalue
+        Link two motifs when the q-value of their comparison, in either
+        direction, is at most this.
+    null
+        The null model behind the P-values, ``"empirical"`` or
+        ``"parametric"``, as for
+        [`compare_motifs()`][universalmotif.compare_motifs].
+    min_overlap
+        The fewest columns two motifs must overlap when they are compared,
+        and when a cluster is merged.
+    rc
+        Also compare and merge DNA and RNA motifs on the reverse strand.
+    bkg
+        Background letter frequencies for the parametric null, as for
+        ``compare_motifs()``; uniform by default.
+    weighted
+        Weight each motif by its ``nsites`` when a cluster is merged.
+    return_clusters
+        Return which cluster each motif falls in instead of the merged
+        motifs.
+    linkage
+        ``"single"`` or ``"complete"``, as described above.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    method
+        For CWMs, the similarity to link them by, ``"COSINE"`` by default or
+        ``"CJACCARD"``, as ``compare_motifs()`` describes them. Other
+        methods cannot be chosen, since other motifs are always linked by
+        the q-values of column correlations.
+    sign
+        For CWMs, ``"match"`` to compare contributions with their signs or
+        ``"ignore"`` to compare their absolute values.
+    min_score
+        For CWMs, link two motifs when their similarity reaches this; by
+        default 0.8 for the cosine and 0.45 for continuous Jaccard. It
+        cannot be given unless every motif is a CWM.
 
-    ``nthreads`` defaults to the package setting from
-    [`set_nthreads()`][universalmotif.set_nthreads].
+    Returns
+    -------
+    list[Motif] | polars.DataFrame
+        One motif per cluster, the motifs left alone as they are and the
+        others merged; or with ``return_clusters`` a summary DataFrame of
+        the input motifs, as from
+        [`summarize_motifs()`][universalmotif.summarize_motifs], with
+        0-based ``motif_i`` and ``cluster`` columns.
 
     References
     ----------
@@ -635,29 +726,52 @@ def motif_tree(
 ) -> MotifTree:
     """Cluster motifs into a tree.
 
-    Motifs are compared with [`compare_motifs()`][universalmotif.compare_motifs], mean column
+    Motifs are compared with
+    [`compare_motifs()`][universalmotif.compare_motifs], mean column
     correlations become distances as ``(1 - score) / 2``, and the distances
-    are clustered hierarchically. The agglomeration ``method`` is one of
-    ``"complete"``, ``"average"``, ``"single"``, ``"ward.D"``, ``"ward.D2"``,
-    ``"mcquitty"``, ``"median"`` or ``"centroid"``; ``"ward.D"`` applies
-    Ward's criterion to the distances as they are and ``"ward.D2"`` to the
-    squared distances.
+    are clustered hierarchically. CWMs are compared by cosine similarity
+    when every motif is one, and their similarities become distances in the
+    same way. A precomputed distance matrix can be clustered instead.
 
-    CWMs are compared by cosine similarity when every motif is one, and
-    ``metric`` chooses another comparison, ``"PCC"``, ``"COSINE"`` or
-    ``"CJACCARD"``, with ``sign`` as
-    [`compare_motifs()`][universalmotif.compare_motifs] describes them; the
-    similarities become distances in the same way.
+    Parameters
+    ----------
+    motifs
+        The motifs to cluster, or a square distance matrix, of which only
+        the lower triangle is used, such as the scores of
+        ``compare_motifs()`` with ``method="EUCL"``.
+    min_overlap
+        The fewest columns two motifs must overlap when they are compared.
+    rc
+        Also compare DNA and RNA motifs on the reverse strand.
+    method
+        The agglomeration method: ``"complete"``, ``"average"``,
+        ``"single"``, ``"ward.D"``, ``"ward.D2"``, ``"mcquitty"``,
+        ``"median"`` or ``"centroid"``. ``"ward.D"`` applies Ward's
+        criterion to the distances as they are and ``"ward.D2"`` to the
+        squared distances.
+    labels
+        Tip labels, either a list with one per motif or a motif attribute
+        to label tips with, such as ``"name"``, ``"altname"`` or
+        ``"family"``. Duplicate motif names get ``.1``, ``.2`` and so on,
+        while the first of each is left as it is. A distance matrix is
+        labelled by a list, or by default with the numbers 1, 2 and so on.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    metric
+        How motifs are compared: ``"PCC"``, by column correlation, or for
+        CWMs ``"COSINE"`` or ``"CJACCARD"``. By default ``"COSINE"`` when
+        every motif is a CWM and ``"PCC"`` otherwise. Not used with a
+        distance matrix.
+    sign
+        For CWMs, ``"match"`` to compare contributions with their signs or
+        ``"ignore"`` to compare their absolute values, as
+        [`compare_motifs()`][universalmotif.compare_motifs] describes it.
 
-    ``motifs`` can also be a square distance matrix, of which only the lower
-    triangle is used, such as the scores of ``compare_motifs()`` with
-    ``method="EUCL"``. ``labels`` is either a list of labels or a motif
-    attribute to label tips with, such as ``"name"``, ``"altname"`` or
-    ``"family"``. Duplicate motif names get ``.1``, ``.2`` and so on, while
-    the first of each is left as it is.
-
-    ``nthreads`` defaults to the package setting from
-    [`set_nthreads()`][universalmotif.set_nthreads].
+    Returns
+    -------
+    MotifTree
+        The tree, which also holds the motifs when it was made from them.
 
     Examples
     --------

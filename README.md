@@ -120,15 +120,16 @@ umotif bkg -g genome.fa.gz -r peaks.narrowPeak --seed 1 -o bkg.fa
 umotif enrich jaspar.meme -s peaks.fa -b bkg.fa -p 4 -o enriched.tsv
 ```
 
-`umotif --help` lists all 19 commands.
+`umotif --help` lists all 22 commands.
 
 ## Differences from the R package
 
 Function names follow the R package, with underscores in place of dots, so
 `min.ic` becomes `min_ic`. Where the R package has both a full and a `_lite`
 version of a function, this package provides the lite one under the plain
-name. Readers always return a list of motifs, and MEME site tables come
-back as polars DataFrames. Functions that use random numbers take a `seed`,
+name. Readers return a list of motifs, except `read_meme()` with
+`readsites` or `readsites_meta`, which returns a dict of the motifs and
+their site tables, as polars DataFrames. Functions that use random numbers take a `seed`,
 but seeds do not reproduce the R package's results, since the two use
 different random number generators.
 
