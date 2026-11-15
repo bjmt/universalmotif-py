@@ -6,6 +6,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 
+import numpy as np
 import polars as pl
 
 from . import _core
@@ -136,7 +137,7 @@ def gapped_motif_finder(
     """
     _, pos = _sequence_pairs(sequences)
     neg = None if bkg_sequences is None else list(_sequence_pairs(bkg_sequences)[1])
-    ks = [k] if isinstance(k, int) else [int(x) for x in k]
+    ks = [int(k)] if isinstance(k, (int, np.integer)) else [int(x) for x in k]
     found, info = _core._gapped_motif_finder(
         list(pos), neg, ks, min_gap, max_gap, nmotifs, hit_pvalue, stop_pvalue, flank, min_ic, n_seeds,
         min_fraction, holdout, mismatch, mask, rc, shuffle_k, _seed(seed), _nthreads(nthreads),
