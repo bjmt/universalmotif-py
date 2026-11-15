@@ -47,23 +47,25 @@ Changes in behaviour:
   logos align CWMs by the cosine of their contributions.
 - Writers gzip `.gz` paths at level 6, as the `gzip` command does, which
   is about four times faster than before for files 3% larger.
+- `merge_motifs()` and `merge_similar()` align motifs narrower than
+  `min_overlap` over their whole width, as comparisons do, rather than
+  leaving them out.
 
 Renamed, with the old names still working for now and warning:
 
-- `no_overlaps_by_strand` and `no_overlaps_by_motif` are
-  `no_overlaps_across_strands` and `no_overlaps_across_motifs` in
-  `scan_sequences()`, `motif_coocc()` and `scan_contributions()`, and
+- `scan_sequences(no_overlaps_by_strand=, no_overlaps_by_motif=)` are
+  `no_overlaps_across_strands` and `no_overlaps_across_motifs`, and
   `dedup_hits(ignore_strand=, ignore_motif=)` and
   `motif_proximity(ignore_strand=)` are `across_strands` and
-  `across_motifs`, as the command line's `--across-strands` already was;
-  `umotif proximity` takes `--across-strands` too.
+  `across_motifs`, as the command line's `--across-strands` already was.
+  `umotif proximity --stranded` is `--no-across-strands`.
 - `motif_tree()` and `plot_comparison()` take the agglomeration method as
-  `linkage` and the comparison method as `method`, as `merge_similar()`
-  and `compare_motifs()` do, where `method` named the agglomeration method
-  and `metric` the comparison; `umotif tree` and `umotif heatmap` take
-  `--linkage`.
+  `linkage`, as `merge_similar()` does, and `method` now names how motifs
+  are compared, as in `compare_motifs()`; an agglomeration method given as
+  `method` is still taken as `linkage`. `umotif tree` and `umotif heatmap`
+  take `--linkage`.
 - `motif_pvalue(bkg_probs=)` is `bkg`, and `plot_match_bkg(bkg=)` is
-  `bkg_sequences`, as background letter frequencies and sequences are
+  `bkg_sequences`, as letter frequencies and background sequences are
   named elsewhere.
 
 New:
@@ -96,14 +98,15 @@ New:
   symmetric DUST, giving the same regions as dustmasker, and lowercase
   letters too with `lowercase=True`; `return_ranges=True` gives the
   regions instead.
-- `match_motifs(correct_gaps=)`, `motif_coocc(no_overlaps_across_strands=)` and
+- `match_motifs(correct_gaps=)`,
+  `motif_coocc(no_overlaps_across_strands=)` and
   `scan_sequences(trim_names=)`, and the `--no-correct-gaps` and
   `--no-across-strands` options of the command line.
 - `compare_motifs(method="CJACCARD")` compares CWMs by TF-MoDISco's
   continuous Jaccard similarity, `sign="ignore"` compares their absolute
   values, and `merge_similar(min_score=)` sets the similarity at which CWMs
-  are merged; `motif_tree()` and `plot_comparison()` take `metric` and
-  `sign`.
+  are merged; `motif_tree()` and `plot_comparison()` take `method` and
+  `sign` too.
 - `scan_contributions()` finds motif hits in contribution scores by
   matching CWMs against them, gapped CWMs included, giving a hits table
   like that of `scan_sequences()`, with thresholds for each TF-MoDISco
@@ -156,24 +159,15 @@ Fixes:
 - Sequences given as bytes are read as letters, where they were scanned,
   counted and shuffled as their printed form (`b'ACGT'`), and `None`,
   numbers and arrays among sequences are refused.
-- Arrays of strings are taken as sequences by `shuffle_sequences()`,
-  `implant_motifs()` and the other functions that also take one-hot
-  arrays, rather than refused as malformed one-hot sequences.
-- `merge_motifs()` and `merge_similar()` align motifs narrower than
-  `min_overlap` over their whole width, as comparisons do, rather than
-  leaving them out.
 - `umotif bkg --table` describes the sequences it writes, where without
   `--seed` it drew a different set for the table, and it uses `-p`.
 - `umotif compare --db` computes q-values over each query's tests against
   the database, where its own self and query-against-query tests made
   them too small.
-- `resize_ranges()` keeps a missing summit (`peak` of -1) missing rather
-  than inventing one, and takes `anchor="centre"`.
 - `one_hot()` takes letters beyond Latin-1, as zero columns.
-- `compare_motifs(compare_to=)` and `gapped_motif_finder(k=)` take NumPy
-  integers.
-- `motif_finder()`, `gapped_motif_finder()` and `enrich_motifs()` no
-  longer fail when a sequence is too short to shuffle for the background.
+- `compare_motifs(compare_to=)` takes NumPy integers.
+- `motif_finder()` and `enrich_motifs()` no longer fail when a sequence is
+  too short to shuffle for the background.
 - Indexing hit contributions with an empty list or a Series of names, and
   `interaction_effects()` on a region with no pairs, no longer fail.
 - `match_bkg()` from a genome groups targets and windows by width once,

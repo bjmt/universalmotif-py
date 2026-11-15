@@ -85,5 +85,3 @@ def test_old_argument_names_still_work_with_a_warning():
     with pytest.warns(FutureWarning, match="linkage"):
         old_tree = um.motif_tree(ms, method="average")
     assert old_tree.order == um.motif_tree(ms, linkage="average").order
-    with pytest.warns(FutureWarning, match="method"):
-        um.motif_tree(ms, metric="PCC")

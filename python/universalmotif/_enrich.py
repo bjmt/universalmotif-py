@@ -18,7 +18,6 @@ from ._analysis import (
 )
 from ._api import _check_motif
 from ._core import Motif
-from ._renamed import renamed
 from ._sequences import _seed
 from ._threads import _nthreads
 
@@ -245,7 +244,6 @@ def motif_coocc(
     pseudocount: int = 0,
     self_pairs: bool = False,
     nthreads: int | None = None,
-    no_overlaps_by_strand: bool | None = None,
 ) -> pl.DataFrame:
     """Find motif pairs that share sequences more often than expected.
 
@@ -311,9 +309,6 @@ def motif_coocc(
         Threads for the scan and for testing the pairs, with 0 for all
         available; by default the package setting from
         [`set_nthreads()`][universalmotif.set_nthreads].
-    no_overlaps_by_strand
-        The old name of ``no_overlaps_across_strands``, which still works
-        for now.
 
     Returns
     -------
@@ -342,9 +337,6 @@ def motif_coocc(
     >>> round(res["pvalue"][0], 3)
     0.256
     """
-    if no_overlaps_by_strand is not None:
-        no_overlaps_across_strands = renamed("motif_coocc", "no_overlaps_by_strand", no_overlaps_by_strand,
-                                             "no_overlaps_across_strands")
     nthreads = _nthreads(nthreads)
     if (sequences is None) == (hits is None):
         raise ValueError("give exactly one of sequences and hits")

@@ -21,7 +21,7 @@ def _bio_motifs():
     except ImportError as e:
         raise ImportError(
             "converting to and from Biopython needs biopython; install it with "
-            "`pip install universalmotif[biopython]`"
+            "`pip install 'universalmotif[biopython]'`"
         ) from e
     return motifs
 

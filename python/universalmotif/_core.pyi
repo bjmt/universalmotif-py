@@ -467,6 +467,27 @@ def _motif_finder(
     pseudocount: int,
     nthreads: int,
 ) -> tuple[list[Motif], dict[str, Any]]: ...
+def _gapped_motif_finder(
+    seqs: list[str],
+    negatives: list[str] | None,
+    k: list[int],
+    min_gap: int,
+    max_gap: int,
+    nmotifs: int,
+    hit_pvalue: float,
+    stop_pvalue: float,
+    flank: int,
+    min_ic: float,
+    n_seed_pairs: int,
+    min_fraction: float,
+    holdout: float,
+    mismatch: bool,
+    mask: bool,
+    rc: bool,
+    shuffle_k: int,
+    seed: int,
+    nthreads: int,
+) -> tuple[list[Motif], dict[str, Any]]: ...
 def _enrich(
     motifs: list[Motif],
     sequences: list[str],
@@ -544,6 +565,19 @@ def _match_bkg(
     unique: bool,
     seed: int,
 ) -> tuple[list[int], int]: ...
+def _match_bkg_values(
+    gc_targets: list[float],
+    len_targets: list[float],
+    gc_universe: list[float],
+    len_universe: list[float],
+    covariates: list[tuple[str, list[float], list[float], int, str]],
+    n_per_target: int,
+    n_bins_gc: int,
+    n_bins_length: int,
+    unique: bool,
+    seed: int,
+) -> tuple[list[int], int]: ...
+def _composition(seqs: list[str]) -> tuple[list[float], list[float]]: ...
 def _genome_windows(
     chrom_lengths: list[int],
     target_widths: list[int],
@@ -577,6 +611,15 @@ def _ungap(motif: Motif, delete: bool) -> Motif: ...
 def _switch_alph(motif: Motif) -> Motif: ...
 def _mask_seqs(seqs: list[str], pattern: str, rc: bool, letter: str, alphabet: str) -> list[str]: ...
 def _mask_ranges(seq: str, ranges: list[tuple[int, int]], letter: str) -> str: ...
+def _mask_complexity(
+    seqs: list[str], window: int, threshold: int, lowercase: bool, letter: str, nthreads: int,
+) -> list[str]: ...
+def _dust_intervals(
+    seqs: list[str], window: int, threshold: int, lowercase: bool,
+) -> list[list[tuple[int, int]]]: ...
+def _shuffle_codes(
+    codes: npt.NDArray[np.uint8], n: int, k: int, method: str, seed: int, offset: int, nthreads: int,
+) -> npt.NDArray[np.uint8]: ...
 def _meme_alph(
     core: str, complements: str | None, ambiguity: list[tuple[str, str]], like: str | None,
     name: str | None, letter_names: list[tuple[str, str]], colours: list[tuple[str, str]],

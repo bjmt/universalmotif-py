@@ -240,7 +240,7 @@ def signal_stats(
     except ImportError as e:
         raise ImportError(
             "reading bigWig files needs pybigtools; install it with `pip install "
-            "universalmotif[bigwig]`"
+            "'universalmotif[bigwig]'`"
         ) from e
     from ._genomic import _range_table
 
@@ -312,7 +312,7 @@ def signal_values(
     except ImportError as e:
         raise ImportError(
             "reading bigWig files needs pybigtools; install it with `pip install "
-            "universalmotif[bigwig]`"
+            "'universalmotif[bigwig]'`"
         ) from e
     start, end = int(start), int(end)
     reader = pybigtools.open(os.fspath(bigwig))

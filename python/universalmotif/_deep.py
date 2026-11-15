@@ -281,7 +281,7 @@ def read_modisco(
     except ImportError as e:
         raise ImportError(
             "reading TF-MoDISco results needs h5py; install it with `pip install "
-            "universalmotif[h5py]`"
+            "'universalmotif[h5py]'`"
         ) from e
     datasets = {"CWM": "contrib_scores", "hCWM": "hypothetical_contribs", "PPM": "sequence"}
     if type not in datasets:
@@ -381,7 +381,7 @@ def modisco_thresholds(
     except ImportError as e:
         raise ImportError(
             "reading TF-MoDISco results needs h5py; install it with `pip install "
-            "universalmotif[h5py]`"
+            "'universalmotif[h5py]'`"
         ) from e
     if not 0 <= quantile <= 1:
         raise ValueError("quantile must be between 0 and 1")
@@ -523,7 +523,7 @@ def read_seqlets(
     except ImportError as e:
         raise ImportError(
             "reading TF-MoDISco results needs h5py; install it with `pip install "
-            "universalmotif[h5py]`"
+            "'universalmotif[h5py]'`"
         ) from e
     if scores is not None and scores not in _SEQLET_SCORES:
         raise ValueError('scores must be None, "projected" or "hypothetical"')
@@ -885,7 +885,7 @@ def read_contributions(
         except ImportError as e:
             raise ImportError(
                 "reading HDF5 contribution scores needs h5py; install it with `pip install "
-                "universalmotif[h5py]`"
+                "'universalmotif[h5py]'`"
             ) from e
         with h5py.File(path, "r") as f:
             if not ("raw" in f and "shap" in f):
@@ -1667,7 +1667,7 @@ def one_hot_batches(
             import pybigtools  # noqa: F401
         except ImportError as e:
             raise ImportError("reading bigWig files needs pybigtools; install it with `pip install "
-                              "universalmotif[bigwig]`") from e
+                              "'universalmotif[bigwig]'`") from e
         if isinstance(bigwigs, (str, os.PathLike)):
             bigwigs = [bigwigs]
         if isinstance(bigwigs, Mapping):

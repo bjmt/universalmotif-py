@@ -17,7 +17,6 @@ from ._core import Motif
 from ._deep import ContributionScores, _letters_first, _seqlet_regions, _to_numpy
 from ._plot import _pyplot
 from ._plot_seqlets import _logo_panel
-from ._renamed import renamed
 from ._threads import _nthreads
 
 if TYPE_CHECKING:
@@ -320,8 +319,6 @@ def scan_contributions(
     no_overlaps_across_strands: bool = True,
     no_overlaps_across_motifs: bool = False,
     nthreads: int | None = None,
-    no_overlaps_by_strand: bool | None = None,
-    no_overlaps_by_motif: bool | None = None,
 ) -> pl.DataFrame:
     """Find motif hits in the contribution scores a sequence model gives its
     inputs, by matching CWMs against the scores.
@@ -415,19 +412,17 @@ def scan_contributions(
         towards neither the similarity nor the importance, and they are
         shown as dots in ``match``, as in ``scan_sequences()``. Otherwise the
         columns are matched as if they followed one another.
-    no_overlaps, no_overlaps_by, no_overlaps_by_strand, no_overlaps_by_motif
+    no_overlaps, no_overlaps_by, no_overlaps_across_strands, no_overlaps_across_motifs
         Remove overlapping hits of each motif in each sequence, keeping
         those with the highest ``no_overlaps_by``, the ``score``,
         ``similarity`` or ``importance``, as ``dedup_hits()`` does. Hits on
-        opposite strands are compared, unless ``no_overlaps_across_strands`` is
-        False, and with ``no_overlaps_across_motifs``, hits of different motifs
-        are compared too, so that each site keeps only its best motif.
+        opposite strands are compared, unless
+        ``no_overlaps_across_strands`` is false, and with
+        ``no_overlaps_across_motifs``, hits of different motifs are compared
+        too, so that each site keeps only its best motif.
     nthreads
         Threads to use, by default the package setting from
         [`set_nthreads()`][universalmotif.set_nthreads].
-    no_overlaps_by_strand, no_overlaps_by_motif
-        Old names of ``no_overlaps_across_strands`` and
-        ``no_overlaps_across_motifs``, which still work for now.
 
     Returns
     -------
@@ -468,12 +463,6 @@ def scan_contributions(
     ...                                           "match").rows()
     [('seq1', 2, 5, '+', 'GAT')]
     """
-    if no_overlaps_by_strand is not None:
-        no_overlaps_across_strands = renamed("scan_contributions", "no_overlaps_by_strand", no_overlaps_by_strand,
-                                             "no_overlaps_across_strands")
-    if no_overlaps_by_motif is not None:
-        no_overlaps_across_motifs = renamed("scan_contributions", "no_overlaps_by_motif", no_overlaps_by_motif,
-                                            "no_overlaps_across_motifs")
     ms = [motifs] if isinstance(motifs, Motif) else list(motifs)
     if not ms:
         raise ValueError("no motifs given")

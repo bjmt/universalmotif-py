@@ -205,7 +205,6 @@ def plot_comparison(
     nthreads: int | None = None,
     method: str | None = None,
     sign: str = "match",
-    metric: str | None = None,
 ) -> Figure:
     """Draw motif similarities as a clustered heatmap.
 
@@ -260,6 +259,9 @@ def plot_comparison(
         with the same ``min_overlap``. A matrix of P- or q-values given as
         ``matrix`` is clustered on the mean -log10 value of both directions,
         scaled to distances from 0 to 1.
+        ``method`` used to name the agglomeration method, and one given
+        as ``method``, such as ``"average"``, is still taken as
+        ``linkage`` for now.
     dendrogram
         Where to draw the tree: ``"left"``, ``"top"``, ``"both"`` or
         ``"none"``.
@@ -298,11 +300,6 @@ def plot_comparison(
         larger heatmaps and are left out once they would be unreadable.
     figsize
         The figure size, by default worked out from the number of motifs.
-    metric
-        The old name of ``method``. ``method`` used to name the
-        agglomeration method, and an agglomeration method given as
-        ``method``, such as ``"average"``, is still taken as ``linkage`` for
-        now.
 
     Returns
     -------
@@ -330,7 +327,7 @@ def plot_comparison(
     ...                       dendrogram="both")
     >>> plt.close(fig)
     """
-    linkage, method = _tree_args("plot_comparison", linkage, method, metric)
+    linkage, method = _tree_args("plot_comparison", linkage, method)
     nthreads = _nthreads(nthreads)
     if value not in _VALUE_LABELS:
         raise ValueError("value must be 'score', 'pvalue' or 'qvalue'")

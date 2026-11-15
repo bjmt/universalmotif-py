@@ -193,7 +193,7 @@ def to_logomaker(motif: Motif, use_type: str | None = None, relative_entropy: bo
         import pandas as pd
     except ImportError as e:
         raise ImportError(
-            "to_logomaker needs pandas; install it with `pip install universalmotif[pandas]`"
+            "to_logomaker needs pandas; install it with `pip install 'universalmotif[pandas]'`"
         ) from e
     motif = _check_motif(motif)
     use_type = use_type or _logo_type(motif)

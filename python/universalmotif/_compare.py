@@ -13,7 +13,6 @@ from . import _core
 from ._analysis import _make_unique
 from ._api import _bkg_table, _check_motif, summarize_motifs
 from ._core import Motif
-from ._renamed import renamed
 from ._threads import _nthreads
 
 
@@ -729,16 +728,14 @@ def _tree(d: dict, labels: list[str], method: str, motifs: list[Motif] | None = 
 _LINKAGES = ("complete", "average", "single", "ward.D", "ward.D2", "mcquitty", "median", "centroid")
 
 
-def _tree_args(func: str, linkage: str, method: str | None, metric: str | None) -> tuple[str, str | None]:
+def _tree_args(func: str, linkage: str, method: str | None) -> tuple[str, str | None]:
     """The agglomeration and comparison methods of motif_tree() and
-    plot_comparison(), whose ``method`` once named the agglomeration method
-    and ``metric`` the comparison."""
+    plot_comparison(), whose ``method`` once named the agglomeration
+    method."""
     if method is not None and str(method) in _LINKAGES:
         warnings.warn(f"{func}(): method now names how motifs are compared; give the agglomeration method "
                       f"{method!r} as linkage", FutureWarning, stacklevel=3)
         linkage, method = method, None
-    if metric is not None:
-        method = renamed(func, "metric", metric, "method", stacklevel=4)
     return linkage, method
 
 
@@ -751,7 +748,6 @@ def motif_tree(
     nthreads: int | None = None,
     method: str | None = None,
     sign: str = "match",
-    metric: str | None = None,
 ) -> MotifTree:
     """Cluster motifs into a tree.
 
@@ -778,6 +774,9 @@ def motif_tree(
         ``"median"`` or ``"centroid"``. ``"ward.D"`` applies Ward's
         criterion to the distances as they are and ``"ward.D2"`` to the
         squared distances.
+        ``method`` used to name the agglomeration method, and one given
+        as ``method``, such as ``"average"``, is still taken as
+        ``linkage`` for now.
     labels
         Tip labels, either a list with one per motif or a motif attribute
         to label tips with, such as ``"name"``, ``"altname"`` or
@@ -796,11 +795,6 @@ def motif_tree(
         For CWMs, ``"match"`` to compare contributions with their signs or
         ``"ignore"`` to compare their absolute values, as
         [`compare_motifs()`][universalmotif.compare_motifs] describes it.
-    metric
-        The old name of ``method``. ``method`` used to name the
-        agglomeration method, and an agglomeration method given as
-        ``method``, such as ``"average"``, is still taken as ``linkage`` for
-        now.
 
     Returns
     -------
@@ -818,7 +812,7 @@ def motif_tree(
     >>> tree.height.round(3).tolist()
     [0.096, 0.211, 0.354, 0.384, 0.447]
     """
-    linkage, method = _tree_args("motif_tree", linkage, method, metric)
+    linkage, method = _tree_args("motif_tree", linkage, method)
     nthreads = _nthreads(nthreads)
     if isinstance(motifs, np.ndarray) or (
         isinstance(motifs, Sequence) and motifs and not isinstance(motifs[0], Motif)

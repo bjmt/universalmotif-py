@@ -41,7 +41,7 @@ def _pyplot():
         import matplotlib.pyplot as plt
     except ImportError as e:  # pragma: no cover
         raise ImportError(
-            "plotting needs matplotlib; install it with `pip install universalmotif[plot]`"
+            "plotting needs matplotlib; install it with `pip install 'universalmotif[plot]'`"
         ) from e
     return plt
 

@@ -507,7 +507,7 @@ def to_pyranges(df: pl.DataFrame):
     except ImportError as e:
         raise ImportError(
             "converting to PyRanges needs pyranges1; install it with `pip install "
-            "universalmotif[pyranges]`"
+            "'universalmotif[pyranges]'`"
         ) from e
     df = _ranges_frame(df)
     if not isinstance(df, pl.DataFrame):

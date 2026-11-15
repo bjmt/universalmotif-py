@@ -25,7 +25,7 @@ def _scipy_sparse():
         import scipy.sparse as sp
     except ImportError as e:
         raise ImportError(
-            "motif match matrices need scipy; install it with `pip install universalmotif[scipy]`"
+            "motif match matrices need scipy; install it with `pip install 'universalmotif[scipy]'`"
         ) from e
     return sp
 
@@ -101,7 +101,7 @@ class MotifMatches:
             import pandas as pd
         except ImportError as e:
             raise ImportError(
-                "to_anndata needs anndata; install it with `pip install universalmotif[anndata]`"
+                "to_anndata needs anndata; install it with `pip install 'universalmotif[anndata]'`"
             ) from e
         return ad.AnnData(
             X=self.matrix,
