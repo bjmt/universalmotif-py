@@ -377,15 +377,13 @@ def cmd_merge(a):
         merged = [um.merge_motifs(motifs, min_overlap=a.min_overlap, rc=a.rc, new_name=a.name,
                                   weighted=a.weighted, nthreads=a.threads)]
     else:
-        kw = {"qvalue": a.qvalue, "null": a.null, "min_overlap": a.min_overlap, "rc": a.rc,
-                  "weighted": a.weighted, "linkage": a.linkage, "nthreads": a.threads}
-        merged = um.merge_similar(motifs, **kw)
+        from ._compare import _clusters_table, _merge_similar_run
+
+        # One run gives both the merged motifs and the clusters.
+        ms, clusters, merged = _merge_similar_run(motifs, a.qvalue, a.null, a.min_overlap, a.rc, None,
+                                                  a.weighted, a.linkage, a.threads, None, "match", None)
         if a.clusters:
-            with warnings.catch_warnings():
-                # Already given for the merge itself.
-                warnings.simplefilter("ignore", UserWarning)
-                clusters = um.merge_similar(motifs, return_clusters=True, **kw)
-            write_table(clusters, a.clusters)
+            write_table(_clusters_table(ms, clusters), a.clusters)
     write_motifs(merged, a.output, a.to)
 
 
@@ -635,8 +633,11 @@ def cmd_compare(a):
     nq = len(queries)
     if a.db:
         targets = read_motifs(a.db, a.db_format)
-        res = um.compare_motifs(queries + targets, compare_to=list(range(nq)), qvalue=qvalue, **kw)
+        res = um.compare_motifs(queries + targets, compare_to=list(range(nq)), qvalue=1.0, **kw)
         res = res.filter(pl.col("target_i") >= nq).with_columns(pl.col("target_i") - nq)
+        # The q-values count only each query's tests against the database,
+        # not those against itself and the other queries.
+        res = _bh_by_query(res).filter(pl.col("qvalue") <= qvalue)
         # Names made unique across queries and database go back to their own.
         res = res.with_columns(
             pl.col("subject_i").map_elements(lambda i: queries[i].name, return_dtype=pl.String)
@@ -649,6 +650,23 @@ def cmd_compare(a):
         res = res.filter(pl.col("subject_i") != pl.col("target_i"))
     write_table(res.rename({"subject": "query", "subject_i": "query_i",
                             "subject_consensus": "query_consensus"}), a.output)
+
+
+def _bh_by_query(res: pl.DataFrame) -> pl.DataFrame:
+    """Benjamini-Hochberg q-values recomputed within each query."""
+    import numpy as np
+
+    q = np.full(res.height, np.nan)
+    p = res["pvalue"].to_numpy()
+    for idx in res.with_row_index().group_by("subject_i").agg("index")["index"]:
+        rows = np.asarray(idx)
+        ps = p[rows]
+        order = np.argsort(ps)
+        m = len(ps)
+        adj = ps[order] * m / np.arange(1, m + 1)
+        adj = np.minimum.accumulate(adj[::-1])[::-1]
+        q[rows[order]] = np.minimum(adj, 1.0)
+    return res.with_columns(pl.Series("qvalue", q))
 
 
 def _unique(names: list[str]) -> list[str]:
@@ -692,7 +710,7 @@ def cmd_find_gapped(a):
     bkg = read_sequences(a.bkg) if a.bkg else None
     res = um.gapped_motif_finder(targets, bkg, k=a.k, min_gap=a.min_gap, max_gap=a.max_gap,
                                  nmotifs=a.nmotifs, hit_pvalue=a.hit_pvalue, stop_pvalue=a.stop_pvalue,
-                                 n_seeds=a.seeds, min_fraction=a.min_fraction, holdout=a.holdout,
+                                 n_seed_pairs=a.seed_pairs, min_fraction=a.min_fraction, holdout=a.holdout,
                                  mismatch=a.mismatch, mask=a.mask, shuffle_k=a.shuffle_k, rc=a.rc,
                                  seed=a.seed, nthreads=a.threads)
     if a.table:
@@ -758,8 +776,12 @@ def cmd_bkg(a):
     bigwig = _bigwig_map(a.bigwig) if a.bigwig else None
     if bigwig and ranges is None:
         raise CliError("matching on bigWig signal needs the targets as ranges, with -g and -r")
+    from ._sequences import _seed
+
+    # One seed for both calls below, so that the table describes the very
+    # sequences written.
     kw = {"n_per_target": a.n, "n_bins_gc": a.gc_bins, "n_bins_length": a.length_bins,
-              "unique": not a.repeats, "seed": a.seed}
+          "unique": not a.repeats, "seed": _seed(a.seed), "nthreads": a.threads}
     if genome is not None:
         kw.update(genome=genome, exclude=exclude, n_candidates=a.candidates,
                   chromosomes=a.chromosomes, bigwig=bigwig,
@@ -1256,8 +1278,9 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="P-value of a site counting as a hit (default: 1e-4)")
     p.add_argument("--stop-pvalue", type=float, default=1e-3,
                    help="spacing P-value at which to stop (default: 1e-3)")
-    p.add_argument("--seeds", type=int, default=6,
-                   help="seeds built into motifs for each k-mer size (default: 6)")
+    p.add_argument("--seed-pairs", type=int, default=6,
+                   help="most enriched pairs of k-mers built into motifs for each k-mer size "
+                        "(default: 6)")
     p.add_argument("--min-fraction", type=float, default=0.02,
                    help="smallest share of targets a pair of k-mers must be in (default: 0.02)")
     p.add_argument("--holdout", type=float, default=0.3,

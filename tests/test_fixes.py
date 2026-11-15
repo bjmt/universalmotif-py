@@ -103,9 +103,9 @@ def test_silent_failures_warn(tmp_path):
         um.scan_sequences(gbox, str(path), pvalue=0.5)
     with pytest.warns(UserWarning, match="P-value of 0"):
         assert um.motif_pvalue(gbox, score=100.0) == 0
+    # A motif narrower than min_overlap is merged over its whole width.
     short = um.create_motif("CACGTG", name="short")
-    with pytest.warns(UserWarning, match="left out: TATA-box"):
-        um.merge_motifs([um.example_motifs()[0], short], min_overlap=8)
+    assert "short" in um.merge_motifs([um.example_motifs()[0], short], min_overlap=8).name
     with pytest.raises(ValueError, match='type="PWM"'):
         um.create_motif([[0.5, -0.2], [0.1, 0.3], [-0.1, 0.0], [0.0, 0.2]])
     pwm = um.create_motif([[0.5, -0.2], [0.1, 0.3], [-0.1, 0.0], [0.0, 0.2]], "DNA", "PWM")

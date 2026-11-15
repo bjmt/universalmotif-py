@@ -300,6 +300,8 @@ def interaction_effects(
             v = flat[:, c]
             rank = {"strongest": -np.abs(v), "min": v, "max": -v}[summary]
             order = np.lexsort((rank, key))
+            if not order.size:
+                continue
             # The first of each pair after sorting is the one kept.
             keep = order[np.r_[True, key[order][1:] != key[order][:-1]]]
             out[pi[keep], pj[keep], c] = v[keep]

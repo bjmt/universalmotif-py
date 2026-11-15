@@ -308,7 +308,7 @@ fn _implant_motifs<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (seqs, negatives, k, min_gap, max_gap, nmotifs, hit_pvalue, stop_pvalue, flank, min_ic, n_seeds, min_fraction, holdout, mismatch, mask, rc, shuffle_k, seed, nthreads))]
+#[pyo3(signature = (seqs, negatives, k, min_gap, max_gap, nmotifs, hit_pvalue, stop_pvalue, flank, min_ic, n_seed_pairs, min_fraction, holdout, mismatch, mask, rc, shuffle_k, seed, nthreads))]
 #[allow(clippy::too_many_arguments)]
 fn _gapped_motif_finder<'py>(
     py: Python<'py>,
@@ -322,7 +322,7 @@ fn _gapped_motif_finder<'py>(
     stop_pvalue: f64,
     flank: usize,
     min_ic: f64,
-    n_seeds: usize,
+    n_seed_pairs: usize,
     min_fraction: f64,
     holdout: f64,
     mismatch: bool,
@@ -341,7 +341,7 @@ fn _gapped_motif_finder<'py>(
         stop_pvalue,
         flank,
         min_ic,
-        n_seeds,
+        n_seed_pairs,
         min_fraction,
         holdout,
         mismatch,
@@ -357,8 +357,11 @@ fn _gapped_motif_finder<'py>(
     let d = PyDict::new(py);
     d.set_item("k", found.iter().map(|f| f.k).collect::<Vec<_>>())?;
     d.set_item(
-        "seed",
-        found.iter().map(|f| f.seed.clone()).collect::<Vec<_>>(),
+        "seed_pair",
+        found
+            .iter()
+            .map(|f| f.seed_pair.clone())
+            .collect::<Vec<_>>(),
     )?;
     d.set_item(
         "seqs_pos",
@@ -374,16 +377,24 @@ fn _gapped_motif_finder<'py>(
         "candidates",
         found.iter().map(|f| f.candidates).collect::<Vec<_>>(),
     )?;
-    d.set_item("seeds", found.iter().map(|f| f.seeds).collect::<Vec<_>>())?;
     d.set_item(
-        "ln_pvalue",
-        found.iter().map(|f| f.ln_pvalue).collect::<Vec<_>>(),
+        "seed_pairs",
+        found.iter().map(|f| f.seed_pairs).collect::<Vec<_>>(),
+    )?;
+    d.set_item("pvalue", found.iter().map(|f| f.pvalue).collect::<Vec<_>>())?;
+    d.set_item(
+        "log10_pvalue",
+        found.iter().map(|f| f.log10_pvalue).collect::<Vec<_>>(),
     )?;
     d.set_item(
-        "ln_spacing_pvalue",
+        "spacing_pvalue",
+        found.iter().map(|f| f.spacing_pvalue).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "log10_spacing_pvalue",
         found
             .iter()
-            .map(|f| f.ln_spacing_pvalue)
+            .map(|f| f.log10_spacing_pvalue)
             .collect::<Vec<_>>(),
     )?;
     Ok((

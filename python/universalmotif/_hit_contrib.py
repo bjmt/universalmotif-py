@@ -90,6 +90,8 @@ class HitContributions:
         return f"HitContributions({what}, {self.width} wide with flanks of {self.flank})"
 
     def __getitem__(self, key: Any) -> HitContributions:
+        if isinstance(key, pl.Series) and key.dtype in (pl.String, pl.Categorical, pl.Enum):
+            key = key.cast(pl.String).to_list()
         if isinstance(key, str) or (isinstance(key, Sequence) and key and all(isinstance(k, str) for k in key)):
             names = [key] if isinstance(key, str) else list(key)
             if "motif" not in self.hits.columns:
@@ -102,7 +104,8 @@ class HitContributions:
         else:
             if isinstance(key, pl.Series):
                 key = key.to_numpy()
-            rows = np.asarray(key)
+            # An empty key picks no hits, whatever type numpy gives it.
+            rows = np.asarray(key) if len(key) else np.zeros(0, dtype=np.int64)
             if rows.dtype == bool:
                 if rows.shape != (len(self),):
                     raise IndexError(f"a mask must have one value for each of the {len(self)} hits")

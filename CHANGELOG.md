@@ -135,6 +135,32 @@ New:
 
 Fixes:
 
+- Sequences given as bytes are read as letters, where they were scanned,
+  counted and shuffled as their printed form (`b'ACGT'`), and `None`,
+  numbers and arrays among sequences are refused.
+- Arrays of strings are taken as sequences by `shuffle_sequences()`,
+  `implant_motifs()` and the other functions that also take one-hot
+  arrays, rather than refused as malformed one-hot sequences.
+- `merge_motifs()` and `merge_similar()` align motifs narrower than
+  `min_overlap` over their whole width, as comparisons do, rather than
+  leaving them out.
+- `umotif bkg --table` describes the sequences it writes, where without
+  `--seed` it drew a different set for the table, and it uses `-p`.
+- `umotif compare --db` computes q-values over each query's tests against
+  the database, where its own self and query-against-query tests made
+  them too small.
+- `resize_ranges()` keeps a missing summit (`peak` of -1) missing rather
+  than inventing one, and takes `anchor="centre"`.
+- `one_hot()` takes letters beyond Latin-1, as zero columns.
+- `compare_motifs(compare_to=)` and `gapped_motif_finder(k=)` take NumPy
+  integers.
+- `motif_finder()`, `gapped_motif_finder()` and `enrich_motifs()` no
+  longer fail when a sequence is too short to shuffle for the background.
+- Indexing hit contributions with an empty list or a Series of names, and
+  `interaction_effects()` on a region with no pairs, no longer fail.
+- `match_bkg()` from a genome groups targets and windows by width once,
+  where it was quadratic in the number of widths, and `umotif merge
+  --clusters` merges once rather than twice.
 - Command line errors on motif files whose format was recognized from the
   extension or contents name that format and suggest `-f`.
 - `umotif enrich --test` takes `sites`, the name `enrich_motifs()` uses,

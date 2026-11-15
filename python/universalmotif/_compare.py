@@ -302,7 +302,7 @@ def compare_motifs(
                                   complete, method, overhang)
         return np.array(d[matrix_out], dtype=float)
 
-    targets = [compare_to] if isinstance(compare_to, (int, str)) else list(compare_to)
+    targets = [compare_to] if isinstance(compare_to, (int, np.integer, str)) else list(compare_to)
     queries = []
     for t in targets:
         if isinstance(t, str):
@@ -512,6 +512,15 @@ def merge_similar(
     >>> um.merge_similar([v1, v2, gbox], return_clusters=True)["cluster"].to_list()
     [0, 0, 1]
     """
+    ms, clusters, merged = _merge_similar_run(motifs, qvalue, null, min_overlap, rc, bkg, weighted,
+                                              linkage, nthreads, method, sign, min_score, stacklevel=2)
+    return _clusters_table(ms, clusters) if return_clusters else merged
+
+
+def _merge_similar_run(motifs, qvalue, null, min_overlap, rc, bkg, weighted, linkage, nthreads, method,
+                       sign, min_score, stacklevel=2):
+    """The motifs, the cluster of each and the merged motifs, which
+    merge_similar() returns one or the other of."""
     if linkage not in ("single", "complete"):
         raise ValueError("linkage must be 'single' or 'complete'")
     nthreads = _nthreads(nthreads)
@@ -528,15 +537,17 @@ def merge_similar(
         metric, sign == "ignore", min_score,
     )
     for note in notes:
-        warnings.warn(note, stacklevel=2)
-    if return_clusters:
-        if not ms:
-            return pl.DataFrame(schema={"name": pl.String, "motif_i": pl.UInt32, "cluster": pl.Int64})
-        return summarize_motifs(ms).with_columns(
-            pl.Series("motif_i", list(range(len(ms))), dtype=pl.UInt32),
-            pl.Series("cluster", clusters, dtype=pl.Int64),
-        )
-    return merged
+        warnings.warn(note, stacklevel=stacklevel + 1)
+    return ms, clusters, merged
+
+
+def _clusters_table(ms, clusters) -> pl.DataFrame:
+    if not ms:
+        return pl.DataFrame(schema={"name": pl.String, "motif_i": pl.UInt32, "cluster": pl.Int64})
+    return summarize_motifs(ms).with_columns(
+        pl.Series("motif_i", list(range(len(ms))), dtype=pl.UInt32),
+        pl.Series("cluster", clusters, dtype=pl.Int64),
+    )
 
 
 @dataclass(frozen=True)

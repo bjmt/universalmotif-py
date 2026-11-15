@@ -191,11 +191,18 @@ def one_hot(
         raise ValueError("the sequences must all have the same length")
     if len(set(alphabet)) != len(alphabet):
         raise ValueError("the alphabet has repeated letters")
+    if any(ord(c) > 255 for c in alphabet.upper() + alphabet.lower()):
+        raise ValueError("the alphabet's letters must be single-byte (Latin-1) characters")
     table = np.full(256, -1, dtype=np.int16)
     for i, letter in enumerate(alphabet):
         table[ord(letter.upper())] = i
         table[ord(letter.lower())] = i
-    codes = table[np.frombuffer("".join(seqs).encode("latin-1"), dtype=np.uint8)]
+    # Letters beyond Latin-1 become "?", outside the alphabet like any other
+    # stray letter, so that each letter stays one byte.
+    text = "".join(seqs).encode("latin-1", "replace")
+    if "?" in alphabet:
+        raise ValueError("'?' cannot be a letter of the alphabet")
+    codes = table[np.frombuffer(text, dtype=np.uint8)]
     codes = codes.reshape(len(seqs), lengths.pop())
     out = np.zeros((codes.shape[0], len(alphabet), codes.shape[1]), dtype=dtype)
     # One channel at a time, which needs no index arrays.

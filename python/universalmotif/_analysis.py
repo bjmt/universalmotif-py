@@ -150,12 +150,26 @@ def _make_unique(names: list[str]) -> list[str]:
     return out
 
 
+def _as_text(s) -> str:
+    """One sequence as a string: bytes are decoded, and objects such as
+    Biopython's ``Seq`` give their letters through ``str()``, but numbers,
+    arrays and ``None`` are refused rather than scanned as their printed
+    form."""
+    if isinstance(s, str):
+        return s
+    if isinstance(s, (bytes, bytearray, memoryview)):
+        return bytes(s).decode("latin-1")
+    if s is None or isinstance(s, (int, float, np.ndarray, np.generic)):
+        raise TypeError(f"sequences must be strings, not {type(s).__name__}")
+    return str(s)
+
+
 def _sequence_pairs(sequences) -> tuple[list[str], list[str]]:
-    if isinstance(sequences, str):
-        return ["seq1"], [sequences]
+    if isinstance(sequences, (str, bytes, bytearray)):
+        return ["seq1"], [_as_text(sequences)]
     if isinstance(sequences, Mapping):
-        return [str(k) for k in sequences], [str(v) for v in sequences.values()]
-    seqs = [str(s) for s in sequences]
+        return [str(k) for k in sequences], [_as_text(v) for v in sequences.values()]
+    seqs = [_as_text(s) for s in sequences]
     return [f"seq{i + 1}" for i in range(len(seqs))], seqs
 
 

@@ -3,7 +3,6 @@ length between them."""
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping, Sequence
 
 import numpy as np
@@ -22,13 +21,13 @@ _GAPPED_SCHEMA = {
     "min_gap": pl.Int64,
     "max_gap": pl.Int64,
     "k": pl.Int64,
-    "seed": pl.String,
+    "seed_pair": pl.String,
     "seqs_pos": pl.Int64,
     "seqs_neg": pl.Int64,
     "n_pos": pl.Int64,
     "n_neg": pl.Int64,
     "candidates": pl.Int64,
-    "seeds": pl.Int64,
+    "seed_pairs": pl.Int64,
     "pvalue": pl.Float64,
     "log10_pvalue": pl.Float64,
     "spacing_pvalue": pl.Float64,
@@ -47,7 +46,7 @@ def gapped_motif_finder(
     stop_pvalue: float = 1e-3,
     flank: int = 3,
     min_ic: float = 0.5,
-    n_seeds: int = 6,
+    n_seed_pairs: int = 6,
     min_fraction: float = 0.02,
     holdout: float = 0.3,
     mismatch: bool = False,
@@ -65,7 +64,7 @@ def gapped_motif_finder(
     sequences are counted in the sequences and in the background, by default
     dinucleotide shuffles of the sequences, and tested for enrichment with
     Fisher's exact test, for each k-mer size. For each size, each of the
-    ``n_seeds`` most enriched distinct pairs, over the window of spacings
+    ``n_seed_pairs`` most enriched distinct pairs, over the window of spacings
     that gives it, seeds a motif: its sites, with ``flank`` letters on
     either side of each part, make a gapped motif, refined by rescanning and
     trimmed of columns below ``min_ic`` bits at either end. The spacer sizes
@@ -115,17 +114,17 @@ def gapped_motif_finder(
         above, is at most this, in (0, 1]. With ``holdout`` at 0, the
         enrichment of its hits must reach this too.
     flank
-        The letters added on either side of each part of a seed.
+        The letters added on either side of each part of a seed pair.
     min_ic
         Columns with fewer bits than this are trimmed from the ends of each
         part, and parts grow into columns with at least this many.
-    n_seeds
-        The seeds built into motifs for each k-mer size and each motif
-        found.
+    n_seed_pairs
+        The most enriched pairs of k-mers built into motifs for each k-mer
+        size and each motif found.
     min_fraction
         Test only pairs found in at least this fraction of the sequences,
-        from 0 to 1, and in at least 5. Lower values find rarer motifs at the cost of
-        more tests to correct for.
+        from 0 to 1, and in at least 5. Lower values find rarer motifs at
+        the cost of more tests to correct for.
     holdout
         The fraction of the sequences, and of the background, set aside to
         test the motifs found in the rest, at least 0 and below 0.9. With 0,
@@ -157,14 +156,15 @@ def gapped_motif_finder(
     polars.DataFrame
         A DataFrame in order of discovery, with the motifs in an object
         column ``motif`` alongside ``name``, ``consensus``, ``left``,
-        ``right``, ``min_gap``, ``max_gap``, ``k``, ``seed``, ``seqs_pos``,
-        ``seqs_neg``, ``n_pos``, ``n_neg``, ``candidates``, ``seeds``,
-        ``pvalue``, ``log10_pvalue``, ``spacing_pvalue`` and
+        ``right``, ``min_gap``, ``max_gap``, ``k``, ``seed_pair``,
+        ``seqs_pos``, ``seqs_neg``, ``n_pos``, ``n_neg``, ``candidates``,
+        ``seed_pairs``, ``pvalue``, ``log10_pvalue``, ``spacing_pvalue`` and
         ``log10_spacing_pvalue``. ``left`` and ``right`` are the widths of
-        the two parts, ``k`` and ``seed`` give the k-mer size and the pair
-        each motif grew from, and ``candidates`` and ``seeds`` count the
-        pairs and seeds tried at that size. The motifs are gapped PPMs named
-        ``gapped1``, ``gapped2`` and so on, and the consensus shows the gap
+        the two parts, ``k`` and ``seed_pair`` give the k-mer size and the
+        pair each motif grew from, and ``candidates`` and ``seed_pairs``
+        count the pairs tested and built into motifs at that size. The
+        motifs are gapped PPMs named ``gapped_1``, ``gapped_2`` and so on,
+        and the consensus shows the gap
         as ``[min-max]``. ``seqs_pos`` and ``seqs_neg`` count sequences with
         a hit; the P-values are those described above.
 
@@ -192,7 +192,7 @@ def gapped_motif_finder(
     neg = None if bkg_sequences is None else list(_sequence_pairs(bkg_sequences)[1])
     ks = [int(k)] if isinstance(k, (int, np.integer)) else [int(x) for x in k]
     found, info = _core._gapped_motif_finder(
-        list(pos), neg, ks, min_gap, max_gap, nmotifs, hit_pvalue, stop_pvalue, flank, min_ic, n_seeds,
+        list(pos), neg, ks, min_gap, max_gap, nmotifs, hit_pvalue, stop_pvalue, flank, min_ic, n_seed_pairs,
         min_fraction, holdout, mismatch, mask, rc, shuffle_k, _seed(seed), _nthreads(nthreads),
     )
     motifs = list(found)
@@ -204,17 +204,17 @@ def gapped_motif_finder(
         "min_gap": [m.mingap[0] for m in motifs],
         "max_gap": [m.maxgap[0] for m in motifs],
         "k": info["k"],
-        "seed": info["seed"],
+        "seed_pair": info["seed_pair"],
         "seqs_pos": info["seqs_pos"],
         "seqs_neg": info["seqs_neg"],
         "n_pos": info["n_pos"],
         "n_neg": info["n_neg"],
         "candidates": info["candidates"],
-        "seeds": info["seeds"],
-        "pvalue": [math.exp(x) for x in info["ln_pvalue"]],
-        "log10_pvalue": [x / math.log(10) for x in info["ln_pvalue"]],
-        "spacing_pvalue": [math.exp(x) for x in info["ln_spacing_pvalue"]],
-        "log10_spacing_pvalue": [x / math.log(10) for x in info["ln_spacing_pvalue"]],
+        "seed_pairs": info["seed_pairs"],
+        "pvalue": info["pvalue"],
+        "log10_pvalue": info["log10_pvalue"],
+        "spacing_pvalue": info["spacing_pvalue"],
+        "log10_spacing_pvalue": info["log10_spacing_pvalue"],
     }
     df = pl.DataFrame(cols, schema=_GAPPED_SCHEMA)
     return df.with_columns(pl.Series("motif", motifs, dtype=pl.Object))

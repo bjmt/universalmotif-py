@@ -157,7 +157,7 @@ def _chrom_lengths(genome) -> dict[str, int]:
 def resize_ranges(
     ranges,
     width: int,
-    anchor: str = "center",
+    anchor: str = "centre",
     genome=None,
     out_of_bounds: str = "drop",
 ) -> pl.DataFrame:
@@ -179,7 +179,8 @@ def resize_ranges(
     width
         The width of every range.
     anchor
-        ``"center"``, ``"start"``, ``"end"`` or ``"summit"``. A centre falls
+        ``"centre"`` (also spelt ``"center"``), ``"start"``, ``"end"`` or
+        ``"summit"``. A centre falls
         on the boundary between two bases, rounding up when the range and
         the width differ by an odd number. Start and end follow the strand,
         so that the start of a range on the ``-`` strand is its last base.
@@ -212,8 +213,10 @@ def resize_ranges(
     """
     if isinstance(width, bool) or not isinstance(width, int) or width < 1:
         raise ValueError("width must be a whole number above 0")
-    if anchor not in ("center", "start", "end", "summit"):
-        raise ValueError("anchor must be 'center', 'start', 'end' or 'summit'")
+    if anchor == "center":
+        anchor = "centre"
+    if anchor not in ("centre", "start", "end", "summit"):
+        raise ValueError("anchor must be 'centre', 'start', 'end' or 'summit'")
     if out_of_bounds not in ("drop", "trim", "keep"):
         raise ValueError("out_of_bounds must be 'drop', 'trim' or 'keep'")
     df = _ranges_frame(ranges)
@@ -227,7 +230,7 @@ def resize_ranges(
     start, end = pl.col("start").cast(pl.Int64), pl.col("end").cast(pl.Int64)
     centred = start + (end - start - width + 1) // 2
     minus = pl.col("strand").cast(pl.String) == "-" if "strand" in df.columns else pl.lit(False)
-    if anchor == "center":
+    if anchor == "centre":
         new = centred
     elif anchor == "start":
         new = pl.when(minus).then(end - width).otherwise(start)
@@ -240,7 +243,9 @@ def resize_ranges(
     out = df.with_columns(new.alias("_new_start"))
     if "peak" in out.columns:
         shifted = start + pl.col("peak").cast(pl.Int64) - pl.col("_new_start")
-        out = out.with_columns(pl.when((shifted >= 0) & (shifted < width)).then(shifted).otherwise(None)
+        # A peak of -1, or none, means no summit, which stays missing.
+        has = pl.col("peak").is_not_null() & (pl.col("peak") >= 0)
+        out = out.with_columns(pl.when(has & (shifted >= 0) & (shifted < width)).then(shifted).otherwise(None)
                                .alias("peak"))
     out = out.with_columns(pl.col("_new_start").alias("start"),
                            (pl.col("_new_start") + width).alias("end")).drop("_new_start")

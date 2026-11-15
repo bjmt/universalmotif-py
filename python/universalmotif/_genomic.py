@@ -697,9 +697,16 @@ def match_bkg(
         gc_u = gc_w.tolist()
         picked = [0] * (n_per_target * n_targets)
         fallbacks = 0
-        for g, w in enumerate(sorted(set(target_w))):
-            ti = [i for i, x in enumerate(target_w) if x == w]
-            ui = [i for i, x in enumerate(window_w) if x == w]
+        # Targets and windows grouped by width in one pass each.
+        by_t: dict[int, list[int]] = {}
+        for i, x in enumerate(target_w):
+            by_t.setdefault(x, []).append(i)
+        by_u: dict[int, list[int]] = {}
+        for i, x in enumerate(window_w):
+            by_u.setdefault(x, []).append(i)
+        for g, w in enumerate(sorted(by_t)):
+            ti = by_t[w]
+            ui = by_u.get(w, [])
             if not ui:
                 raise ValueError(f"no windows of width {w} could be drawn; try more n_candidates")
             specs = [(nm, [t[i] for i in ti], [u[i] for i in ui], b, ty)

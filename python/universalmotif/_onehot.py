@@ -24,7 +24,11 @@ class _ArrayForm:
 
 
 def _is_array(x: Any) -> bool:
-    return isinstance(x, np.ndarray) or (hasattr(x, "detach") and hasattr(x, "shape"))
+    """Whether sequences are one-hot numbers, as a numeric array or a tensor,
+    rather than an array of strings."""
+    if isinstance(x, np.ndarray):
+        return x.dtype.kind in "biuf"
+    return hasattr(x, "detach") and hasattr(x, "shape")
 
 
 def _letters_middle(x: Any, alphabet: str) -> tuple[np.ndarray, _ArrayForm]:

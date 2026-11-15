@@ -23,7 +23,7 @@ def test_finds_a_planted_direct_repeat(planted):
     assert (top["n_pos"], top["n_neg"]) == (400, 400)
     assert top["log10_spacing_pvalue"] < -3 and top["spacing_pvalue"] < 1e-3
     m = top["motif"]
-    assert m.isgapped and m.name == "gapped1" and m.gaploc == [6]
+    assert m.isgapped and m.name == "gapped_1" and m.gaploc == [6]
     hits = um.scan_sequences(m, planted, no_overlaps=True)
     assert hits["sequence_i"].n_unique() > 150
 
