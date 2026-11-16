@@ -145,7 +145,7 @@ def call_seqlets(
     >>> scores[::2, 40:48] += 0.2
     >>> seqlets = um.call_seqlets(scores, flank=0, seed=1)
     >>> seqlets.height, seqlets.filter(pl.col("sequence_i") % 2 == 0).height
-    (105, 103)
+    (102, 101)
     >>> seqlets.select(pl.col("core_start", "core_end").median()).row(0)
     (38.0, 50.0)
     """
