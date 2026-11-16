@@ -39,6 +39,9 @@ these together on the outputs of a published model.
 
 ## Finding motifs in contribution scores
 
+[`contribution_motifs()`][universalmotif.contribution_motifs] finds the
+motifs a model relies on in one call, from its contribution scores, by way
+of the functions below.
 [`call_seqlets()`][universalmotif.call_seqlets] calls seqlets, the short
 stretches of high contribution, in a model's scores, and their letters can
 go to [`motif_finder()`][universalmotif.motif_finder] to find the motifs the
@@ -57,6 +60,10 @@ the model.
 model relied on each TF-MoDISco pattern, by matching CWMs against the
 contribution scores of every input, with thresholds for each pattern from
 its own seqlets by [`modisco_thresholds()`][universalmotif.modisco_thresholds].
+
+::: universalmotif.contribution_motifs
+
+::: universalmotif.ContributionMotifs
 
 ::: universalmotif.call_seqlets
 

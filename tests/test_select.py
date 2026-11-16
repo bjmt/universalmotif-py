@@ -64,6 +64,9 @@ def test_select_leaves_out_similar_motifs(data):
     other = um.select_motifs(ms, data["seqs"], max_similarity=0.99, compare_as=stand_ins, min_gain=0)
     assert other.filter(pl.col("motif") == "AP-1, longer")["similar_to"][0] == "GATA"
     assert other.filter(pl.col("motif") == "GATA")["kept"][0]
+    # A single motif is kept whatever the cutoff.
+    one = um.select_motifs([data["ap1"]], data["seqs"], max_similarity=0.5)
+    assert one["kept"].to_list() == [True]
 
 
 def test_select_inputs_and_errors(data):

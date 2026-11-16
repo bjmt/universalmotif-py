@@ -469,6 +469,7 @@ def _motif_finder(
 ) -> tuple[list[Motif], dict[str, Any]]: ...
 def _call_seqlets(
     scores: list[Any],
+    decoys: list[Any] | None,
     threshold: float,
     min_len: int,
     max_len: int,

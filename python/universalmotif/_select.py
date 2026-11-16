@@ -180,7 +180,9 @@ def select_motifs(
         cmp = ms if compare_as is None else [_check_motif(m) for m in compare_as]
         if len(cmp) != len(ms):
             raise ValueError(f"compare_as has {len(cmp)} motifs for {len(ms)} motifs")
-        similarity = np.asarray(compare_motifs(cmp, nthreads=nthreads), dtype=float).tolist()
+        # A single motif has nothing to be like.
+        similarity = (np.asarray(compare_motifs(cmp, nthreads=nthreads), dtype=float).tolist() if len(cmp) > 1
+                      else [[1.0]] * len(cmp))
     elif compare_as is not None:
         raise ValueError("compare_as needs max_similarity")
     out = _core._select_motifs(ms, seqs, _sites_of(sites, names), similarity, pvalue, min_gain, min_overlap,

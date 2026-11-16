@@ -34,11 +34,18 @@ New:
   change motif sites in a genome.
 - A new guide, variant analysis, scores the ClinVar variants of the
   β-globin promoters against JASPAR motifs and prepares them for a model.
+- `contribution_motifs()` finds the motifs a sequence model relies on from
+  its contribution scores in one call: seqlets, `motif_finder()` on them
+  and, with hypothetical scores, on their idealized letters, then
+  refinement and selection. On a chromBPNet model it recovers about as
+  many of the model's published TF-MoDISco patterns as TF-MoDISco does on
+  the same regions, in 12 seconds against 40 minutes.
 - `call_seqlets()` calls seqlets in a sequence model's contribution scores:
   stretches whose total, and the total of every stretch inside them, is
   unlikely under a null from the scores themselves, kept down to a false
-  discovery rate estimated from shuffled scores. On the scores of a
-  chromBPNet model, `motif_finder()` on its seqlets, then
+  discovery rate estimated from decoys: the model's scores for shuffled
+  sequences when given, and otherwise the scores shuffled. On the scores
+  of a chromBPNet model, `motif_finder()` on its seqlets, then
   `refine_motifs()`, gives motifs that reach more held-out seqlets than
   TF-MoDISco's patterns, in about 8 seconds where TF-MoDISco takes 40
   minutes.

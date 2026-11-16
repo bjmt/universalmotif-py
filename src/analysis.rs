@@ -885,11 +885,12 @@ fn _scan_contributions<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (scores, threshold, min_len, max_len, flank, fdr, sign, n_bins, seed, nthreads))]
+#[pyo3(signature = (scores, decoys, threshold, min_len, max_len, flank, fdr, sign, n_bins, seed, nthreads))]
 #[allow(clippy::too_many_arguments)]
 fn _call_seqlets<'py>(
     py: Python<'py>,
     scores: Vec<PyReadonlyArray1<'py, f64>>,
+    decoys: Option<Vec<PyReadonlyArray1<'py, f64>>>,
     threshold: f64,
     min_len: usize,
     max_len: usize,
@@ -911,6 +912,8 @@ fn _call_seqlets<'py>(
         }
     };
     let x: Vec<Vec<f64>> = scores.iter().map(|a| a.as_array().to_vec()).collect();
+    let d: Option<Vec<Vec<f64>>> =
+        decoys.map(|v| v.iter().map(|a| a.as_array().to_vec()).collect());
     let opts = SeqletOptions {
         threshold,
         min_len,
@@ -922,7 +925,9 @@ fn _call_seqlets<'py>(
         seed,
         nthreads,
     };
-    let found = py.detach(|| call_seqlets(&x, &opts)).map_err(err)?;
+    let found = py
+        .detach(|| call_seqlets(&x, d.as_deref(), &opts))
+        .map_err(err)?;
     let d = PyDict::new(py);
     d.set_item(
         "sequence_i",

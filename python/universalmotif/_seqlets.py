@@ -32,6 +32,8 @@ def _observed(contributions: Any, sequences: Any) -> tuple[list[np.ndarray], lis
 def call_seqlets(
     contributions: Any,
     sequences: Any = None,
+    decoys: Any = None,
+    decoy_sequences: Any = None,
     threshold: float = 0.01,
     min_len: int = 4,
     max_len: int = 25,
@@ -58,9 +60,17 @@ def call_seqlets(
 
     The null for each length comes from the distribution of the scores
     themselves, so a set share of stretches passes even in noise. With
-    ``fdr``, the same calls are made on the scores shuffled within each
-    sequence, and seqlets are kept down to the total at which these decoys
-    make up at most ``fdr`` of the seqlets passing.
+    ``fdr``, the same calls are made on decoy scores, and seqlets are kept
+    down to the total at which the decoys' seqlets, counted as if the decoys
+    had as many positions as the scores, make up at most ``fdr`` of those
+    passing. The best decoys are the model's own contributions for
+    sequences with nothing to find, such as shuffled versions of the
+    sequences from
+    [`shuffled_references()`][universalmotif.shuffled_references], which
+    show how the model treats sequence without sites. Without them, each
+    sequence's scores shuffled stand in, which keep the scores' values but
+    not the model's view of empty sequence, and let through more seqlets
+    of weak contribution.
 
     The seqlets can go straight to
     [`motif_finder()`][universalmotif.motif_finder], as the sequences of
@@ -82,6 +92,9 @@ def call_seqlets(
         The sequences the scores are for, as text or one-hot encoded, to
         pick the letters present from scores of every letter, and to give
         each seqlet's letters.
+    decoys, decoy_sequences
+        Decoy scores, and their sequences when needed, in the same forms
+        as ``contributions`` and ``sequences``.
     threshold
         The P-value every stretch inside a seqlet must reach.
     min_len, max_len
@@ -145,7 +158,8 @@ def call_seqlets(
     if flank < 0:
         raise ValueError("flank must be zero or positive")
     rows, names, codes = _observed(contributions, sequences)
-    out = _core._call_seqlets(rows, threshold, min_len, max_len, flank, fdr, sign, n_bins, _seed(seed),
+    decoy_rows = None if decoys is None else _observed(decoys, decoy_sequences)[0]
+    out = _core._call_seqlets(rows, decoy_rows, threshold, min_len, max_len, flank, fdr, sign, n_bins, _seed(seed),
                               _nthreads(nthreads))
     seq_i = np.asarray(out["sequence_i"], dtype=np.int64)
     df = pl.DataFrame({
