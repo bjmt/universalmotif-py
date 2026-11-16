@@ -266,6 +266,21 @@ def _hit_sequences(hits: pl.DataFrame, scores: _Scores) -> np.ndarray:
     return idx
 
 
+def _mean_importance_quantile(projected: np.ndarray, lengths: np.ndarray, width: int = 20,
+                              q: float = 0.97) -> float:
+    """The ``q`` quantile of the mean absolute score per position over every
+    window of ``width`` positions in the scores, each sequence counting only
+    its own length."""
+    per_pos = np.abs(projected).sum(axis=1, dtype=np.float64)
+    cum = np.concatenate([np.zeros((per_pos.shape[0], 1)), np.cumsum(per_pos, axis=1)], axis=1)
+    means = []
+    for row, n in zip(cum, lengths):
+        w = min(width, int(n))
+        if w > 0:
+            means.append((row[w:n + 1] - row[:n + 1 - w]) / w)
+    return float(np.quantile(np.concatenate(means), q)) if means else 0.0
+
+
 def _per_motif(value: Any, names: list[str], what: str) -> list[float]:
     """One value of a threshold for each motif, from one for all, a value per
     motif or a mapping from motif names."""
@@ -308,8 +323,8 @@ def scan_contributions(
     motifs: Motif | Sequence[Motif],
     contributions: Any,
     sequences: Any = None,
-    min_similarity: Any = 0.7,
-    min_importance: Any = 0.5,
+    min_similarity: Any = None,
+    min_importance: Any = None,
     thresholds: Any = None,
     rc: bool = True,
     normalize: bool = False,
@@ -319,6 +334,7 @@ def scan_contributions(
     no_overlaps_across_strands: bool = True,
     no_overlaps_across_motifs: bool = False,
     nthreads: int | None = None,
+    hypothetical: bool = False,
 ) -> pl.DataFrame:
     """Find motif hits in the contribution scores a sequence model gives its
     inputs, by matching CWMs against the scores.
@@ -366,10 +382,27 @@ def scan_contributions(
     hits work on them. [`genomic_hits()`][universalmotif.genomic_hits] moves
     them to the genome, given the regions the scores came from.
 
+    With ``hypothetical``, each window is matched instead by the model's
+    hypothetical scores, those every letter would have had at each position,
+    which say which letters the model wants there even where a site has the
+    wrong one. They are compared, after centring each position so that only
+    the preferences among letters count, with the motif centred the same
+    way. The motifs can then be CWMs, best built from hypothetical scores,
+    or motifs of any other type, such as those of a database, matched
+    through their log2 probabilities; JASPAR's vertebrate motifs, matched
+    this way against the hypothetical scores of an ENCODE ATAC-seq model,
+    called hits as precisely as the model's own TF-MoDISco CWMs matched
+    against its observed scores, and named the right family of factor at
+    nine in ten of the sites of its eight commonest patterns, though less
+    often for families whose motifs look alike. Importance still comes from the
+    observed scores, so a hit is a site the model both relied on and wants
+    to look like the motif.
+
     Parameters
     ----------
     motifs
-        DNA CWMs, the contributions of a typical site of each motif.
+        DNA CWMs, the contributions of a typical site of each motif, or with
+        ``hypothetical`` motifs of any type.
     contributions, sequences
         The scores, in any form
         [`hit_contributions()`][universalmotif.hit_contributions] takes,
@@ -377,14 +410,24 @@ def scan_contributions(
         or an array of shape (sequences, 4, length). Hypothetical scores of
         every letter, or observed scores of one per position, need the
         ``sequences`` to pick the letters present; scores of every letter
-        given without them are taken to be projected already.
+        given without them are taken to be projected already. With
+        ``hypothetical``, they must be hypothetical scores of every letter,
+        with their sequences.
     min_similarity
-        The least cosine between a window's scores and the CWM, from -1 to
-        1.
+        The least cosine between a window's scores and the motif, from -1 to
+        1; 0.7 by default. Probabilistic motifs matched with
+        ``hypothetical`` differ in shape from contributions where they are
+        loose, so theirs is 0.5 by default.
     min_importance
         The least importance of a window, as a fraction of the sum of the
-        CWM's absolute values. A CWM from TF-MoDISco is the average of its
-        seqlets, so 1 is about the importance of a typical seqlet.
+        CWM's absolute values, 0.5 by default. A CWM from TF-MoDISco is the
+        average of its seqlets, so 1 is about the importance of a typical
+        seqlet. With ``hypothetical``, a CWM's is a fraction of the sum of
+        its columns' largest absolute values, the importance of a site with
+        its favoured letters. Other motifs carry no scale, so theirs is the
+        least mean absolute observed score per position, by default the
+        97th percentile of that mean over every window of 20 positions in
+        the scores given.
     thresholds
         Per-motif thresholds as a table with ``motif``, ``min_similarity``
         and ``min_importance`` columns, such as ``modisco_thresholds()``
@@ -423,6 +466,9 @@ def scan_contributions(
     nthreads
         Threads to use, by default the package setting from
         [`set_nthreads()`][universalmotif.set_nthreads].
+    hypothetical
+        Match the hypothetical scores of every letter rather than the
+        observed ones, as described above.
 
     Returns
     -------
@@ -478,13 +524,24 @@ def scan_contributions(
             raise ValueError("thresholds names a motif more than once")
         min_similarity = dict(zip(table["motif"], table["min_similarity"]))
         min_importance = dict(zip(table["motif"], table["min_importance"]))
+    # Probabilistic motifs matched against hypothetical scores have defaults
+    # of their own.
+    loose = [hypothetical and m.type != "CWM" for m in ms]
+    if min_similarity is None:
+        min_similarity = [0.5 if x else 0.7 for x in loose]
     smin = _per_motif(min_similarity, names, "min_similarity")
-    imin = _per_motif(min_importance, names, "min_importance")
-    if any(np.isnan(v) for v in smin + imin):
-        raise ValueError("thresholds cannot be NaN, as they are for patterns without seqlets")
 
     scores = _gather_scores(contributions, sequences, None)
     values, codes = scores.values, scores.codes
+    hyp = None
+    if hypothetical:
+        if values.ndim != 3 or codes is None:
+            raise ValueError("hypothetical matching needs the hypothetical scores of every letter, of shape "
+                             "(sequences, 4, length), and their sequences")
+        if not ((values != 0).sum(axis=1) > 1).any():
+            raise ValueError("the scores have at most one letter with a score at each position, as observed "
+                             "scores do; hypothetical matching needs the scores of every letter")
+        hyp = np.ascontiguousarray(values, dtype=np.float32)
     if values.ndim == 2:
         if codes is None:
             raise ValueError("observed scores of one value per position need the sequences, to "
@@ -500,8 +557,16 @@ def scan_contributions(
         target = np.median(rms[rms > 0]) if (rms > 0).any() else 1.0
         factor = np.where(rms > 0, np.maximum(1.0, target / np.where(rms > 0, rms, 1.0)), 1.0)
         projected = (projected * factor[:, None, None].astype(np.float32)).astype(np.float32, copy=False)
+        if hyp is not None:
+            hyp = (hyp * factor[:, None, None].astype(np.float32)).astype(np.float32, copy=False)
+    if min_importance is None:
+        min_importance = [_mean_importance_quantile(projected, scores.lengths) if x else 0.5 for x in loose] \
+            if any(loose) else 0.5
+    imin = _per_motif(min_importance, names, "min_importance")
+    if any(np.isnan(v) for v in smin + imin):
+        raise ValueError("thresholds cannot be NaN, as they are for patterns without seqlets")
     motif_i, seq_i, start, end, minus, score, similarity, importance, gapped = _core._scan_contributions(
-        ms, projected, scores.lengths.tolist(), smin, imin, rc, use_gaps, _nthreads(nthreads))
+        ms, projected, scores.lengths.tolist(), smin, imin, rc, use_gaps, _nthreads(nthreads), hyp)
     letters = (_window_letters(codes, projected, seq_i.astype(np.int64), start, end, minus)
                if len(seq_i) else np.empty(0, dtype=object))
     for row, sizes in gapped:

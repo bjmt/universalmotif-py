@@ -759,9 +759,12 @@ fn _scan_contributions<'py>(
     rc: bool,
     use_gaps: bool,
     nthreads: usize,
+    hypothetical: Option<numpy::PyReadonlyArray3<'py, f32>>,
 ) -> PyResult<ContribColumns<'py>> {
     use numpy::{IntoPyArray, PyUntypedArrayMethods};
-    use universalmotif::contributions::{ContribScanOptions, ContribThreshold, scan_contributions};
+    use universalmotif::contributions::{
+        ContribScanOptions, ContribThreshold, scan_contributions, scan_hypothetical,
+    };
 
     let motifs = unwrap(&motifs);
     let shape = scores.shape();
@@ -787,8 +790,25 @@ fn _scan_contributions<'py>(
         use_gaps,
         nthreads,
     };
+    let hyp = match &hypothetical {
+        Some(h) => {
+            if h.shape() != shape {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "the hypothetical and projected scores must have the same shape",
+                ));
+            }
+            Some(
+                h.as_slice()
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?,
+            )
+        }
+        None => None,
+    };
     let hits = py
-        .detach(|| scan_contributions(&motifs, values, &lengths, width, &thresholds, &opts))
+        .detach(|| match hyp {
+            Some(h) => scan_hypothetical(&motifs, h, values, &lengths, width, &thresholds, &opts),
+            None => scan_contributions(&motifs, values, &lengths, width, &thresholds, &opts),
+        })
         .map_err(err)?;
     let col = |f: &dyn Fn(&universalmotif::contributions::ContribHit) -> f64| -> Vec<f64> {
         hits.iter().map(f).collect()

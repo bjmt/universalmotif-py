@@ -13,6 +13,10 @@ New:
   `UNIVERSALMOTIF_PROGRESS` set the default. The `scan`, `enrich`, `find`,
   `find-gapped` and `shuffle` commands show it on a terminal, with
   `--progress` and `--no-progress` to choose.
+- `scan_contributions(hypothetical=True)` matches the model's hypothetical
+  scores, the letters it wants at each position, against CWMs or against
+  motifs of any type, so that database motifs can be matched against a
+  model's scores directly.
 
 ## 0.5.0 (2026-11-15)
 
