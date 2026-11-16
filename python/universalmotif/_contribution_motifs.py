@@ -501,6 +501,17 @@ def contribution_motifs(
     took two minutes on two threads, with a peak of 2.6 GB, half of it the
     scores and sequences themselves.
 
+    Scores from a model's profile head are spikier than those of its counts
+    head, a few strong positions with weak ones between, and the default
+    seqlets, every stretch of 4 or more of whose positions must stand out,
+    miss many of their sites. Seqlets called with
+    ``call_seqlets(scores, sequences, min_len=2, threshold=0.05)`` and given
+    as ``seqlets`` suit them better: on the profile head of the K562 model,
+    over 30,000 regions, they recovered 23 of its 73 published patterns at
+    a cosine of 0.8 against 12 with the defaults. TF-MoDISco's profile-head
+    patterns are wide, with much of their weight in the flanks, and many
+    are matched by our motifs only in their cores.
+
     The motifs found in different samples of regions differ mostly in the
     rarer ones: in three random 70% samples of the 30,000 regions, the
     same 25 published patterns were recovered every time and up to four
