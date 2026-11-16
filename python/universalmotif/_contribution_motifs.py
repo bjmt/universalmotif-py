@@ -118,7 +118,8 @@ class ContributionMotifs:
                nthreads: int | None = None) -> str:
         """A report of the patterns as one self-contained HTML page, like
         TF-MoDISco's: for each pattern, the logos of its leading motif's CWM
-        and PPM, the seqlets it reaches, its hits, and with a ``database``
+        and of its PPM as information content, the seqlets it reaches, its
+        hits, and with a ``database``
         such as JASPAR the ``top`` database motifs it resembles most by
         [`name_motifs()`][universalmotif.name_motifs], then each of its
         members. The page is returned, and written to ``path`` when one is
@@ -146,7 +147,7 @@ class ContributionMotifs:
                    + (f", with {n_hits:,} hits in all the regions" if counts else "") + ".</p>")
         out.append(_REPORT_KEY)
         head = [("", ""), ("Pattern", ""), ("Seqlets", "and their share of all seqlets"),
-                *([("Hits", "")] if counts else []), ("CWM", ""), ("PPM", ""),
+                *([("Hits", "")] if counts else []), ("CWM", ""), ("ICM", ""),
                 *([("Database matches", "closest database motifs, with q-values")] if names is not None else []),
                 ("Motifs", "")]
         out.append('<div class="wrap"><table class="pats"><thead><tr>'
@@ -203,7 +204,8 @@ class ContributionMotifs:
 _REPORT_KEY = """<dl class="key">
 <dt>Seqlets</dt><dd>How many seqlets (short stretches the model scores highly) contain the pattern.</dd>
 <dt>Hits</dt><dd>How many sites in all the regions the model scores like the pattern's CWM.</dd>
-<dt>CWM, PPM</dt><dd>What the model weighs at each position, and which letters occur there.</dd>
+<dt>CWM</dt><dd>What the model weighs at each position.</dd>
+<dt>ICM</dt><dd>Which letters occur at each position, scaled by information content (bits).</dd>
 <dt>Motifs</dt><dd>The spellings of the pattern found separately; click to see them.</dd>
 </dl>
 """
