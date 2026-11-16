@@ -961,6 +961,82 @@ def _mutagenesis_region(sequence: str, region: tuple[int, int] | None) -> tuple[
     return a, b
 
 
+def idealize_sequences(
+    sequences: Any,
+    hypothetical: Any,
+    threshold: float = 0.01,
+    sign: str = "positive",
+    alphabet: str = "ACGT",
+) -> Any:
+    """Sequences with each letter swapped for the one a model prefers there,
+    where it prefers another by more than ``threshold``.
+
+    ``hypothetical`` holds a model's hypothetical contribution scores, the
+    score of every letter at every position, as an array of shape
+    (sequences, letters, length) or (sequences, length, letters), or as a
+    [`ContributionScores`][universalmotif.ContributionScores] holding them.
+    At each position the letter scoring highest, or lowest with
+    ``sign="negative"``, replaces the letter present when it scores more
+    than ``threshold`` above it (or below it). Letters outside ``alphabet``,
+    such as N, are left as they are.
+
+    Degenerate sites, whose letters vary too much for any one word to be
+    common, become their ideal form, so that discovery on idealized seqlets
+    can find motifs it misses on the real ones, such as spaced palindromes.
+    The motifs found describe what the model wants rather than what the
+    genome holds, so rebuilding them from the real sequences, with
+    [`refine_motifs()`][universalmotif.refine_motifs], fits them to the
+    sites they stand for.
+
+    Returns the sequences in the form given: a string, a list of strings or
+    a mapping from names to strings.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> import universalmotif as um
+    >>> hyp = np.zeros((1, 4, 6))
+    >>> hyp[0, 2, 1] = 0.5  # G is wanted at position 1
+    >>> hyp[0, 0, 3] = 0.005  # A only slightly at position 3
+    >>> um.idealize_sequences("ACCTTT", hyp)
+    'AGCTTT'
+    """
+    if sign not in ("positive", "negative"):
+        raise ValueError("sign must be 'positive' or 'negative'")
+    if isinstance(hypothetical, ContributionScores):
+        hypothetical = hypothetical.scores
+    h = _letters_first(_to_numpy(hypothetical, dtype=None), len(alphabet), "the hypothetical scores")
+    names, seqs = _sequence_pairs(sequences)
+    if h.ndim == 2:
+        h = h[None]
+    if h.shape[0] != len(seqs):
+        raise ValueError(f"hypothetical scores for {h.shape[0]} sequences, but {len(seqs)} sequences")
+    if sign == "negative":
+        h = -h
+    letters = np.frombuffer(alphabet.encode("latin-1"), dtype=np.uint8)
+    lookup = np.full(256, -1, dtype=np.int16)
+    for i, c in enumerate(alphabet):
+        lookup[ord(c.upper())] = lookup[ord(c.lower())] = i
+    out = []
+    for i, seq in enumerate(seqs):
+        if len(seq) > h.shape[-1]:
+            raise ValueError(f"sequence {i} is longer than its scores")
+        raw = np.frombuffer(seq.encode("latin-1", "replace"), dtype=np.uint8).copy()
+        code = lookup[raw]
+        x = np.asarray(h[i, :, :len(seq)], dtype=np.float64)
+        known = code >= 0
+        here = np.where(known, x[np.maximum(code, 0), np.arange(len(seq))], 0.0)
+        best = x.argmax(axis=0)
+        swap = known & (x.max(axis=0) - here > threshold)
+        raw[swap] = letters[best[swap]]
+        out.append(raw.tobytes().decode("latin-1"))
+    if isinstance(sequences, str):
+        return out[0]
+    if isinstance(sequences, Mapping):
+        return dict(zip(names, out))
+    return out
+
+
 def mutagenesis(
     sequence: str,
     alphabet: str = "ACGT",

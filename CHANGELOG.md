@@ -42,6 +42,13 @@ New:
   `refine_motifs()`, gives motifs that reach more held-out seqlets than
   TF-MoDISco's patterns, in about 8 seconds where TF-MoDISco takes 40
   minutes.
+- `motif_finder(stability=4)` reruns the search on random halves of the
+  sequences and gives each motif the share of reruns that find it again,
+  so that motifs other samples would also give can be kept.
+- `idealize_sequences()` rewrites sequences in the letters a model's
+  hypothetical scores prefer, for finding degenerate sites such as spaced
+  palindromes in seqlets, and `HitContributions.to_cwms()` gives the CWMs
+  of motifs' hits.
 - `select_motifs()` ranks motifs greedily by how many new sequences or
   sites, such as a model's seqlets, each reaches, and keeps those adding
   enough, optionally leaving out motifs whose CWMs or other stand-ins are

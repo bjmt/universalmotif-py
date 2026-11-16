@@ -13,6 +13,7 @@ import polars as pl
 
 from . import _core
 from ._analysis import _sequence_pairs, dedup_hits
+from ._api import create_motif
 from ._core import Motif
 from ._deep import ContributionScores, _letters_first, _seqlet_regions, _to_numpy
 from ._plot import _pyplot
@@ -88,6 +89,66 @@ class HitContributions:
         if motifs:
             what += f" of {motifs:,} motif{'s' if motifs != 1 else ''}"
         return f"HitContributions({what}, {self.width} wide with flanks of {self.flank})"
+
+    def to_cwms(self, hypothetical: bool = False) -> list[Motif]:
+        """One CWM per motif, the mean contribution of each letter at each
+        position of its hits, and with ``hypothetical`` of their flanks too.
+
+        From the observed scores, each position's score goes to the letter
+        of the hit there, read from the hits' ``match`` column, as
+        [`scan_sequences()`][universalmotif.scan_sequences] gives it. With
+        ``hypothetical``, the mean hypothetical scores of every letter are
+        used instead, which needs them kept by
+        [`hit_contributions()`][universalmotif.hit_contributions]. The
+        CWMs are named after their motifs, in the order the motifs first
+        appear, with ``nsites`` the number of hits. Gapped hits, whose
+        widths vary, are left out.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> import polars as pl
+        >>> import universalmotif as um
+        >>> hits = pl.DataFrame({"motif": ["a", "a"], "sequence_i": [0, 1], "start": [1, 1], "end": [3, 3],
+        ...                      "strand": ["+", "+"], "match": ["AC", "AG"]})
+        >>> hc = um.hit_contributions(hits, np.array([[0.0, 1.0, 0.5, 0.0], [0.0, 0.8, 0.2, 0.0]]))
+        >>> cwm = hc.to_cwms()[0]
+        >>> cwm.matrix.round(2).tolist()
+        [[0.9, 0.0], [0.0, 0.25], [0.0, 0.1], [0.0, 0.0]]
+        """
+        if "motif" not in self.hits.columns:
+            raise ValueError("the hits have no motif column")
+        if hypothetical and self.hypothetical is None:
+            raise ValueError("hypothetical scores were not kept; call hit_contributions() with hypothetical=True")
+        if not hypothetical and "match" not in self.hits.columns:
+            raise ValueError("the hits have no match column to read their letters from")
+        out = []
+        widths = (self.hits["end"] - self.hits["start"]).to_numpy()
+        motif = self.hits["motif"].cast(pl.String)
+        for name in motif.unique(maintain_order=True).to_list():
+            rows = np.flatnonzero((motif == name).to_numpy())
+            w = widths[rows]
+            if (w != w[0]).any():
+                continue
+            cols = int(w[0]) + 2 * self.flank
+            if hypothetical:
+                values = np.nanmean(self.hypothetical[rows, :, :cols], axis=0)
+            else:
+                letters = self.hits["match"][rows].to_list()
+                onehot = np.zeros((len(rows), len(_LETTERS), cols))
+                lookup = {c: i for i, c in enumerate(_LETTERS)}
+                for r, word in enumerate(letters):
+                    for j, c in enumerate(word.upper().replace("U", "T")):
+                        i = lookup.get(c)
+                        if i is not None and self.flank + j < cols:
+                            onehot[r, i, self.flank + j] = 1
+                obs = np.nan_to_num(self.observed[rows, :cols])
+                values = (onehot * obs[:, None, :]).mean(axis=0)
+                if self.flank:
+                    # The letters of the flanks are not in the matches.
+                    values = values[:, self.flank:cols - self.flank]
+            out.append(create_motif(values, alphabet="DNA", type="CWM", name=name, nsites=len(rows)))
+        return out
 
     def __getitem__(self, key: Any) -> HitContributions:
         if isinstance(key, pl.Series) and key.dtype in (pl.String, pl.Categorical, pl.Enum):

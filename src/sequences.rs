@@ -11,7 +11,10 @@ use universalmotif::finder::{FinderOptions, motif_finder};
 use universalmotif::gapped::{GappedFinderOptions, gapped_motif_finder};
 use universalmotif::kmer::{self, BkgOptions, WindowOptions};
 use universalmotif::sample::{self, ImplantMode, ImplantOptions};
-use universalmotif::select::{RefineOptions, SelectOptions, Site, refine_motifs, select_motifs};
+use universalmotif::select::{
+    RefineOptions, SelectOptions, Site, StabilityOptions, motif_stability, refine_motifs,
+    select_motifs,
+};
 use universalmotif::shuffle::{self, ShuffleMethod, ShuffleOptions};
 
 use pyo3_arrow::PyTable;
@@ -588,6 +591,55 @@ fn _refine_motifs(
     ))
 }
 
+#[pyfunction]
+#[pyo3(signature = (motifs, seqs, negatives, min_width, max_width, nmotifs, hit_pvalue, stop_pvalue, qvalue, dedup_overlap, rc, shuffle_k, seed, pseudocount, nthreads, rounds, fraction, min_similarity))]
+#[allow(clippy::too_many_arguments)]
+fn _motif_stability(
+    py: Python<'_>,
+    motifs: Vec<PyRef<'_, PyMotif>>,
+    seqs: Vec<PyBackedStr>,
+    negatives: Option<Vec<PyBackedStr>>,
+    min_width: usize,
+    max_width: usize,
+    nmotifs: usize,
+    hit_pvalue: f64,
+    stop_pvalue: f64,
+    qvalue: f64,
+    dedup_overlap: f64,
+    rc: bool,
+    shuffle_k: usize,
+    seed: u64,
+    pseudocount: u32,
+    nthreads: usize,
+    rounds: usize,
+    fraction: f64,
+    min_similarity: f64,
+) -> PyResult<Vec<f64>> {
+    let motifs: Vec<Motif> = motifs.iter().map(|m| m.inner.clone()).collect();
+    let finder = FinderOptions {
+        min_width,
+        max_width,
+        nmotifs,
+        hit_pvalue,
+        stop_pvalue,
+        qvalue,
+        dedup_overlap,
+        rc,
+        shuffle_k,
+        seed,
+        pseudocount,
+        nthreads,
+    };
+    let opts = StabilityOptions {
+        rounds,
+        fraction,
+        min_similarity,
+        seed,
+    };
+    py.detach(|| motif_stability(&motifs, &seqs, negatives.as_deref(), &finder, &opts))
+        .map_err(err)
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_kmers, m)?)?;
     m.add_function(wrap_pyfunction!(_count_kmers, m)?)?;
@@ -604,6 +656,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_motif_finder, m)?)?;
     m.add_function(wrap_pyfunction!(_select_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_refine_motifs, m)?)?;
+    m.add_function(wrap_pyfunction!(_motif_stability, m)?)?;
     m.add_function(wrap_pyfunction!(_gapped_motif_finder, m)?)?;
     Ok(())
 }

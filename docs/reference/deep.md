@@ -45,13 +45,22 @@ go to [`motif_finder()`][universalmotif.motif_finder] to find the motifs the
 model relies on, with
 [`refine_motifs()`][universalmotif.refine_motifs] and
 [`select_motifs()`][universalmotif.select_motifs] then fitting the motifs
-to the seqlets and keeping those that reach enough of them.
+to the seqlets and keeping those that reach enough of them. Degenerate
+sites, such as spaced palindromes, can be found from seqlets rewritten in
+the letters the model prefers by
+[`idealize_sequences()`][universalmotif.idealize_sequences], with the
+motifs then refined on the real sequences, and
+[`HitContributions.to_cwms()`][universalmotif.HitContributions.to_cwms]
+gives the CWMs of motifs' hits, for leaving out motifs that are the same to
+the model.
 [`scan_contributions()`][universalmotif.scan_contributions] finds where a
 model relied on each TF-MoDISco pattern, by matching CWMs against the
 contribution scores of every input, with thresholds for each pattern from
 its own seqlets by [`modisco_thresholds()`][universalmotif.modisco_thresholds].
 
 ::: universalmotif.call_seqlets
+
+::: universalmotif.idealize_sequences
 
 ::: universalmotif.scan_contributions
 

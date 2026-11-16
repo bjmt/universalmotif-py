@@ -842,6 +842,8 @@ def motif_finder(
     pseudocount: int = 1,
     nthreads: int | None = None,
     progress: bool | None = None,
+    stability: int = 0,
+    stability_fraction: float = 0.5,
 ) -> pl.DataFrame:
     """Discover motifs enriched in DNA or RNA sequences.
 
@@ -917,6 +919,16 @@ def motif_finder(
         Show a progress bar on stderr once the call has run for a second,
         and let Ctrl-C stop it; by default the package setting from
         [`set_progress()`][universalmotif.set_progress].
+    stability, stability_fraction
+        With ``stability`` above 0, rerun the search that many times, each
+        on a random ``stability_fraction`` of the sequences and of the
+        background with the same options, and give each motif the share of
+        reruns that find a motif with a similarity of at least 0.9 to it, as
+        [`compare_motifs()`][universalmotif.compare_motifs] scores it by
+        default. Motifs found in most reruns are those the search would
+        find again in other data, so keeping them makes the motifs found
+        from one sample of sequences to the next more alike; the reruns
+        take about as long again as the search, each.
 
     Returns
     -------
@@ -930,7 +942,8 @@ def motif_finder(
         as E-values. ``seqs_pos`` and ``seqs_neg`` count sequences with a
         hit, and ``sites_pos`` and ``sites_neg`` count hits.
         ``log10_pvalue`` and ``log10_qvalue`` stay finite when the P-values
-        are too small for a double.
+        are too small for a double. With ``stability``, a ``stability``
+        column gives the share of reruns that found each motif again.
 
     References
     ----------
@@ -965,30 +978,23 @@ def motif_finder(
         raise ValueError("shuffle_k must be at least 1")
     if pseudocount < 0:
         raise ValueError("pseudocount must be non-negative")
+    if stability < 0 or not 0 < stability_fraction < 1:
+        raise ValueError("stability must be zero or positive, and stability_fraction above 0 and below 1")
     _, seqs = _sequence_pairs(sequences)
     neg = None if bkg_sequences is None else _sequence_pairs(bkg_sequences)[1]
     if rc is None:
         rc = not any("U" in s or "u" in s for s in seqs)
-    motifs, cols = _core._motif_finder(
-        seqs,
-        neg,
-        min_width,
-        max_width,
-        nmotifs,
-        hit_pvalue,
-        stop_pvalue,
-        qvalue,
-        dedup_overlap,
-        rc,
-        shuffle_k,
-        _seed(seed),
-        pseudocount,
-        nthreads,
-    )
+    seed = _seed(seed)
+    args = (min_width, max_width, nmotifs, hit_pvalue, stop_pvalue, qvalue, dedup_overlap, rc, shuffle_k, seed,
+            pseudocount, nthreads)
+    motifs, cols = _core._motif_finder(seqs, neg, *args)
     cols["name"] = [m.name for m in motifs]
     cols["consensus"] = [m.consensus or "" for m in motifs]
     cols["nsites"] = [m.nsites for m in motifs]
     df = pl.DataFrame({k: cols[k] for k in _FINDER_SCHEMA}, schema=_FINDER_SCHEMA)
+    if stability:
+        st = _core._motif_stability(motifs, seqs, neg, *args, stability, stability_fraction, 0.9) if motifs else []
+        df = df.with_columns(pl.Series("stability", st, dtype=pl.Float64))
     return df.with_columns(pl.Series("motif", motifs, dtype=pl.Object))
 
 
