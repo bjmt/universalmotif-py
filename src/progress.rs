@@ -41,7 +41,10 @@ impl PyProgress {
 /// Call `f` with `progress` as the handle that the functions it calls on
 /// this thread report to.
 #[pyfunction]
-fn _with_progress<'py>(progress: &PyProgress, f: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+fn _with_progress<'py>(
+    progress: &PyProgress,
+    f: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
     with_progress(&progress.0, || f.call0())
 }
 
