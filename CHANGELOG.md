@@ -34,6 +34,14 @@ New:
   change motif sites in a genome.
 - A new guide, variant analysis, scores the ClinVar variants of the
   β-globin promoters against JASPAR motifs and prepares them for a model.
+- `select_motifs()` ranks motifs greedily by how many new sequences or
+  sites, such as a model's seqlets, each reaches, and keeps those adding
+  enough, optionally leaving out motifs whose CWMs or other stand-ins are
+  too similar to one kept. `refine_motifs()` rebuilds motifs from their
+  hits, widened and trimmed, with each site going to the motif matching it
+  best. On attribution scores of a chromBPNet model, the two turn the 56
+  motifs `motif_finder()` finds in seqlets into 17 that reach as many
+  held-out seqlets as TF-MoDISco's 17 patterns, in seconds.
 - `view_motifs()` marks the gaps of gapped motifs with a dashed line
   labelled with the gap sizes.
 - `scan_sequences()`, `match_motifs()`, `enrich_motifs()`,

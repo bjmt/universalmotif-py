@@ -1,6 +1,6 @@
 # Enrichment and discovery
 
-Testing motifs for enrichment, co-occurrence and positional enrichment in a set of sequences, and finding new motifs *de novo*.
+Testing motifs for enrichment, co-occurrence and positional enrichment in a set of sequences, finding new motifs *de novo*, and choosing and refining the motifs found.
 
 ::: universalmotif.enrich_motifs
 
@@ -13,3 +13,7 @@ Testing motifs for enrichment, co-occurrence and positional enrichment in a set 
 ::: universalmotif.motif_finder
 
 ::: universalmotif.gapped_motif_finder
+
+::: universalmotif.select_motifs
+
+::: universalmotif.refine_motifs

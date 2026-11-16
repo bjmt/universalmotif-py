@@ -11,6 +11,7 @@ use universalmotif::finder::{FinderOptions, motif_finder};
 use universalmotif::gapped::{GappedFinderOptions, gapped_motif_finder};
 use universalmotif::kmer::{self, BkgOptions, WindowOptions};
 use universalmotif::sample::{self, ImplantMode, ImplantOptions};
+use universalmotif::select::{RefineOptions, SelectOptions, Site, refine_motifs, select_motifs};
 use universalmotif::shuffle::{self, ShuffleMethod, ShuffleOptions};
 
 use pyo3_arrow::PyTable;
@@ -484,6 +485,109 @@ fn _motif_finder<'py>(
     ))
 }
 
+fn sites_from(sites: Option<Vec<(usize, usize, usize)>>) -> Option<Vec<Site>> {
+    sites.map(|v| {
+        v.into_iter()
+            .map(|(sequence, start, end)| Site {
+                sequence,
+                start,
+                end,
+            })
+            .collect()
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (motifs, sequences, sites, similarity, pvalue, min_gain, min_overlap, max_similarity, rc, nthreads))]
+#[allow(clippy::too_many_arguments)]
+fn _select_motifs<'py>(
+    py: Python<'py>,
+    motifs: Vec<PyRef<'py, PyMotif>>,
+    sequences: Vec<PyBackedStr>,
+    sites: Option<Vec<(usize, usize, usize)>>,
+    similarity: Option<Vec<Vec<f64>>>,
+    pvalue: f64,
+    min_gain: f64,
+    min_overlap: usize,
+    max_similarity: Option<f64>,
+    rc: bool,
+    nthreads: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    let motifs: Vec<Motif> = motifs.iter().map(|m| m.inner.clone()).collect();
+    let sites = sites_from(sites);
+    let opts = SelectOptions {
+        pvalue,
+        min_gain,
+        min_overlap,
+        max_similarity,
+        rc,
+        nthreads,
+    };
+    let sel = py
+        .detach(|| {
+            select_motifs(
+                &motifs,
+                &sequences,
+                sites.as_deref(),
+                similarity.as_deref(),
+                &opts,
+            )
+        })
+        .map_err(err)?;
+    let d = PyDict::new(py);
+    d.set_item("n_targets", sel.n_targets)?;
+    d.set_item("targets", sel.targets)?;
+    d.set_item("rank", sel.rank)?;
+    d.set_item("gain", sel.gain)?;
+    d.set_item("cumulative", sel.cumulative)?;
+    d.set_item("kept", sel.kept)?;
+    d.set_item("similar_to", sel.similar_to)?;
+    Ok(d)
+}
+
+#[pyfunction]
+#[pyo3(signature = (motifs, sequences, sites, pvalue, flank, iterations, competitive, min_ic, max_width, min_sites, min_overlap, rc, nthreads))]
+#[allow(clippy::too_many_arguments)]
+fn _refine_motifs(
+    py: Python<'_>,
+    motifs: Vec<PyRef<'_, PyMotif>>,
+    sequences: Vec<PyBackedStr>,
+    sites: Option<Vec<(usize, usize, usize)>>,
+    pvalue: f64,
+    flank: usize,
+    iterations: usize,
+    competitive: bool,
+    min_ic: f64,
+    max_width: usize,
+    min_sites: usize,
+    min_overlap: usize,
+    rc: bool,
+    nthreads: usize,
+) -> PyResult<(Vec<PyMotif>, Vec<usize>)> {
+    let motifs: Vec<Motif> = motifs.iter().map(|m| m.inner.clone()).collect();
+    let sites = sites_from(sites);
+    let opts = RefineOptions {
+        pvalue,
+        flank,
+        iterations,
+        competitive,
+        min_ic,
+        max_width,
+        min_sites,
+        min_overlap,
+        rc,
+        nthreads,
+    };
+    let out = py
+        .detach(|| refine_motifs(&motifs, &sequences, sites.as_deref(), &opts))
+        .map_err(err)?;
+    let used = out.iter().map(|r| r.sites).collect();
+    Ok((
+        out.into_iter().map(|r| PyMotif::from(r.motif)).collect(),
+        used,
+    ))
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_kmers, m)?)?;
     m.add_function(wrap_pyfunction!(_count_kmers, m)?)?;
@@ -498,6 +602,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_sample_sites, m)?)?;
     m.add_function(wrap_pyfunction!(_implant_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_motif_finder, m)?)?;
+    m.add_function(wrap_pyfunction!(_select_motifs, m)?)?;
+    m.add_function(wrap_pyfunction!(_refine_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_gapped_motif_finder, m)?)?;
     Ok(())
 }

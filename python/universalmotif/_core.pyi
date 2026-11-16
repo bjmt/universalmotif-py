@@ -467,6 +467,33 @@ def _motif_finder(
     pseudocount: int,
     nthreads: int,
 ) -> tuple[list[Motif], dict[str, Any]]: ...
+def _select_motifs(
+    motifs: list[Motif],
+    sequences: list[str],
+    sites: list[tuple[int, int, int]] | None,
+    similarity: list[list[float]] | None,
+    pvalue: float,
+    min_gain: float,
+    min_overlap: int,
+    max_similarity: float | None,
+    rc: bool,
+    nthreads: int,
+) -> dict[str, Any]: ...
+def _refine_motifs(
+    motifs: list[Motif],
+    sequences: list[str],
+    sites: list[tuple[int, int, int]] | None,
+    pvalue: float,
+    flank: int,
+    iterations: int,
+    competitive: bool,
+    min_ic: float,
+    max_width: int,
+    min_sites: int,
+    min_overlap: int,
+    rc: bool,
+    nthreads: int,
+) -> tuple[list[Motif], list[int]]: ...
 def _gapped_motif_finder(
     seqs: list[str],
     negatives: list[str] | None,
