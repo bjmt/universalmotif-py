@@ -96,7 +96,8 @@ def call_seqlets(
     n_bins
         The bins the scores are counted in to build the null.
     seed
-        Seed for the shuffles.
+        Seed for the shuffles behind ``fdr``, so that the seqlets kept near
+        the cutoff are the same from run to run.
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
@@ -128,9 +129,9 @@ def call_seqlets(
     >>> rng = np.random.default_rng(1)
     >>> scores = rng.normal(0, 0.01, (200, 100))
     >>> scores[::2, 40:48] += 0.2
-    >>> seqlets = um.call_seqlets(scores, flank=0)
+    >>> seqlets = um.call_seqlets(scores, flank=0, seed=1)
     >>> seqlets.height, seqlets.filter(pl.col("sequence_i") % 2 == 0).height
-    (102, 101)
+    (105, 103)
     >>> seqlets.select(pl.col("core_start", "core_end").median()).row(0)
     (38.0, 50.0)
     """
