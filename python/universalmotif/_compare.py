@@ -369,6 +369,103 @@ def _check_sign(sign: str, cwm: bool) -> None:
         raise ValueError("sign='ignore' applies to COSINE and CJACCARD only")
 
 
+def name_motifs(
+    motifs: Motif | Iterable[Motif],
+    database: Iterable[Motif],
+    top: int = 3,
+    qvalue: float = 0.05,
+    min_overlap: int = 5,
+    nthreads: int | None = None,
+) -> pl.DataFrame:
+    """The motifs of a database, such as JASPAR, that each motif resembles
+    most, to name the factors behind motifs found by discovery.
+
+    Each motif is compared with every database motif as
+    [`compare_motifs()`][universalmotif.compare_motifs] does with
+    ``complete=True``, the TOMTOM way of scoring the whole of the query,
+    which picks the same best match as TOMTOM for most motifs. Matches are
+    ranked by P-value, and their q-values are corrected for the number of
+    database motifs each motif was compared with, so that a motif's
+    matches mean the same whatever else was named alongside it. Up to
+    ``top`` matches with a q-value of at most ``qvalue`` are kept for each
+    motif. Gapped motifs are compared with their gaps, as by
+    ``compare_motifs()``.
+
+    Parameters
+    ----------
+    motifs
+        The motifs to name.
+    database
+        The motifs to name them by, such as those of
+        [`read_meme()`][universalmotif.read_meme] for a JASPAR file. Their
+        ``altname``, usually the factor's name, is given beside their
+        ``name``.
+    top
+        The most matches to keep for each motif.
+    qvalue
+        The largest q-value of a match kept.
+    min_overlap
+        The fewest positions two motifs must share to be compared.
+    nthreads
+        Threads to use, by default the package setting from
+        [`set_nthreads()`][universalmotif.set_nthreads].
+
+    Returns
+    -------
+    polars.DataFrame
+        One row per match, by motif and then rank: ``motif`` and
+        ``motif_i``, the motif's name and position in ``motifs``, ``rank``
+        from 1, ``match`` and ``altname``, the database motif's names,
+        ``score``, ``pvalue``, ``qvalue``, ``strand``, the strand of the
+        database motif that matches, ``offset``, and the two consensus
+        sequences. Motifs with no match pass have no rows.
+
+    Examples
+    --------
+    >>> import universalmotif as um
+    >>> db = [um.create_motif("TGACTCA", name="MA0099", altname="FOS::JUN"),
+    ...       um.create_motif("AGATAA", name="MA0035", altname="GATA1"),
+    ...       um.create_motif("CACGTG", name="MA0004", altname="Arnt")]
+    >>> found = [um.create_motif("ATGAGTCAT", name="pos_1"), um.create_motif("CTTATCT", name="pos_2")]
+    >>> um.name_motifs(found, db, top=1, qvalue=1).select("motif", "match", "altname").rows()
+    [('pos_1', 'MA0099', 'FOS::JUN'), ('pos_2', 'MA0035', 'GATA1')]
+    """
+    ms, db = _motif_list(motifs), _motif_list(database)
+    if not ms or not db:
+        raise ValueError("give at least one motif and one database motif")
+    if top < 1:
+        raise ValueError("top must be at least 1")
+    nq = len(ms)
+    queries = [m.replace(name=f"q{i}") for i, m in enumerate(ms)]
+    targets = [m.replace(name=f"d{j}") for j, m in enumerate(db)]
+    cmp = compare_motifs(queries + targets, compare_to=list(range(nq)), qvalue=1, complete=True,
+                         min_overlap=min_overlap, nthreads=nthreads)
+    cmp = cmp.filter(pl.col("target_i") >= nq).with_columns(
+        motif_i=pl.col("subject_i").cast(pl.Int64), db_i=(pl.col("target_i") - nq).cast(pl.Int64))
+    schema = {"motif": pl.String, "motif_i": pl.Int64, "rank": pl.Int64, "match": pl.String,
+              "altname": pl.String, "score": pl.Float64, "pvalue": pl.Float64, "qvalue": pl.Float64,
+              "strand": pl.String, "offset": pl.Int64, "consensus": pl.String, "match_consensus": pl.String}
+    if not cmp.height:
+        return pl.DataFrame(schema=schema)
+    # Benjamini-Hochberg over every database motif, within each query.
+    m = len(db)
+    cmp = cmp.sort("motif_i", "pvalue", pl.col("score"), descending=[False, False, True]).with_columns(
+        _r=pl.int_range(1, pl.len() + 1).over("motif_i"))
+    cmp = cmp.with_columns(
+        qvalue=(pl.col("pvalue") * m / pl.col("_r")).reverse().cum_min().reverse().over("motif_i").clip(upper_bound=1.0))
+    cmp = (cmp.filter(pl.col("qvalue") <= qvalue)
+           .with_columns(rank=pl.int_range(1, pl.len() + 1).over("motif_i"))
+           .filter(pl.col("rank") <= top))
+    return cmp.select(
+        motif=pl.col("motif_i").map_elements(lambda i: ms[i].name, return_dtype=pl.String),
+        motif_i="motif_i", rank=pl.col("rank").cast(pl.Int64),
+        match=pl.col("db_i").map_elements(lambda j: db[j].name, return_dtype=pl.String),
+        altname=pl.col("db_i").map_elements(lambda j: db[j].altname or "", return_dtype=pl.String),
+        score="score", pvalue="pvalue", qvalue="qvalue", strand="strand",
+        offset=pl.col("offset").cast(pl.Int64), consensus="subject_consensus", match_consensus="target_consensus",
+    ).cast(schema)
+
+
 def merge_motifs(
     motifs: Iterable[Motif],
     min_overlap: int = 5,
@@ -881,4 +978,4 @@ def motif_tree(
     return _tree(d, labs, linkage, ms)
 
 
-__all__ = ["MotifTree", "compare_motifs", "merge_motifs", "merge_similar", "motif_tree"]
+__all__ = ["MotifTree", "compare_motifs", "merge_motifs", "merge_similar", "motif_tree", "name_motifs"]

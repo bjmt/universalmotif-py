@@ -4,6 +4,8 @@ Comparing motifs with one another, merging similar ones, and building trees from
 
 ::: universalmotif.compare_motifs
 
+::: universalmotif.name_motifs
+
 ::: universalmotif.compare_columns
 
 ::: universalmotif.merge_motifs

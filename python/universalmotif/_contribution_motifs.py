@@ -3,8 +3,12 @@ discovery in them, refinement and selection, in one call."""
 
 from __future__ import annotations
 
+import html
+import os
+import pathlib
 import re
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -54,6 +58,8 @@ class ContributionMotifs:
     and ``seqlets`` the seqlets they were found in and chosen to reach.
     ``ppms`` and ``cwms`` give the motifs as lists, ``thresholds`` their hit
     thresholds, and ``hits`` holds the hits of the CWMs in the scores.
+    ``patterns`` gathers motifs with similar CWMs, such as spellings of
+    one factor's site, under the one that reaches the most seqlets.
     """
 
     motifs: pl.DataFrame
@@ -77,11 +83,138 @@ class ContributionMotifs:
         """The CWMs of the motifs' hits in the seqlets."""
         return self.motifs["cwm"].to_list()
 
+    @property
+    def patterns(self) -> pl.DataFrame:
+        """One row per pattern, in order of the seqlets its representative
+        reaches: its ``pattern`` name, ``sign``, ``representative`` (the
+        member reaching the most seqlets) and that motif's ``consensus``,
+        ``seqlets``, PPM in ``motif`` and CWM in ``cwm``, the names of all its
+        ``members``, the representative first, and ``gain``, the share of the
+        seqlets its members add between them."""
+        t = self.motifs.with_row_index("_row")
+        rep = (t.sort("seqlets", "_row", descending=[True, False])
+               .group_by("pattern", maintain_order=True).first())
+        members = (t.sort("seqlets", "_row", descending=[True, False]).group_by("pattern", maintain_order=True)
+                   .agg(members=pl.col("name"), gain=pl.col("gain").sum()))
+        return (rep.select("pattern", "sign", representative="name", consensus="consensus", seqlets="seqlets",
+                           motif="motif", cwm="cwm")
+                .join(members, on="pattern", maintain_order="left")
+                .select("pattern", "sign", "representative", "consensus", "seqlets", "members", "gain", "motif",
+                        "cwm"))
+
+    def report(self, path: str | os.PathLike[str] | None = None, database: Iterable[Motif] | None = None,
+               top: int = 3, qvalue: float = 0.05, title: str = "Motifs from contribution scores",
+               nthreads: int | None = None) -> str:
+        """A report of the patterns as one self-contained HTML page, like
+        TF-MoDISco's: for each pattern, the logos of its leading motif's CWM
+        and PPM, the seqlets it reaches, its hits, and with a ``database``
+        such as JASPAR the ``top`` database motifs it resembles most by
+        [`name_motifs()`][universalmotif.name_motifs], then each of its
+        members. The page is returned, and written to ``path`` when one is
+        given.
+        """
+        from ._api import motif_rc
+        from ._compare import name_motifs
+        from ._display import logo_svg
+
+        pats = self.patterns
+        names = None
+        if database is not None and pats.height:
+            db = list(database)
+            names = name_motifs(pats["motif"].to_list(), db, top=top, qvalue=qvalue, nthreads=nthreads)
+            logos = {m.name: m for m in db}
+        counts = {}
+        if self.hits is not None and self.hits.height:
+            counts = dict(self.hits.group_by("motif").len().iter_rows())
+        n_seqlets = self.seqlets.height
+        rows = self.motifs
+        out = [_REPORT_HEAD.replace("__TITLE__", html.escape(title))]
+        out.append(f"<h1>{html.escape(title)}</h1>")
+        n_hits = sum(counts.values())
+        out.append(f'<p class="sum">{pats.height} patterns of {rows.height} motifs, from {n_seqlets:,} seqlets'
+                   + (f", with {n_hits:,} hits" if counts else "") + ".</p>")
+        for k, pat in enumerate(pats.iter_rows(named=True)):
+            members = rows.filter(pl.col("pattern") == pat["pattern"])
+            hits = sum(counts.get(m, 0) for m in pat["members"])
+            out.append('<section class="pat">')
+            out.append(f'<h2>{html.escape(pat["pattern"])} <span>{html.escape(pat["consensus"])}</span></h2>')
+            out.append(f'<p class="facts">{pat["seqlets"]:,} seqlets reached by {html.escape(pat["representative"])}'
+                       f' · {100 * pat["gain"]:.1f}% of seqlets added by its {len(pat["members"])} '
+                       f'member{"s" if len(pat["members"]) != 1 else ""}'
+                       + (f" · {hits:,} hits" if counts else "") + "</p>")
+            out.append('<div class="logos">')
+            out.append(f'<figure><figcaption>CWM</figcaption>{logo_svg(pat["cwm"], height=56)}</figure>')
+            out.append(f'<figure><figcaption>PPM</figcaption>{logo_svg(pat["motif"], height=56)}</figure>')
+            out.append("</div>")
+            if names is not None:
+                found = names.filter(pl.col("motif_i") == k)
+                if found.height:
+                    out.append('<table class="names"><thead><tr><th>Match</th><th>Factor</th><th>q-value</th>'
+                               "<th>Logo</th></tr></thead><tbody>")
+                    for r in found.iter_rows(named=True):
+                        m = logos[r["match"]]
+                        if r["strand"] == "-":
+                            m = motif_rc(m)
+                        out.append(f'<tr><td>{html.escape(r["match"])}</td><td>{html.escape(r["altname"])}</td>'
+                                   f'<td>{r["qvalue"]:.2g}</td><td>{logo_svg(m, height=32, position_width=10)}</td></tr>')
+                    out.append("</tbody></table>")
+                else:
+                    out.append(f'<p class="none">No database motif matches at a q-value of {qvalue:g}.</p>')
+            if members.height > 1:
+                out.append('<details><summary>Members</summary><table class="members"><thead><tr><th>Motif</th>'
+                           "<th>Found in</th><th>Consensus</th><th>Seqlets</th><th>Gain</th><th>Hits</th>"
+                           "<th>CWM</th></tr></thead><tbody>")
+                for r in members.iter_rows(named=True):
+                    out.append(f'<tr><td>{html.escape(r["name"])}</td><td>{html.escape(r["source"])}</td>'
+                               f'<td><code>{html.escape(r["consensus"])}</code></td><td>{r["seqlets"]:,}</td>'
+                               f'<td>{100 * r["gain"]:.2f}%</td><td>{counts.get(r["name"], 0):,}</td>'
+                               f'<td>{logo_svg(r["cwm"], height=32, position_width=10)}</td></tr>')
+                out.append("</tbody></table></details>")
+            out.append("</section>")
+        out.append("</main>")
+        page = "\n".join(out)
+        if path is not None:
+            pathlib.Path(path).write_text(page)
+        return page
+
     def __len__(self) -> int:
         return self.motifs.height
 
     def __repr__(self) -> str:
-        return f"ContributionMotifs({self.motifs.height} motifs from {self.seqlets.height:,} seqlets)"
+        n = self.motifs["pattern"].n_unique() if "pattern" in self.motifs.columns else self.motifs.height
+        return (f"ContributionMotifs({self.motifs.height} motifs in {n} pattern{'s' if n != 1 else ''} "
+                f"from {self.seqlets.height:,} seqlets)")
+
+
+_REPORT_HEAD = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root { --bg: #fbfbfa; --fg: #1f2629; --muted: #5f6b6e; --rule: #d6dcdb; --panel: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #141a1b; --fg: #e3e8e8; --muted: #9aa6a8; --rule: #2f393b; --panel: #1b2325; color-scheme: dark; }
+}
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+       margin: 0; }
+main { max-width: 1000px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 1.7rem; margin: 0 0 6px; }
+.sum, .facts, .none { color: var(--muted); }
+.pat { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px 18px;
+       margin: 18px 0; }
+.pat h2 { font-size: 1.15rem; margin: 0 0 4px; }
+.pat h2 span { font: 500 0.9rem ui-monospace, Menlo, monospace; color: var(--muted); margin-left: 8px; }
+.logos { display: flex; flex-wrap: wrap; gap: 24px; margin: 10px 0; }
+.logos figure { margin: 0; }
+figcaption { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+svg { max-width: 100%; height: auto; display: block; }
+table { border-collapse: collapse; font-size: 0.88rem; margin-top: 8px; }
+th, td { text-align: left; padding: 4px 14px 4px 0; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+th { font-weight: 600; color: var(--muted); }
+details { margin-top: 10px; }
+summary { cursor: pointer; color: var(--muted); }
+code { font-family: ui-monospace, Menlo, monospace; }
+</style></head><body><main>
+"""
 
 
 def _strings(codes: np.ndarray, lengths: np.ndarray) -> list[str]:
@@ -254,6 +387,7 @@ def contribution_motifs(
     max_gap: int = 12,
     hits: bool = True,
     hit_quantile: float = 0.05,
+    pattern_similarity: float | None = 0.8,
     seed: int | None = None,
     nthreads: int | None = None,
     progress: bool | None = None,
@@ -307,6 +441,14 @@ def contribution_motifs(
        similarity and of their importance. Motifs with no hit within a
        seqlet, such as composites, whose parts are often seqlets of their
        own, take the defaults of ``scan_contributions()``.
+
+    Motifs are finally gathered into patterns, as TF-MoDISco gathers
+    seqlets: in order of the seqlets they reach, each motif joins the first
+    pattern whose leading motif's CWM it is at least ``pattern_similarity``
+    like, so that a factor's site found in several spellings becomes one
+    pattern with those spellings as its members. Composites lead patterns
+    of their own. Every motif is kept and scanned for whatever its pattern;
+    the patterns only arrange them.
 
     Each sign of ``sign`` is searched on its own. The defaults aim at
     finding the patterns a model has learned, much as TF-MoDISco does, and
@@ -385,6 +527,10 @@ def contribution_motifs(
     hits, hit_quantile
         Match the CWMs against the scores, and the quantile of their hits
         within the seqlets that sets each motif's thresholds.
+    pattern_similarity
+        The least cosine between two motifs' CWMs for the second to join
+        the first's pattern, or None to give every motif a pattern of its
+        own.
     seed
         Seed for the background, the reruns and the decoy shuffles.
     nthreads
@@ -406,7 +552,8 @@ def contribution_motifs(
         that the motifs up to it reach), ``stability`` with reruns,
         ``min_similarity`` and ``min_importance``, its hit thresholds, and
         the motif as a PPM in ``motif`` and as a CWM in ``cwm``, that of a
-        composite at its commonest spacing. Names of motifs from later
+        composite at its commonest spacing, and ``pattern``, the pattern it
+        belongs to, which ``patterns`` lists. Names of motifs from later
         rounds start with ``r``, and those of composites with ``g``. Its
         ``seqlets`` table holds the seqlets searched, and ``hits`` the hits
         of the CWMs, as ``scan_contributions()`` gives them.
@@ -488,8 +635,9 @@ def contribution_motifs(
                              {r["name"]: r["cwm"] for r in kept}, hit_quantile)
             for r in kept:
                 r["min_similarity"], r["min_importance"] = th.get(r["name"], _DEFAULT_THRESHOLDS)
+            _group(kept, label, pattern_similarity, nthreads)
         rows += kept
-    schema = {"name": pl.String, "sign": pl.String, "source": pl.String, "consensus": pl.String, "width": pl.Int64,
+    schema = {"name": pl.String, "pattern": pl.String, "sign": pl.String, "source": pl.String, "consensus": pl.String, "width": pl.Int64,
               "seqlets": pl.Int64, "gain": pl.Float64, "cumulative": pl.Float64, "stability": pl.Float64,
               "min_similarity": pl.Float64, "min_importance": pl.Float64}
     table = pl.DataFrame([{k: r[k] for k in schema} for r in rows], schema=schema, orient="row")
@@ -614,6 +762,31 @@ def _scan(table: pl.DataFrame, observed: np.ndarray, seqs: list[str], names: lis
     i = hits["sequence_i"].to_numpy()
     label = np.asarray(names, dtype=object)[i] if names else np.char.add("seq", (i + 1).astype(str))
     return hits.with_columns(pl.Series("sequence", label, dtype=pl.String))
+
+
+def _group(kept: list[dict], label: str, similarity: float | None, nthreads: int) -> None:
+    """Give each kept motif a pattern: in order of the seqlets they reach,
+    each motif joins the first pattern whose representative's CWM it is at
+    least ``similarity`` like, by cosine, or starts a pattern of its own.
+    Composites always start their own, as one of their parts is often
+    another pattern."""
+    from ._compare import compare_motifs
+
+    order = sorted(range(len(kept)), key=lambda k: (-kept[k]["seqlets"], k))
+    sim = None
+    if similarity is not None and len(kept) > 1:
+        sim = np.asarray(compare_motifs([r["cwm"] for r in kept], nthreads=nthreads), dtype=float)
+    reps: list[int] = []
+    for k in order:
+        r = kept[k]
+        home = None
+        if sim is not None and r["source"] != "gapped":
+            home = next((j for j in reps if kept[j]["source"] != "gapped" and sim[k, j] >= similarity), None)
+        if home is None:
+            reps.append(k)
+            r["pattern"] = f"{label}_p{len(reps)}"
+        else:
+            r["pattern"] = kept[home]["pattern"]
 
 
 def _narrow(m: Motif, hits: pl.DataFrame) -> Motif | None:

@@ -56,6 +56,14 @@ New:
   palindrome and TAL1–GATA composite among them, in 15 seconds against 40
   minutes, and takes two minutes and 2.6 GB over all 187,000 of its
   regions.
+- `ContributionMotifs.patterns` gathers motifs with similar CWMs into
+  patterns, each led by the motif reaching the most seqlets, as
+  TF-MoDISco gathers seqlets (`pattern_similarity`, 0.8 by default), and
+  `ContributionMotifs.report()` writes the patterns as one HTML page with
+  their logos, seqlets, hits and database matches.
+- `name_motifs()` names motifs by the database motifs, such as JASPAR's,
+  they resemble most, scored the TOMTOM way, with q-values corrected for
+  the size of the database.
 - `call_seqlets()` calls seqlets in a sequence model's contribution scores:
   stretches whose total, and the total of every stretch inside them, is
   unlikely under a null from the scores themselves, kept down to a false

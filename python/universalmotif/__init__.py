@@ -62,7 +62,7 @@ from ._utils import (
     switch_alph,
     ungap,
 )
-from ._compare import MotifTree, compare_motifs, merge_motifs, merge_similar, motif_tree
+from ._compare import MotifTree, compare_motifs, merge_motifs, merge_similar, motif_tree, name_motifs
 from ._api import (
     consensus_to_ppm,
     consensus_to_ppm_aa,
@@ -232,6 +232,7 @@ __all__ = [
     "motif_tree",
     "mutagenesis",
     "mutagenesis_effects",
+    "name_motifs",
     "normalize",
     "one_hot",
     "one_hot_batches",

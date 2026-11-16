@@ -21,8 +21,8 @@ def model():
 def test_finds_the_motifs_the_model_uses(model):
     found = um.contribution_motifs(model["scores"], model["seqs"], seed=1)
     assert isinstance(found, um.ContributionMotifs)
-    assert found.motifs.columns == ["name", "sign", "source", "consensus", "width", "seqlets", "gain", "cumulative",
-                                    "min_similarity", "min_importance", "motif", "cwm"]
+    assert found.motifs.columns == ["name", "pattern", "sign", "source", "consensus", "width", "seqlets", "gain",
+                                    "cumulative", "min_similarity", "min_importance", "motif", "cwm"]
     cons = found.motifs["consensus"].to_list()
     assert any("TGACTCA" in c or "TGAGTCA" in c for c in cons)
     assert any("GATAAG" in c or "CTTATC" in c for c in cons)
@@ -32,6 +32,14 @@ def test_finds_the_motifs_the_model_uses(model):
     gains = found.motifs["gain"].to_list()
     assert gains == sorted(gains, reverse=True)
     assert "ContributionMotifs(" in repr(found)
+    # AP-1 and GATA are patterns of their own, each led by the motif reaching the most seqlets.
+    pats = found.patterns
+    assert pats.columns == ["pattern", "sign", "representative", "consensus", "seqlets", "members", "gain", "motif",
+                            "cwm"]
+    assert pats.height == found.motifs["pattern"].n_unique() >= 2
+    assert sorted(sum(pats["members"].to_list(), [])) == sorted(found.motifs["name"])
+    assert pats["seqlets"].to_list() == sorted(pats["seqlets"], reverse=True)
+    assert abs(pats["gain"].sum() - found.motifs["gain"].sum()) < 1e-9
     # Hits of the CWMs at thresholds set from the seqlets reach most planted sites.
     assert found.thresholds.columns == ["motif", "min_similarity", "min_importance"]
     assert (found.thresholds["min_similarity"] > 0.9).all()
@@ -68,6 +76,10 @@ def test_composites():
     assert comp["min_similarity"].is_not_null().all()
     plain = um.contribution_motifs(scores, seqs, seed=1, gapped=False, rounds=1)
     assert not (plain.motifs["source"] == "gapped").any()
+    # Composites lead patterns of their own; without grouping every motif is a pattern.
+    assert all(len(m) == 1 for m in found.patterns.filter(pl.col("representative").is_in(comp["name"]))["members"])
+    ungrouped = um.contribution_motifs(scores, seqs, seed=1, pattern_similarity=None)
+    assert ungrouped.patterns.height == len(ungrouped)
 
 
 def test_inputs_and_options(model):
@@ -112,3 +124,25 @@ def test_decoys_set_the_seqlet_cut(model):
     quiet = np.random.default_rng(3).normal(0, 0.005, (300, 120))
     assert um.call_seqlets(scores, decoys=loud, sign="positive").height < 20
     assert um.call_seqlets(scores, decoys=quiet, sign="positive").height >= 240
+
+
+def test_report_and_names(model, tmp_path):
+    found = um.contribution_motifs(model["scores"], model["seqs"], seed=1)
+    db = [um.create_motif("TGACTCA", name="MA0099", altname="FOS::JUN"),
+          um.create_motif("AGATAAG", name="MA0035", altname="GATA1"),
+          um.create_motif("CACGTG", name="MA0004", altname="Arnt")]
+    names = um.name_motifs(found.patterns["motif"].to_list(), db, top=2, qvalue=1)
+    best = dict(names.filter(pl.col("rank") == 1).select("consensus", "altname").iter_rows())
+    assert any("TGA" in c and v == "FOS::JUN" for c, v in best.items())
+    assert any("GATA" in c or "TATC" in c for c, v in best.items() if v == "GATA1")
+    assert names.group_by("motif_i").len()["len"].max() <= 2
+    assert (names["qvalue"] >= names["pvalue"]).all()
+    path = tmp_path / "report.html"
+    page = found.report(path, database=db)
+    assert path.read_text() == page and page.startswith("<!doctype html>")
+    assert page.count('class="pat"') == found.patterns.height
+    assert "FOS::JUN" in page and "<svg" in page
+    # Without a database the report still lists the patterns.
+    assert found.report().count('class="pat"') == found.patterns.height
+    with pytest.raises(ValueError, match="top"):
+        um.name_motifs(found.ppms, db, top=0)
