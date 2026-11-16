@@ -51,14 +51,16 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
 - **Single-cell ATAC:** sparse peak by motif match matrices, ready for
   AnnData and chromVAR-style analyses.
 - **Deep learning:** motifs as convolution filters and back, one-hot
-  sequences, TF-MoDISco results read as CWMs, attribution scores drawn
+  sequences, TF-MoDISco results read as CWMs, seqlets and motifs found
+  directly in a model's contribution scores, attribution scores drawn
   along sequences, and batches for in-silico mutagenesis and motif
   insertion experiments.
 - **Comparison:** motif similarity with P-values, merging of similar motifs,
   and trees.
 - **Statistics:** enrichment, co-occurrence, positional enrichment,
   proximity to genomic anchors, composition-matched backgrounds and *de
-  novo* motif discovery, of gapped motifs too.
+  novo* motif discovery, of gapped motifs too, with refinement and
+  selection of the motifs found.
 - **Sequences:** shuffling that keeps k-mer counts, random sequences, k-mer
   backgrounds, complexity, masking and sliding windows.
 - **Command line:** `umotif` runs the main functions on files, for shell
@@ -78,7 +80,9 @@ workflow](guides/chipseq-workflow.ipynb), and [building a motif
 library](guides/building-a-library.ipynb) shows how to combine motifs from
 several databases, while [motifs and deep
 learning](guides/deep-learning.ipynb) reads the patterns and contribution
-scores of a sequence model, and [variant analysis](guides/variants.ipynb)
+scores of a sequence model, [motifs from contribution
+scores](guides/contribution-motifs.ipynb) finds those motifs directly, and
+[variant analysis](guides/variants.ipynb)
 scores how the variants of a VCF file change the motif sites they fall in.
 Every function is described in the
 [API reference](reference/index.md).

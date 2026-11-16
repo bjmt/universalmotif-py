@@ -53,6 +53,7 @@ plugins:
         - guides/building-a-library.ipynb
         - guides/deep-learning.ipynb
         - guides/variants.ipynb
+        - guides/contribution-motifs.ipynb
       include_source: true
       allow_errors: false
       # The cache is keyed on the notebooks alone, so it would keep outputs
@@ -118,6 +119,7 @@ nav:
       - A ChIP-seq workflow: guides/chipseq-workflow.ipynb
       - Building a motif library: guides/building-a-library.ipynb
       - Motifs and deep learning: guides/deep-learning.ipynb
+      - Motifs from contribution scores: guides/contribution-motifs.ipynb
       - Variant analysis: guides/variants.ipynb
   - Command line: command-line.md
   - API reference:

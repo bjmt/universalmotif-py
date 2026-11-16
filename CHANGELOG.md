@@ -39,6 +39,10 @@ New:
   included, to score variants with a model.
 - The `variants` command scores how the variants of a VCF file or table
   change motif sites in a genome.
+- A new guide, motifs from contribution scores, finds the motifs of a
+  chromBPNet model with `contribution_motifs()` and sets them beside the
+  model's TF-MoDISco patterns, and the discovery guide shows
+  `motif_finder(stability=…)`.
 - A new guide, variant analysis, scores the ClinVar variants of the
   β-globin promoters against JASPAR motifs and prepares them for a model.
 - `contribution_motifs()` finds the motifs a sequence model relies on from
