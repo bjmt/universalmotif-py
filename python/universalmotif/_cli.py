@@ -54,8 +54,10 @@ def _stem_suffix(path: str) -> str:
 
 
 def _read_bytes(path: str) -> bytes:
+    from ._io import _gunzip
+
     raw = sys.stdin.buffer.read() if path == "-" else Path(path).read_bytes()
-    return gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw
+    return _gunzip(raw) if raw[:2] == b"\x1f\x8b" else raw
 
 
 def _sniff_format(text: str) -> str:
@@ -604,16 +606,16 @@ def cmd_variants(a):
     motifs = read_motifs(a.motifs, a.format)
     if a.variants != "-" and not Path(a.variants).exists():
         raise CliError(f"no such file: {a.variants}")
-    text = _read_bytes(a.variants).decode()
-    if text.lstrip().startswith(("##fileformat=VCF", "#CHROM")):
+    raw = _read_bytes(a.variants)
+    if raw.lstrip().startswith((b"##fileformat=VCF", b"#CHROM")):
         from ._variants import _vcf_frame
 
         try:
-            variants = _vcf_frame(text, a.variants)
+            variants = _vcf_frame(raw, a.variants)
         except ValueError as e:
             raise CliError(str(e)) from None
     else:
-        variants = pl.read_csv(io.StringIO(text), separator="\t", null_values="NA", infer_schema_length=10000,
+        variants = pl.read_csv(io.BytesIO(raw), separator="\t", null_values="NA", infer_schema_length=10000,
                                comment_prefix="#")
     hits = read_table(a.hits) if a.hits else None
     table = um.variant_motif_effects(variants, open_genome(a.genome), motifs, pvalue=a.pvalue, hits=hits,

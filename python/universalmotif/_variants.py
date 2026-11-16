@@ -9,7 +9,6 @@ import io
 import os
 import warnings
 from collections.abc import Iterable, Mapping
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -80,26 +79,44 @@ def read_vcf(file: str | os.PathLike) -> pl.DataFrame:
     │ chr1  ┆ 204      ┆ null ┆ CTT ┆ C   │
     └───────┴──────────┴──────┴─────┴─────┘
     """
-    raw = Path(file).read_bytes()
-    if raw[:2] == b"\x1f\x8b":
-        raw = gzip.decompress(raw)
-    return _vcf_frame(raw.decode(), file)
+    # Only the lines before the header are read here, and polars reads the
+    # rest, decompressing it itself, so that a large file takes about as
+    # much memory as its table.
+    with open(file, "rb") as fh:
+        gzipped = fh.read(2) == b"\x1f\x8b"
+    with (gzip.open(file, "rb") if gzipped else open(file, "rb")) as fh:
+        skip, _ = _vcf_header(fh, file)
+    return _vcf_table(os.fspath(file), skip, file)
 
 
-def _vcf_frame(text: str, file) -> pl.DataFrame:
-    """The variants in the text of a VCF file."""
+def _vcf_header(lines, file) -> tuple[int, bytes]:
+    """The number of lines before the header of a VCF file, and the header."""
+    skip = 0
+    for line in lines:
+        if line.startswith(b"##") or not line.strip():
+            skip += 1
+            continue
+        header = line.rstrip(b"\r\n")
+        if not header.startswith(b"#CHROM"):
+            break
+        width = header.count(b"\t") + 1
+        if width < 8:
+            raise ValueError(f"{file} has {width} columns, but a VCF file has at least 8")
+        return skip, header
+    raise ValueError(f"{file} has no #CHROM header line, so it is not a VCF file")
+
+
+def _vcf_frame(raw: bytes, file) -> pl.DataFrame:
+    """The variants in the contents of a VCF file."""
+    skip, _ = _vcf_header(io.BytesIO(raw), file)
+    return _vcf_table(io.BytesIO(raw), skip, file)
+
+
+def _vcf_table(source, skip: int, file) -> pl.DataFrame:
     names = ["chrom", "position", "id", "ref", "alt", "qual", "filter", "info"]
-    lines = [ln for ln in text.splitlines() if ln.strip() and not ln.startswith("##")]
-    if not lines or not lines[0].startswith("#CHROM"):
-        raise ValueError(f"{file} has no #CHROM header line, so it is not a VCF file")
-    width = lines[0].count("\t") + 1
-    if width < 8:
-        raise ValueError(f"{file} has {width} columns, but a VCF file has at least 8")
-    if len(lines) == 1:
-        df = pl.DataFrame(schema={n: pl.String for n in names})
-    else:
-        df = pl.read_csv(io.StringIO("\n".join(lines[1:])), separator="\t", has_header=False,
-                         columns=list(range(8)), new_columns=names, infer_schema=False, quote_char=None)
+    df = pl.read_csv(source, separator="\t", has_header=True, skip_rows=skip, columns=list(range(8)),
+                     infer_schema=False, quote_char=None)
+    df = df.rename(dict(zip(df.columns, names)))
     try:
         df = df.with_columns(pl.col("position").cast(pl.Int64) - 1)
     except pl.exceptions.InvalidOperationError:

@@ -21,10 +21,21 @@ Positions = Literal["columns", "rows"]
 PathLike = str | os.PathLike[str]
 
 
+def _gunzip(raw: bytes) -> bytes:
+    """Gzipped bytes decompressed. A bgzipped file is many gzip members one
+    after another, which gzip.decompress() copies the rest of the file for
+    each of, taking minutes for a large file, while reading it as a stream
+    takes seconds."""
+    import io
+
+    with gzip.GzipFile(fileobj=io.BytesIO(raw)) as fh:
+        return fh.read()
+
+
 def _read_text(file: PathLike, skip: int) -> str:
     raw = Path(file).read_bytes()
     # Gzipped files are recognized from their first bytes.
-    text = (gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw).decode()
+    text = (_gunzip(raw) if raw[:2] == b"\x1f\x8b" else raw).decode()
     if skip:
         if skip < 0:
             raise ValueError("skip must be zero or positive")

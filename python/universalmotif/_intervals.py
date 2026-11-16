@@ -13,6 +13,7 @@ from pathlib import Path
 import polars as pl
 
 from ._genomic import _CHROM_COLUMNS, _range_table, _ranges_frame
+from ._io import _gunzip
 
 _REGION = re.compile(r"^(.+):(\d+)-(\d+)(\(-\))?(?:\.\d+)?$")
 
@@ -99,7 +100,7 @@ def read_bed(file: str | os.PathLike, format: str | None = None) -> pl.DataFrame
     """
     raw = Path(file).read_bytes()
     if raw[:2] == b"\x1f\x8b":
-        raw = gzip.decompress(raw)
+        raw = _gunzip(raw)
     return _bed_frame(raw.decode(), _bed_format(file, format), file)
 
 

@@ -43,6 +43,11 @@ New:
   motifs of any type, so that database motifs can be matched against a
   model's scores directly.
 
+Fixes:
+
+- Reading bgzipped files, such as large BED and VCF files, takes seconds
+  rather than minutes.
+
 ## 0.5.0 (2026-11-15)
 
 Changes in behaviour:
