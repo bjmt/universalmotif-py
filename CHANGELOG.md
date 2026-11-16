@@ -29,6 +29,8 @@ New:
   included, to score variants with a model.
 - The `variants` command scores how the variants of a VCF file or table
   change motif sites in a genome.
+- A new guide, variant analysis, scores the ClinVar variants of the
+  β-globin promoters against JASPAR motifs and prepares them for a model.
 - `view_motifs()` marks the gaps of gapped motifs with a dashed line
   labelled with the gap sizes.
 - `scan_sequences()`, `match_motifs()`, `enrich_motifs()`,

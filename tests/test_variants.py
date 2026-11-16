@@ -176,6 +176,9 @@ def test_genome_matches_one_sequence(data, genome):
         assert set(table["chrom"]) == {"chrB"}
         assert table.drop("chrom", "id").equals(one)
         assert table["id"].to_list() == [f"v{v}" for v in table["variant"]]
+    # Columns of the variants' own named like those of the table are no bother.
+    numbered = variants.with_row_index("variant", offset=100).with_columns(pl.lit(1).alias("_row"))
+    assert um.variant_motif_effects(numbered, g, motifs, pvalue=PVALUE).equals(table)
     other = variants.rename({"chrom": "seqnames"})
     assert um.variant_motif_effects(other, um.Genome(genome), motifs, pvalue=PVALUE).drop("chrom", "id").equals(one)
 

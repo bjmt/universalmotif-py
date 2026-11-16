@@ -511,9 +511,8 @@ def variant_motif_effects(
             raise ValueError("on a genome, variants must be a table with chromosome, position, ref and alt "
                              "columns")
         df = _variants(variants, None, None, alphabet, 0, need_effects=False)
-        chrom_col = _chrom_column(df)
-        df = df.with_columns(pl.col(chrom_col).cast(pl.String).alias("_chrom"))
-        if df["_chrom"].null_count():
+        chrom = pl.col(_chrom_column(df)).cast(pl.String)
+        if df.select(chrom.null_count()).item():
             raise ValueError("chromosomes cannot be missing")
         offset = 0
     else:
@@ -521,10 +520,13 @@ def variant_motif_effects(
             variants = _every_substitution(sequence, alphabet, start)
         df = _variants(variants, None, sequence, alphabet, start, need_effects=False)
         genome = {"": sequence}
-        df = df.with_columns(pl.lit("").alias("_chrom"))
+        chrom = pl.lit("")
         offset = start
-    df = df.with_row_index("variant")
+    # Only the columns used are kept, so that the variants' other columns
+    # cannot clash with those added here.
     id_col = _column(df, "id")
+    df = df.select(chrom.alias("_chrom"), "position", "ref", "alt",
+                   *([pl.col(id_col).alias("_id")] if id_col else [])).with_row_index("_row")
     keep = _usable(df["ref"].to_list(), df["alt"].to_list())
     if not keep.all():
         warnings.warn(f"{int((~keep).sum())} of {df.height} variants were left out, with an alternative allele "
@@ -589,8 +591,14 @@ def variant_motif_effects(
     if hits is None:
         from ._analysis import scan_sequences
 
-        found = scan_sequences(scored, {"ref": ref_seq, "alt": alt_seq}, pvalue=pvalue, rc=rc,
-                               nthreads=nthreads, use_gaps=False, progress=progress)
+        # Warnings from the scan, such as of motifs that cannot reach the
+        # cutoff, are passed on as if from this function.
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            found = scan_sequences(scored, {"ref": ref_seq, "alt": alt_seq}, pvalue=pvalue, rc=rc,
+                                   nthreads=nthreads, use_gaps=False, progress=progress)
+        for w in caught:
+            warnings.warn(w.message, w.category, stacklevel=2)
         parts = []
         for side, (_, off, n) in sides.items():
             h = found.filter(pl.col("sequence") == side)
@@ -630,8 +638,8 @@ def variant_motif_effects(
             frames.append(_with_pvalues(part, motif))
     if not frames:
         return pl.DataFrame(schema=schema)
-    info = use.select("variant", *(["_chrom"] if on_genome else []), "position", "ref", "alt",
-                      *([pl.col(id_col).cast(pl.String).alias("id")] if id_col else []))
+    info = use.select(pl.col("_row").alias("variant"), *(["_chrom"] if on_genome else []), "position", "ref", "alt",
+                      *([pl.col("_id").cast(pl.String).alias("id")] if id_col else []))
     if on_genome:
         info = info.rename({"_chrom": "chrom"})
     info = info.with_columns(pl.Series("_tp", tp + offset), pl.int_range(pl.len(), dtype=pl.Int64).alias("_v"))

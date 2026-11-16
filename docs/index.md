@@ -78,7 +78,9 @@ workflow](guides/chipseq-workflow.ipynb), and [building a motif
 library](guides/building-a-library.ipynb) shows how to combine motifs from
 several databases, while [motifs and deep
 learning](guides/deep-learning.ipynb) reads the patterns and contribution
-scores of a sequence model. Every function is described in the
+scores of a sequence model, and [variant analysis](guides/variants.ipynb)
+scores how the variants of a VCF file change the motif sites they fall in.
+Every function is described in the
 [API reference](reference/index.md).
 
 If you already know the R package, the function names will be familiar,
