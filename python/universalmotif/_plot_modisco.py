@@ -298,7 +298,8 @@ def plot_modisco(
         Place the logos of each row in a shared frame of positions.
     use_type
         How the PPMs and matches are drawn, ``"ICM"`` for information
-        content or ``"PPM"`` for probabilities.
+        content or ``"PPM"`` for probabilities, which also heads their
+        column.
     trim_threshold
         Passed to ``read_modisco()`` when reading a file.
     text_size
@@ -334,7 +335,7 @@ def plot_modisco(
     >>> cmp = um.compare_motifs(ppms + known, compare_to=[0, 1, 2], qvalue=0.5)
     >>> fig = um.plot_modisco({"CWM": cwms, "PPM": ppms}, matches=cmp, database=known)
     >>> [t.get_text() for t in fig.axes[0].texts][:5]
-    ['Pattern', 'Seqlets', 'CWM', 'PPM', 'Best match']
+    ['Pattern', 'Seqlets', 'CWM', 'ICM', 'Best match']
     >>> plt.close(fig)
 
     A results file is read directly, here keeping the three most common
@@ -399,7 +400,8 @@ def plot_modisco(
     small = 0.8 * text_size
     labels = [p.label for p in pats]
     seqlets = ["" if p.nsites is None else f"{p.nsites:,}" for p in pats]
-    head = {"label": "Pattern", "seqlets": "Seqlets", "CWM": "CWM", "hCWM": "hCWM", "PPM": "PPM"}
+    # The PPM column is headed by what it shows: information content (ICM) or probabilities (PPM).
+    head = {"label": "Pattern", "seqlets": "Seqlets", "CWM": "CWM", "hCWM": "hCWM", "PPM": use_type}
     match_head = ["Best match"] if n_cols == 1 else [f"Match {k + 1}" for k in range(n_cols)]
     lines = [_match_lines(*m[:4]) for p in pats for m in p.matches]
 

@@ -75,7 +75,8 @@ def test_file_report(modisco, known):
     cmp = _matches(modisco, known)
     fig = plot_modisco(modisco, matches=cmp, database=known)
     texts = _texts(fig)
-    assert texts[:5] == ["Pattern", "Seqlets", "CWM", "PPM", "Best match"]
+    # PPMs are drawn as information content by default, and headed so.
+    assert texts[:5] == ["Pattern", "Seqlets", "CWM", "ICM", "Best match"]
     labels = [t for t in texts if t[:4] in ("pos_", "neg_")]
     assert labels == ["pos_0", "pos_1", "pos_2", "neg_0"]
     assert "Positive patterns" in texts and "Negative patterns" in texts
@@ -119,6 +120,7 @@ def test_matches_are_oriented(known):
     cmp = um.compare_motifs([ppm, wbox], compare_to=0, qvalue=1)
     assert cmp.filter(pl.col("target") == "W-box")["strand"].item() == "-"
     fig = plot_modisco({"CWM": [cwm], "PPM": [ppm]}, matches=cmp, database=[wbox], use_type="PPM")
+    assert "PPM" in _texts(fig) and "ICM" not in _texts(fig)
     pattern, match = _logos(fig)[1:]
     # Drawn as probabilities, the reverse-complemented match has the same
     # letters as the pattern, so their shapes line up after a shift.
@@ -185,7 +187,7 @@ def test_names(modisco):
 def test_columns(modisco):
     fig = plot_modisco(modisco, columns=["CWM", "hCWM", "PPM"])
     texts = _texts(fig)
-    assert texts[:4] == ["Pattern", "CWM", "hCWM", "PPM"]
+    assert texts[:4] == ["Pattern", "CWM", "hCWM", "ICM"]
     assert "1,200" not in texts
     assert len(_logos(fig)) == 3 * 4
     fig = plot_modisco(modisco, columns="seqlets")
