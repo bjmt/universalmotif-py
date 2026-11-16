@@ -34,12 +34,16 @@ def test_finds_the_motifs_the_model_uses(model):
     assert "ContributionMotifs(" in repr(found)
     # AP-1 and GATA are patterns of their own, each led by the motif reaching the most seqlets.
     pats = found.patterns
-    assert pats.columns == ["pattern", "sign", "representative", "consensus", "seqlets", "members", "gain", "motif",
-                            "cwm"]
+    assert pats.columns == ["pattern", "sign", "representative", "consensus", "seqlets", "share", "unique",
+                            "members", "motif", "cwm"]
     assert pats.height == found.motifs["pattern"].n_unique() >= 2
     assert sorted(sum(pats["members"].to_list(), [])) == sorted(found.motifs["name"])
     assert pats["seqlets"].to_list() == sorted(pats["seqlets"], reverse=True)
-    assert abs(pats["gain"].sum() - found.motifs["gain"].sum()) < 1e-9
+    # Patterns are numbered by the seqlets they reach, and a seqlet reached by one pattern alone counts once.
+    assert pats["pattern"].to_list() == [f"pos_p{k + 1}" for k in range(pats.height)]
+    assert (pats["unique"] <= pats["share"]).all() and pats["unique"].sum() <= 1
+    reach = set().union(*(set(found.reach[m]) for m in found.motifs["name"]))
+    assert reach <= set(range(found.seqlets.height))
     # Hits of the CWMs at thresholds set from the seqlets reach most planted sites.
     assert found.thresholds.columns == ["motif", "min_similarity", "min_importance"]
     assert (found.thresholds["min_similarity"] > 0.9).all()

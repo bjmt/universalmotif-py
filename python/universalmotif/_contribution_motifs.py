@@ -9,7 +9,7 @@ import pathlib
 import re
 import warnings
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -65,6 +65,8 @@ class ContributionMotifs:
     motifs: pl.DataFrame
     seqlets: pl.DataFrame
     hits: pl.DataFrame | None = None
+    #: For each motif, the rows of ``seqlets`` that its sequence matches reach.
+    reach: dict[str, np.ndarray] | None = field(default=None, repr=False)
 
     @property
     def ppms(self) -> list[Motif]:
@@ -85,22 +87,36 @@ class ContributionMotifs:
 
     @property
     def patterns(self) -> pl.DataFrame:
-        """One row per pattern, in order of the seqlets its representative
-        reaches: its ``pattern`` name, ``sign``, ``representative`` (the
-        member reaching the most seqlets) and that motif's ``consensus``,
-        ``seqlets``, PPM in ``motif`` and CWM in ``cwm``, the names of all its
-        ``members``, the representative first, and ``gain``, the share of the
-        seqlets its members add between them."""
-        t = self.motifs.with_row_index("_row")
-        rep = (t.sort("seqlets", "_row", descending=[True, False])
-               .group_by("pattern", maintain_order=True).first())
-        members = (t.sort("seqlets", "_row", descending=[True, False]).group_by("pattern", maintain_order=True)
-                   .agg(members=pl.col("name"), gain=pl.col("gain").sum()))
-        return (rep.select("pattern", "sign", representative="name", consensus="consensus", seqlets="seqlets",
-                           motif="motif", cwm="cwm")
-                .join(members, on="pattern", maintain_order="left")
-                .select("pattern", "sign", "representative", "consensus", "seqlets", "members", "gain", "motif",
-                        "cwm"))
+        """One row per pattern, in order of the seqlets it reaches: its
+        ``pattern`` name, ``sign``, ``representative`` (the member reaching
+        the most seqlets) and that motif's ``consensus``, ``seqlets``, the
+        seqlets any member's sequence matches reach, ``share``, those as a
+        share of the seqlets of its sign, ``unique``, the share of the
+        seqlets of its sign that this pattern reaches and no other does,
+        the names of its ``members``, the representative first, and the
+        representative's PPM in ``motif`` and CWM in ``cwm``."""
+        t = self.motifs.with_row_index("_row").sort("seqlets", "_row", descending=[True, False])
+        rep = t.group_by("pattern", maintain_order=True).first()
+        members = t.group_by("pattern", maintain_order=True).agg(members=pl.col("name"))
+        pats = rep.select("pattern", "sign", representative="name", consensus="consensus", motif="motif",
+                          cwm="cwm").join(members, on="pattern", maintain_order="left")
+        reach = self.reach or {}
+        union = {p: np.unique(np.concatenate([reach.get(m, np.empty(0, np.int64)) for m in ms]))
+                 for p, ms in pats.select("pattern", "members").iter_rows()}
+        n_sign = {s: int((self.seqlets["sign"] == s).sum()) if "sign" in self.seqlets.columns else self.seqlets.height
+                  for s in pats["sign"].unique()}
+        times = np.bincount(np.concatenate([*union.values(), np.empty(0, np.int64)]).astype(np.int64),
+                            minlength=self.seqlets.height)
+        rows = []
+        for p, sg in pats.select("pattern", "sign").iter_rows():
+            u = union[p]
+            rows.append((len(u), len(u) / max(n_sign[sg], 1), int((times[u] == 1).sum()) / max(n_sign[sg], 1)))
+        stats = pl.DataFrame(rows, schema={"seqlets": pl.Int64, "share": pl.Float64, "unique": pl.Float64},
+                             orient="row")
+        return (pats.with_columns(stats.get_columns())
+                .sort("seqlets", descending=True, maintain_order=True)
+                .select("pattern", "sign", "representative", "consensus", "seqlets", "share", "unique", "members",
+                        "motif", "cwm"))
 
     def report(self, path: str | os.PathLike[str] | None = None, database: Iterable[Motif] | None = None,
                top: int = 3, qvalue: float = 0.05, title: str = "Motifs from contribution scores",
@@ -131,20 +147,26 @@ class ContributionMotifs:
         out = [_REPORT_HEAD.replace("__TITLE__", html.escape(title))]
         out.append(f"<h1>{html.escape(title)}</h1>")
         n_hits = sum(counts.values())
-        out.append(f'<p class="sum">{pats.height} patterns of {rows.height} motifs, from {n_seqlets:,} seqlets'
-                   + (f", with {n_hits:,} hits" if counts else "")
-                   + ". Each pattern is led by the motif reaching the most seqlets; <i>added</i> is the share of "
-                   "seqlets its members reach that motifs chosen before them do not.</p>")
-        head = ["", "Pattern", "Seqlets", "Added", *(["Hits"] if counts else []), "CWM", "PPM",
-                *(["Database matches"] if names is not None else []), "Members"]
+        out.append(f'<p class="sum">{pats.height} patterns of {rows.height} motifs, found in {n_seqlets:,} seqlets'
+                   + (f", with {n_hits:,} hits in all the regions" if counts else "") + ".</p>")
+        out.append(_REPORT_KEY)
+        head = [("", ""), ("Pattern", "Its name, the leading motif's consensus and the leading motif"),
+                ("Seqlets", "Seqlets reached by any of the pattern's motifs, and their share of its sign's"),
+                ("Only here", "Share of seqlets reached by this pattern and no other"),
+                *([("Hits", "Sites in all the regions where a member's CWM matches the scores")] if counts else []),
+                ("CWM", "Mean contribution of each letter at the leading motif's sites in seqlets"),
+                ("PPM", "Letter frequencies at those sites"),
+                *([("Database matches", "Closest database motifs, by q-value")] if names is not None else []),
+                ("Motifs", "The motifs gathered into the pattern; open to see them")]
         out.append('<div class="wrap"><table class="pats"><thead><tr>'
-                   + "".join(f"<th>{h}</th>" for h in head) + "</tr></thead><tbody>")
+                   + "".join(f'<th title="{html.escape(t)}">{h}</th>' for h, t in head) + "</tr></thead><tbody>")
         for k, pat in enumerate(pats.iter_rows(named=True)):
             members = rows.filter(pl.col("pattern") == pat["pattern"])
             cells = [f'<td class="n">{k + 1}</td>',
                      (f'<td><b>{html.escape(pat["pattern"])}</b><br><code>{html.escape(pat["consensus"])}</code>'
                       f'<br><span class="m">{html.escape(pat["representative"])}</span></td>'),
-                     f'<td class="n">{pat["seqlets"]:,}</td>', f'<td class="n">{100 * pat["gain"]:.1f}%</td>']
+                     f'<td class="n">{pat["seqlets"]:,}<br><span class="m">{100 * pat["share"]:.1f}%</span></td>',
+                     f'<td class="n">{100 * pat["unique"]:.1f}%</td>']
             if counts:
                 cells.append(f'<td class="n">{sum(counts.get(m, 0) for m in pat["members"]):,}</td>')
             cells.append(f'<td class="logo">{logo_svg(pat["cwm"], height=34, position_width=8)}</td>')
@@ -189,6 +211,22 @@ class ContributionMotifs:
                 f"from {self.seqlets.height:,} seqlets)")
 
 
+_REPORT_KEY = """<details class="key" open><summary>How to read this report</summary><dl>
+<dt>Seqlet</dt><dd>A short stretch, usually 10 to 30 bases, where the model's contribution scores are
+unusually high, called from the scores alone before any motif is known. Motifs are found in the
+seqlets, and a motif <i>reaches</i> a seqlet when its sequence matches inside it.</dd>
+<dt>Pattern</dt><dd>Motifs whose CWMs are alike, such as several spellings of one factor's site, gathered
+under the one that reaches the most seqlets. <i>Seqlets</i> counts those reached by any of them, and
+<i>only here</i> the share reached by this pattern and by no other.</dd>
+<dt>Hit</dt><dd>A site anywhere in the scored regions, inside a seqlet or not, where a motif's CWM matches
+the contribution scores closely enough: in shape (similarity) and in size (importance), at thresholds set
+from the motif's own sites in seqlets. Hits are where the model used the motif.</dd>
+<dt>CWM and PPM</dt><dd>The CWM shows the mean contribution of each letter at the motif's sites, which is
+what the model relies on; the PPM shows how often each letter occurs there.</dd>
+</dl></details>
+"""
+
+
 _REPORT_HEAD = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
@@ -216,6 +254,11 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
 details summary { cursor: pointer; color: var(--muted); }
 .mem { display: flex; align-items: center; gap: 8px; white-space: nowrap; margin: 2px 0; }
 .mem svg { max-width: none; }
+.key { margin: 0 0 14px; max-width: 110ch; }
+.key dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 8px 0 0; }
+.key dt { font-weight: 600; }
+.key dd { margin: 0; color: var(--muted); }
+th[title] { cursor: help; }
 </style></head><body><main>
 """
 
@@ -603,8 +646,11 @@ def contribution_motifs(
     signs = {"positive": ["+"], "negative": ["-"], "both": ["+", "-"]}[sign]
     ideal = {}
     rows = []
+    reach_by_motif: dict[str, np.ndarray] = {}
     for sg in signs:
         sub = seqlets.filter(pl.col("sign") == sg) if "sign" in seqlets.columns else seqlets
+        sub_ids = (seqlets.with_row_index("_id").filter(pl.col("sign") == sg)["_id"].to_numpy()
+                   if "sign" in seqlets.columns else np.arange(seqlets.height))
         if sub.height < 20:
             continue
         label = "pos" if sg == "+" else "neg"
@@ -639,6 +685,17 @@ def contribution_motifs(
             for r in kept:
                 r["min_similarity"], r["min_importance"] = th.get(r["name"], _DEFAULT_THRESHOLDS)
             _group(kept, label, pattern_similarity, nthreads)
+            reach = _reach(_site_hits([r["motif"] for r in kept], seqs, sites, nthreads))
+            for r in kept:
+                reach_by_motif[r["name"]] = sub_ids[np.sort(np.fromiter(reach.get(r["name"], ()), dtype=np.int64))]
+            # Number the patterns by the seqlets their members reach between them.
+            union: dict[str, set] = {}
+            for r in kept:
+                union.setdefault(r["pattern"], set()).update(reach.get(r["name"], ()))
+            order = sorted(union, key=lambda q: (-len(union[q]), int(q.rsplit("_p", 1)[1])))
+            new_name = {q: f"{label}_p{k + 1}" for k, q in enumerate(order)}
+            for r in kept:
+                r["pattern"] = new_name[r["pattern"]]
         rows += kept
     schema = {"name": pl.String, "pattern": pl.String, "sign": pl.String, "source": pl.String, "consensus": pl.String, "width": pl.Int64,
               "seqlets": pl.Int64, "gain": pl.Float64, "cumulative": pl.Float64, "stability": pl.Float64,
@@ -651,7 +708,7 @@ def contribution_motifs(
     found_hits = None
     if hits:
         found_hits = _scan(table, observed, seqs, scores.names, nthreads)
-    return ContributionMotifs(table, seqlets, found_hits)
+    return ContributionMotifs(table, seqlets, found_hits, reach_by_motif)
 
 
 def _search(part, sub, sources, lengths, label, prefix, min_width, max_width, nmotifs, stability, min_stability,
