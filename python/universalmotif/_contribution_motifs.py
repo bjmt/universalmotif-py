@@ -43,6 +43,9 @@ _MIN_GAPPED_TARGET = 30
 # Hit thresholds for motifs with no hit within a seqlet: scan_contributions()'s
 # defaults.
 _DEFAULT_THRESHOLDS = (0.7, 0.5)
+# The least similarity, the cosine with the CWM, of a hit, and of the median
+# site of a motif in the seqlets for the motif to be kept.
+_MIN_SIMILARITY = 0.5
 # The fewest letters between the parts of a composite motif.
 _MIN_SPACER = 2
 # The positions a hit must share with a seqlet to count as reaching it.
@@ -388,7 +391,7 @@ def _thresholds(hits: pl.DataFrame, observed: Any, cwms: dict, quantile: float) 
         sim = np.where(norm > 0, np.einsum("nal,al->n", x, c) / np.maximum(norm * np.sqrt((c ** 2).sum()), 1e-300),
                        0.0)
         imp = np.abs(x).sum(axis=(1, 2)) / max(float(np.abs(c).sum()), 1e-300)
-        out[name] = (float(np.quantile(sim, quantile)), float(np.quantile(imp, quantile)))
+        out[name] = (float(np.quantile(sim, quantile)), float(np.quantile(imp, quantile)), float(np.median(sim)))
     return out
 
 
@@ -468,9 +471,12 @@ def contribution_motifs(
        thresholds for each motif set from its hits within the seqlets as
        [`modisco_thresholds()`][universalmotif.modisco_thresholds] sets
        them from a pattern's seqlets: the ``hit_quantile`` of their
-       similarity and of their importance. Motifs with no hit within a
-       seqlet, such as composites, whose parts are often seqlets of their
-       own, take the defaults of ``scan_contributions()``.
+       similarity and of their importance, with a similarity of at least
+       0.5. Motifs with no hit within a seqlet, such as composites, whose
+       parts are often seqlets of their own, take the defaults of
+       ``scan_contributions()``, and motifs whose median site in the
+       seqlets has a similarity under 0.5, whose sites share no shape of
+       contribution, are left out.
 
     Motifs are finally gathered into patterns, as TF-MoDISco gathers
     seqlets: in order of the seqlets they reach, each motif joins the first
@@ -677,8 +683,12 @@ def contribution_motifs(
             # overlapping a seqlet are mostly positions the model gave little weight.
             th = _thresholds(_site_hits([r["motif"] for r in kept], seqs, sites, nthreads, within=True), observed,
                              {r["name"]: r["cwm"] for r in kept}, hit_quantile)
+            # A motif whose sites in the seqlets mostly differ in shape from its CWM is not one pattern.
+            kept = [r for r in kept if r["name"] not in th or th[r["name"]][2] >= _MIN_SIMILARITY]
             for r in kept:
-                r["min_similarity"], r["min_importance"] = th.get(r["name"], _DEFAULT_THRESHOLDS)
+                sim, imp = th[r["name"]][:2] if r["name"] in th else _DEFAULT_THRESHOLDS
+                r["min_similarity"], r["min_importance"] = max(sim, _MIN_SIMILARITY), imp
+        if kept:
             _group(kept, label, pattern_similarity, nthreads)
             reach = _reach(_site_hits([r["motif"] for r in kept], seqs, sites, nthreads))
             for r in kept:
