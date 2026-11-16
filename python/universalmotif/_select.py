@@ -84,24 +84,26 @@ def select_motifs(
     """Rank motifs by how many new sequences or sites each reaches, and keep
     those that add enough.
 
-    Discovery tends to give more motifs than the sequences need: rare ones,
-    and several spellings of one site that each catch some of its
+    Discovery tends to give more motifs than the sequences need. Some are
+    rare, and some are spellings of one site that each catch some of its
     instances. Here motifs are chosen greedily, each step taking the motif
-    whose hits reach the most targets not yet reached, and a motif is kept
-    if it adds at least ``min_gain`` of all targets when its turn comes. The
+    whose hits reach the most targets not yet reached. A motif is kept if
+    it adds at least ``min_gain`` of all targets when its turn comes. The
     gains only shrink along the order, so the kept motifs come first.
-    Targets are the ``sites`` when given, such as the seqlets of a sequence
-    model or the summits of peaks, reached by a hit sharing at least
-    ``min_overlap`` positions with them, and otherwise the sequences, reached
-    by any hit.
 
-    With ``max_similarity``, a motif whose similarity to one already kept
-    reaches it when its turn comes is left out instead, and the targets it
-    reaches are not counted. Similarities are those of
+    Targets are the ``sites`` when given, such as the seqlets of a sequence
+    model or the summits of peaks. A hit reaches a site when it shares at
+    least ``min_overlap`` positions with it. Without ``sites``, the targets
+    are the sequences, and any hit reaches its sequence.
+
+    With ``max_similarity``, a motif is left out instead when its
+    similarity to one already kept reaches that value at its turn. The
+    targets it reaches are then not counted. Similarities are those of
     [`compare_motifs()`][universalmotif.compare_motifs] with its default
-    method, between the motifs themselves or, with ``compare_as``, between
-    other motifs standing for them one for one, such as the CWMs of their
-    hits, which show when two spellings of a site are the same to a model.
+    method, between the motifs themselves. With ``compare_as``, they are
+    between other motifs standing for them one for one, such as the CWMs
+    of their hits. CWMs show when two spellings of a site are the same to
+    a model.
 
     Parameters
     ----------
@@ -112,12 +114,14 @@ def select_motifs(
         The sequences to reach, as for ``motif_finder()``.
     sites
         Targets within the sequences, as a table with ``start`` and ``end``
-        columns, counted from 0 with the end left out, and a ``sequence``
-        column naming the sequences given as a mapping (or ``seq1``,
-        ``seq2`` and so on for a list) or a ``sequence_i`` column of their
-        indices from 0, as the hits of
-        [`scan_sequences()`][universalmotif.scan_sequences] and the
-        seqlets of [`read_seqlets()`][universalmotif.read_seqlets] have.
+        columns, counted from 0 with the end left out. The table also needs
+        a ``sequence`` column or a ``sequence_i`` column. A ``sequence``
+        column names the sequences given as a mapping, or uses ``seq1``,
+        ``seq2`` and so on for a list. A ``sequence_i`` column holds their
+        indices from 0. The hits of
+        [`scan_sequences()`][universalmotif.scan_sequences] and the seqlets
+        of [`read_seqlets()`][universalmotif.read_seqlets] have these
+        columns.
     pvalue
         The P-value cutoff for hits.
     min_gain
@@ -142,17 +146,23 @@ def select_motifs(
     -------
     polars.DataFrame
         One row per motif, in the greedy order with motifs left out as
-        similar last, with the columns ``motif`` (its name), ``motif_i``, its
-        place in ``motifs``, ``rank``, from 1, ``targets``, those it reaches
-        on its own, ``gain`` and ``cumulative``, the shares of all targets
-        it adds and that the motifs up to it reach, ``kept``,
-        ``similar_to``, the kept motif a left-out one resembles, and
-        ``object``, the motif itself.
+        similar last. The columns are these.
+
+        - ``motif``, its name.
+        - ``motif_i``, its place in ``motifs``.
+        - ``rank``, from 1.
+        - ``targets``, those it reaches on its own.
+        - ``gain`` and ``cumulative``, the shares of all targets it adds
+          and that the motifs up to it reach.
+        - ``kept``.
+        - ``similar_to``, the kept motif a left-out one resembles.
+        - ``object``, the motif itself.
 
     Examples
     --------
     AP-1 sites are planted in half of the sequences and GATA sites in a
-    third, and a longer AP-1 motif reaches only sequences AP-1 already has:
+    third. A longer AP-1 motif reaches only sequences that AP-1 already
+    has:
 
     >>> import universalmotif as um
     >>> seqs = um.create_sequences(seqlen=200, seqnum=300, seed=1)
@@ -222,21 +232,24 @@ def refine_motifs(
     """Rebuild motifs from their hits, so that their edges and letters follow
     the sites they match.
 
-    In each of ``iterations`` rounds the motifs are scanned, and each is
-    rebuilt from its hits widened by ``flank`` positions on either side and
-    read along their strands, with edge columns below ``min_ic`` bits then
-    trimmed. A motif can so grow to take in letters its sites share beyond
-    its edges, or lose edges they don't share. With ``sites``, such as the
-    seqlets of a sequence model, only hits reaching them are used. A motif
-    wider than ``max_width`` keeps its most informative stretch of that
-    width. Gapped motifs, such as those of
+    In each of ``iterations`` rounds the motifs are scanned. Each is
+    rebuilt from its hits, widened by ``flank`` positions on either side
+    and read along their strands. Edge columns below ``min_ic`` bits are
+    then trimmed. A motif can thus grow to take in letters its sites share
+    beyond its edges, or lose edges they don't share. With ``sites``, such
+    as the seqlets of a sequence model, only hits reaching them are used. A
+    motif wider than ``max_width`` keeps its most informative stretch of
+    that width.
+
+    Gapped motifs, such as those of
     [`gapped_motif_finder()`][universalmotif.gapped_motif_finder], are
     rebuilt part by part from the letters their hits put in each part,
-    whatever the spacer, with flanks added and trimmed at their outer ends
-    only, and their gaps keep their ranges. Motifs with fewer than
-    ``min_sites`` hits are left as they are. Each rebuilt motif keeps the
-    name, type and other details of the one given, with ``nsites`` the
-    number of hits it was built from.
+    whatever the spacer. Their flanks are added and trimmed at their outer
+    ends only, and their gaps keep their ranges.
+
+    Motifs with fewer than ``min_sites`` hits are left as they are. Each
+    rebuilt motif keeps the name, type and other details of the one given,
+    with ``nsites`` the number of hits it was built from.
 
     With ``competitive``, as by default, overlapping hits of different
     motifs are reduced to the best one, so that each site builds only one

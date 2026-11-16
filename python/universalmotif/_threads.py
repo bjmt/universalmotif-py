@@ -33,10 +33,10 @@ def set_nthreads(n: int) -> None:
     """Set the number of threads used by functions that take ``nthreads``.
 
     Every function with an ``nthreads`` argument uses this setting when the
-    argument is left as ``None``, and an ``nthreads`` given to a function
-    still wins. The setting starts at 1, or at the value of the
+    argument is left as ``None``. An ``nthreads`` given to a function still
+    wins. The setting starts at 1, or at the value of the
     ``UNIVERSALMOTIF_NTHREADS`` environment variable when the package is
-    imported, and 0 means all available cores.
+    imported. A value of 0 means all available cores.
 
     Examples
     --------

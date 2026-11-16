@@ -93,20 +93,28 @@ def view_logo(
 ) -> Axes:
     """Draw a logo from any numeric matrix.
 
-    ``x`` is a (rows, positions) array with ``letters`` naming the rows, a
-    mapping from row names to values, or a motif, which is drawn as its
-    matrix is. Row names may be several characters long, columns can have
-    any height, and negative values are stacked below zero, upside down so
-    that they read outward from zero unless ``flip_neg`` is ``False``.
+    ``x`` can be any of these:
+
+    - a (rows, positions) array, with ``letters`` naming the rows;
+    - a mapping from row names to values;
+    - a motif, which is drawn as its matrix is.
+
+    Row names may be several characters long, and columns can have any
+    height. Negative values are stacked below zero. Unless ``flip_neg`` is
+    ``False``, they are drawn upside down so that they read outward from
+    zero.
+
     Letters are coloured by ``colour_scheme``, a mapping from single
     characters to colours. Without one, a motif's letters take the colours
-    of its alphabet as in [`view_motifs()`][universalmotif.view_motifs],
-    and those of a matrix or mapping are all filled with ``fill``.
+    of its alphabet as in [`view_motifs()`][universalmotif.view_motifs].
+    The letters of a matrix or mapping are then all filled with ``fill``.
 
-    Letters shorter than ``min_height`` are left out, ``x_spacer`` and
-    ``y_spacer`` set the gaps between letters, ``sort_positions`` stacks
-    each position's letters by height, and ``fit_to_height`` scales every
-    position to that height. The axes are left bare.
+    The other options set the layout, and the axes are left bare.
+
+    - ``min_height``: letters shorter than this are left out.
+    - ``x_spacer``, ``y_spacer``: the gaps between letters.
+    - ``sort_positions``: stack each position's letters by height.
+    - ``fit_to_height``: scale every position to this height.
 
     Examples
     --------
@@ -152,7 +160,7 @@ def _default_colours(alphabet: str, letters: Sequence[str] = ()) -> dict[str, st
 
 def _logo_collection():
     """A collection of letters that reports where it is drawn whatever its
-    transform, so that tight layouts and bbox_inches="tight" make room for
+    transform. Tight layouts and bbox_inches="tight" then make room for
     logos outside the axes."""
     from matplotlib.collections import PolyCollection
     from matplotlib.transforms import Bbox
@@ -185,18 +193,26 @@ def draw_logo(
 ):
     """Draw a motif's logo in a box on an existing plot.
 
-    The logo fills the box from ``(x, y)`` to ``(x + width, y + height)``, in
-    data coordinates or in those of ``transform``, such as ``ax.transAxes``
-    for fractions of the axes. ``width`` defaults to one unit per position,
-    so that a logo drawn at ``x = 0.5`` lines up with positions 1, 2, 3 and
-    so on. The box spans the logo's full scale, from 0 to the most bits a
-    position can have for an ICM, 0 to 1 for a PPM, and the range of the
-    motif itself for other types, so logos of the same type drawn in boxes
-    of the same height are on the same scale. Letters are drawn as in
-    [`view_motifs()`][universalmotif.view_motifs]: as information content
-    by default, or as contributions for a CWM, sorted by height except for
-    PCMs and PPMs, with negative letters flipped. ``rc`` draws the reverse
-    complement of a DNA or RNA motif.
+    The logo fills the box from ``(x, y)`` to ``(x + width, y + height)``.
+    The box is in data coordinates, or in those of ``transform``, such as
+    ``ax.transAxes`` for fractions of the axes. ``width`` defaults to one
+    unit per position, so a logo drawn at ``x = 0.5`` lines up with
+    positions 1, 2, 3 and so on.
+
+    The box spans the logo's full scale:
+
+    - for an ICM, from 0 to the most bits a position can have;
+    - for a PPM, from 0 to 1;
+    - for other types, the range of the motif itself.
+
+    Logos of the same type drawn in boxes of the same height are therefore
+    on the same scale.
+
+    Letters are drawn as in [`view_motifs()`][universalmotif.view_motifs].
+    By default they show information content, or contributions for a CWM.
+    They are sorted by height except for PCMs and PPMs, and negative
+    letters are flipped. ``rc`` draws the reverse complement of a DNA or
+    RNA motif.
 
     Like text, the logo is not clipped to the axes, so it can sit beside
     them, for example in place of a row label. Returns the matplotlib
@@ -292,11 +308,13 @@ def _anchor_ic(m: Motif) -> float:
 def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by, rc_text, nthreads,
                     align=True):
     """Display matrices of motifs aligned to a common frame, in display
-    order: returns (names, matrices, offsets, widths, gaps, alphabet), the
-    gaps of each motif given as (columns before it, mingap, maxgap, blank
-    columns) within the frame. A gapped motif aligned to others is placed at
-    the gap sizes it fits best, its gaps filled with that many blank
-    columns; on its own, or not aligned, its gaps take no columns."""
+    order.
+
+    Returns (names, matrices, offsets, widths, gaps, alphabet). The gaps of
+    each motif are given as (columns before it, mingap, maxgap, blank
+    columns) within the frame. A gapped motif aligned to others is placed
+    at the gap sizes it fits best, with its gaps filled by that many blank
+    columns. On its own, or not aligned, its gaps take no columns."""
     if use_type not in _YLABELS:
         raise ValueError("use_type must be one of PCM, PPM, PWM, ICM and CWM")
     if sort_by not in ("none", "ic", "similarity"):
@@ -402,7 +420,7 @@ def _y_axis(mats: list[np.ndarray], use_type: str):
     lo = min(float(np.where(m > 0, 0, m).sum(axis=0).min()) for m in mats)
     hi = max(float(np.where(m < 0, 0, m).sum(axis=0).max()) for m in mats)
     # Log-odds and contributions can be any size, so the ticks are round
-    # numbers at least a quarter of the range apart, and the space left below
+    # numbers at least a quarter of the range apart. The space left below
     # the lowest letter is not labelled.
     span = (hi - lo) or 1.0
     step = _round_step(span / 4)
@@ -439,10 +457,11 @@ def _style_axes(ax, ylabel, ticks, ylim, n, show_positions, labels=None, text_si
 
 
 def _draw_gaps(ax: Axes, gaps: list[tuple[int, int, int, int]], text_size: float) -> None:
-    """Mark each gap of a motif with dashed lines on either side of it,
-    reaching past the letters to a label above the panel with the gap sizes.
-    A gap that takes no columns has a single line between the columns on
-    either side."""
+    """Mark each gap of a motif with dashed lines on either side of it.
+
+    The lines reach past the letters to a label above the panel with the
+    gap sizes. A gap that takes no columns has a single line between the
+    columns on either side."""
     for after, lo, hi, span in gaps:
         edges = [after + 0.5] if span == 0 else [after + 0.5, after + span + 0.5]
         for x in edges:
@@ -483,22 +502,25 @@ def view_motifs(
     """Draw motifs as sequence logos.
 
     Motifs of any alphabet can be drawn. Several motifs are aligned to the
-    one with the highest information content (for CWMs, that of their
-    probabilities) in the same way as
-    [`compare_motifs()`][universalmotif.compare_motifs] aligns them, trying
-    reverse complements of DNA and RNA motifs with ``rc``, so that CWMs are
-    aligned by the cosine of their contributions, keeping their signs, and
-    other motifs by column correlation. Motifs that align
-    better as reverse complements are flipped and get ``rc_text`` added to
-    their names, and all of them are padded into a common frame and drawn
-    one above the other. With ``align=False`` they are drawn as they are,
-    from the left of the frame. Each gap of a gapped motif is marked with
-    dashed lines, labelled with the gap's range of sizes. On its own, a
-    gapped motif's gaps take no columns, and a line between the columns on
-    either side marks each. Aligned with other motifs, it is placed at the
-    gap sizes that fit the others best, as
-    [`compare_motifs()`][universalmotif.compare_motifs] finds them, with its
-    gaps left blank between two lines.
+    one with the highest information content, which for CWMs is that of
+    their probabilities. The alignment works as in
+    [`compare_motifs()`][universalmotif.compare_motifs], trying reverse
+    complements of DNA and RNA motifs with ``rc``. CWMs are aligned by the
+    cosine of their contributions, keeping their signs, and other motifs by
+    column correlation.
+
+    Motifs that align better as reverse complements are flipped and get
+    ``rc_text`` added to their names. All of them are padded into a common
+    frame and drawn one above the other. With ``align=False`` they are
+    drawn as they are, from the left of the frame.
+
+    Each gap of a gapped motif is marked with dashed lines, labelled with
+    the gap's range of sizes. On its own, a gapped motif's gaps take no
+    columns, and each is marked by a line between the columns on either
+    side. Aligned with other motifs, it is placed at the gap sizes that fit
+    the others best, as
+    [`compare_motifs()`][universalmotif.compare_motifs] finds them. Its
+    gaps are then left blank between two lines.
 
     Parameters
     ----------
@@ -508,13 +530,13 @@ def view_motifs(
     use_type
         Matrix type to draw, one of ``"ICM"``, ``"PPM"``, ``"PWM"``,
         ``"PCM"``, or ``"CWM"`` for motifs that are CWMs. By default CWMs
-        are drawn as CWMs and other motifs as ICMs, and a mix of CWMs and
-        other types is drawn as ICMs so that the panels share a scale. ICMs
-        are drawn in bits, and motifs without ``nsites`` count as 100 sites.
+        are drawn as CWMs and other motifs as ICMs. A mix of CWMs and other
+        types is drawn as ICMs so that the panels share a scale. ICMs are
+        drawn in bits, and motifs without ``nsites`` count as 100 sites.
     sort_by
-        Display order, which is the input order with ``"none"``, decreasing
-        information content with ``"ic"``, or clusters by correlation with
-        ``"similarity"``.
+        Display order. ``"none"`` keeps the input order, ``"ic"`` sorts by
+        decreasing information content, and ``"similarity"`` clusters by
+        correlation.
     show_names, names_pos
         Name each logo, either above it with ``"top"`` or beside it with
         ``"right"``. A single logo is named above it.
@@ -523,14 +545,14 @@ def view_motifs(
         every logo with each motif counting its own positions.
     colour_scheme
         Letter colours. DNA and RNA default to green A, blue C, yellow G and
-        red T or U, amino acids to colours grouped by side-chain chemistry,
-        and other alphabets to a categorical palette.
+        red T or U. Amino acids default to colours grouped by side-chain
+        chemistry, and other alphabets to a categorical palette.
     min_height, x_spacer, y_spacer, sort_positions, sort_positions_decreasing, fit_to_height, flip_neg
         Letter layout, as in [`view_logo()`][universalmotif.view_logo]. By
-        default letters are sorted by height except for PCMs and PPMs, and
-        ``fit_to_height`` scales every PPM position to a height of 1 and
-        leaves PCM positions as they are. It is ignored for ICMs, PWMs and
-        CWMs.
+        default letters are sorted by height except for PCMs and PPMs. The
+        default ``fit_to_height`` scales every PPM position to a height of
+        1 and leaves PCM positions as they are. It is ignored for ICMs, PWMs
+        and CWMs.
     return_raw
         Return the aligned matrices as a dict from names to (letters,
         positions) arrays instead of drawing them.
@@ -665,11 +687,11 @@ def plot_motif_peaks(
 ) -> Figure:
     """Draw the positions of motif hits found by [`motif_peaks()`][universalmotif.motif_peaks].
 
-    One panel per motif, or per motif named in ``motifs`` in the order
-    named, shows a histogram of the hit centres, with the most enriched
-    window shaded and the P-value and enrichment in the title. Since
+    Each motif gets a panel with a histogram of its hit centres. The most
+    enriched window is shaded, and the title gives the P-value and
+    enrichment. ``motifs`` picks the motifs to draw and their order.
     [`motif_peaks()`][universalmotif.motif_peaks] returns every motif by
-    default, a long table is best filtered by q-value first or narrowed
+    default, so a long table is best filtered by q-value first or narrowed
     with ``motifs``.
 
     Examples
@@ -997,7 +1019,7 @@ def _fit_polar_limits(ax: Axes, texts: list, r: float) -> None:
 
 def _fit_legends(ax: Axes, legends: list, own_figure: bool) -> None:
     """Make room for legends drawn beside the axes that would otherwise run
-    off the figure: a figure made here is widened, and axes passed in are
+    off the figure. A figure made here is widened, and axes passed in are
     narrowed."""
     fig = ax.figure
     renderer = fig.canvas.get_renderer()
@@ -1046,11 +1068,12 @@ def plot_motif_proximity(
     """Draw each motif's distances to the nearest anchor, from
     [`motif_proximity()`][universalmotif.motif_proximity], with the most enriched zone shaded.
 
-    Distances are signed and negative upstream of stranded anchors, and the
+    Distances are signed and negative upstream of stranded anchors. The
     zone of an upstream or downstream test is shaded on that side only.
-    ``motifs`` picks the motifs to draw and their order, and otherwise every
-    row gets a panel, so a long table is best filtered by q-value first. With
-    ``log_x`` the absolute distances plus one are drawn on a log scale.
+    ``motifs`` picks the motifs to draw and their order. Otherwise every
+    row gets a panel, so a long table is best filtered by q-value first.
+    With ``log_x`` the absolute distances plus one are drawn on a log
+    scale.
 
     Examples
     --------
@@ -1111,9 +1134,9 @@ def plot_motif_proximity(
 
 def _density(x: np.ndarray, n: int = 512) -> tuple[np.ndarray, np.ndarray]:
     """Gaussian kernel density over the range of x, with Silverman's
-    rule-of-thumb bandwidth, which is 0.9 times the smaller of the standard
-    deviation and the interquartile range over 1.34, times n to the power
-    -1/5."""
+    rule-of-thumb bandwidth. The bandwidth is 0.9 times the smaller of the
+    standard deviation and the interquartile range over 1.34, times n to
+    the power -1/5."""
     x = np.asarray(x, dtype=float)
     if x.size < 2 or np.ptp(x) == 0:
         return np.array([x.mean() if x.size else 0.0]), np.array([0.0])
@@ -1138,13 +1161,13 @@ def plot_match_bkg(
     """Compare the composition of targets and their matched background
     from [`match_bkg()`][universalmotif.match_bkg], as overlaid densities.
 
-    Give the targets and the background, as ``sequences`` and
-    ``bkg_sequences``, to draw their GC fraction and length, or the
-    ``indices`` table from ``match_bkg(..., return_indices=True)`` to also
-    see any covariates. ``by`` picks the axes to draw, and ``names`` gives
-    the two sets their names in the legend, such as ``("peaks",
-    "shuffled")`` for a background that was not matched. ``bkg`` is the old
-    name of ``bkg_sequences``, which still works for now.
+    Give the targets and the background as ``sequences`` and
+    ``bkg_sequences`` to draw their GC fraction and length. To also see
+    any covariates, give instead the ``indices`` table from
+    ``match_bkg(..., return_indices=True)``. ``by`` picks the axes to draw.
+    ``names`` gives the two sets their names in the legend, such as
+    ``("peaks", "shuffled")`` for a background that was not matched.
+    ``bkg`` is the old name of ``bkg_sequences`` and still works for now.
 
     Examples
     --------
@@ -1275,8 +1298,10 @@ _LOGO_ROW = 0.6
 
 def _hit_logos(hits: pl.DataFrame, motifs: Any, start: int, a: int, b: int) -> list[tuple[float, float, int, Motif]]:
     """The motif of each hit overlapping positions ``a`` to ``b``, turned to
-    read along the hit, as (left, width, row, motif) in the x coordinates of
-    a panel drawing those positions, with overlapping hits in later rows."""
+    read along the hit.
+
+    Each is given as (left, width, row, motif) in the x coordinates of a
+    panel drawing those positions. Overlapping hits go in later rows."""
     from ._api import motif_rc
 
     for col in ("motif", "start", "end"):
@@ -1457,43 +1482,50 @@ def view_attributions(
     those a deep-learning model gives each position of an input.
 
     ``scores`` is either one value per position, or one value per letter
-    and position as an array of shape (letters, length), with the letters
-    in the order of ``alphabet``. Arrays of shape (length, letters) and
-    PyTorch tensors are accepted too. ``kind`` chooses what is drawn:
+    and position as an array of shape (letters, length). The letters are in
+    the order of ``alphabet``. Arrays of shape (length, letters) and
+    PyTorch tensors are accepted too. ``kind`` chooses what is drawn.
 
     ``"observed"``
-        A logo of the letters of ``sequence``, each as tall as its score,
-        above the axis when positive and below it when negative. Scores per
-        letter are reduced to those of the letters in the sequence, so this
-        draws contribution scores times the input. Without ``sequence``,
-        per-letter scores are drawn as they are, which suits scores that
-        are already zero for the letters not in the sequence.
+        A logo of the letters of ``sequence``, each as tall as its score.
+        Positive scores are drawn above the axis and negative ones below
+        it. Scores per letter are reduced to those of the letters in the
+        sequence, so this draws contribution scores times the input.
+        Without ``sequence``, per-letter scores are drawn as they are. This
+        suits scores that are already zero for the letters not in the
+        sequence.
     ``"all"``
         A logo of every letter's score at every position, such as
         hypothetical contributions or the effects of in silico
-        mutagenesis, with positive scores stacked above the axis and
+        mutagenesis. Positive scores are stacked above the axis and
         negative ones below.
     ``"heatmap"``
         The same per-letter scores as a heatmap with a colour scale
-        centred on zero, with the letters of ``sequence`` marked by dots.
+        centred on zero. The letters of ``sequence`` are marked by dots.
 
     Positions are labelled from ``start``, such as the genomic position of
-    the first letter, and ``region``, a (start, end) pair in the same
-    positions with the end left out, draws only part of the sequence.
-    ``hits``, such as from [`scan_sequences()`][universalmotif.scan_sequences]
-    run on ``sequence``, shades each hit, labelled with its ``label`` or
-    ``motif`` column if the table has one, with positions counted along the
-    sequence from 0. Given the ``motifs`` that were scanned, as a list or a
-    mapping from the names in the ``motif`` column, each hit's motif is drawn
-    above it, reverse complemented for hits on the ``-`` strand, so that the
-    motif can be compared with the scores beneath it, such as a CWM matched
-    by [`scan_contributions()`][universalmotif.scan_contributions]. Each
-    logo fills its own row, so logos are not on a common scale, and logos of
+    the first letter. ``region`` draws only part of the sequence. It is a
+    (start, end) pair in the same positions, with the end left out.
+
+    ``hits`` shades each hit, such as those from
+    [`scan_sequences()`][universalmotif.scan_sequences] run on
+    ``sequence``. Their positions are counted along the sequence from 0.
+    Each hit is labelled with its ``label`` or ``motif`` column if the
+    table has one.
+
+    ``motifs`` gives the motifs that were scanned, as a list or as a
+    mapping from the names in the ``motif`` column. Each hit's motif is
+    then drawn above it, reverse complemented for hits on the ``-``
+    strand. This lets the motif be compared with the scores beneath it,
+    such as a CWM matched by
+    [`scan_contributions()`][universalmotif.scan_contributions]. Each logo
+    fills its own row, so logos are not on a common scale. Logos of
     overlapping hits take further rows. With ``ax``, they are drawn in a
     panel above it.
-    Letters are coloured by ``colour_scheme``, by default the package's
-    colours for DNA, RNA and amino acids, and letters below the axis are
-    drawn upside down, so that they read outward from zero, unless
+
+    Letters are coloured by ``colour_scheme``, which defaults to the
+    package's colours for DNA, RNA and amino acids. Letters below the axis
+    are drawn upside down so that they read outward from zero, unless
     ``flip_neg`` is ``False``.
 
     Needs the ``plot`` extra.
@@ -1571,7 +1603,7 @@ def view_attributions(
         scale = max(hi, -lo) or 1.0
         # With every letter drawn, each position's letters are stacked by
         # height, as in motif logos.
-        # Every letter is drawn at its own height: dropping short letters
+        # Every letter is drawn at its own height. Dropping short letters
         # would scale the rest of the column up to fill in for them, so
         # only letters that are effectively zero are left out.
         view_logo(m, letters=list(alphabet), colour_scheme=colour_scheme, flip_neg=flip_neg,
@@ -1624,18 +1656,22 @@ def view_variant(
     with one letter changed, one above the other, with their difference
     below.
 
-    ``ref_scores`` are the scores of ``sequence`` and ``alt_scores`` those of
-    the sequence with ``alt`` at ``position``, in any of the forms
-    [`view_attributions()`][universalmotif.view_attributions] takes, drawn
-    with its ``kind`` of ``"observed"`` or ``"all"``. ``position`` and
-    ``region`` are given in the same positions as the axis, which start at
-    ``start``. The two logos share a y-axis so that they can be compared,
-    the changed position is shaded, and the bottom panel shows the change,
-    alternative minus reference. With ``kind="observed"`` it is the change
-    in the score of the letter each sequence has at each position, as bars.
-    With ``kind="all"`` it is the change in the score of every letter, drawn
-    as a logo like the two above, which suits hypothetical scores and
-    mutagenesis maps alike.
+    ``ref_scores`` are the scores of ``sequence``, and ``alt_scores`` those
+    of the sequence with ``alt`` at ``position``. Both can take any of the
+    forms [`view_attributions()`][universalmotif.view_attributions] takes,
+    and are drawn with its ``kind`` of ``"observed"`` or ``"all"``.
+    ``position`` and ``region`` are given in the same positions as the
+    axis, which start at ``start``.
+
+    The two logos share a y-axis so that they can be compared, and the
+    changed position is shaded. The bottom panel shows the change as
+    alternative minus reference.
+
+    - With ``kind="observed"``, it is the change in the score of the letter
+      each sequence has at each position, drawn as bars.
+    - With ``kind="all"``, it is the change in the score of every letter,
+      drawn as a logo like the two above. This suits hypothetical scores
+      and mutagenesis maps alike.
 
     Needs the ``plot`` extra.
 
@@ -1679,8 +1715,8 @@ def view_variant(
     _share_logo_y(axes[:2])
     scale = max(float(np.abs(m_ref).max(initial=0.0)), float(np.abs(m_alt).max(initial=0.0)))
     if kind == "all":
-        # The change in the score of every letter, as a logo of its own;
-        # rounding error is not drawn as a change.
+        # The change in the score of every letter, as a logo of its own.
+        # Rounding error is not drawn as a change.
         d = m_alt - m_ref
         d[np.abs(d) <= 1e-9 * scale] = 0.0
         view_attributions(d, alt_seq, kind="all", alphabet=alphabet, start=start, region=(a, b),
@@ -1742,34 +1778,43 @@ def view_attribution_tracks(
     """Draw several tracks of attribution scores for the same sequence one
     above the other, lined up along a shared position axis.
 
-    This suits comparing the scores a model's heads give the same input,
-    such as its counts and profile heads, those of several models or cell
-    types, or the scores of the observed letters above a heatmap of in
-    silico mutagenesis. ``tracks`` is a dict of scores labelled by its keys,
-    or a list of scores labelled by number, with each in any of the forms
-    [`view_attributions()`][universalmotif.view_attributions] takes and of
-    the same length. ``kind`` is one of its kinds for every track, a list
-    with one per track, or a dict giving the kinds of some tracks by their
-    keys, with the rest drawn as ``"observed"``.
+    Some uses:
+
+    - the scores a model's heads give the same input, such as its counts
+      and profile heads;
+    - the scores of several models or cell types;
+    - the scores of the observed letters above a heatmap of in silico
+      mutagenesis.
+
+    ``tracks`` is a dict of scores labelled by its keys, or a list of
+    scores labelled by number. Each can take any of the forms
+    [`view_attributions()`][universalmotif.view_attributions] takes, and
+    all must have the same length. ``kind`` can be one of its kinds for
+    every track, or a list with one per track. It can also be a dict giving
+    the kinds of some tracks by their keys, with the rest drawn as
+    ``"observed"``.
 
     One more kind, ``"signal"``, draws a track of plain numbers with one
-    value per position, such as the coverage of an ATAC-seq or ChIP-seq
-    experiment read with [`signal_values()`][universalmotif.signal_values],
-    a model's predicted profile or conservation scores. The values are drawn
-    as steps one position wide and filled down to zero, with missing values
-    left as gaps, in grey or in the colour given with them as a
-    (values, colour) pair. Such tracks must be as long as the sequence, and
-    the sequence can be left out when every track is a signal.
+    value per position. Examples are the coverage of an ATAC-seq or
+    ChIP-seq experiment read with
+    [`signal_values()`][universalmotif.signal_values], a model's predicted
+    profile or conservation scores. The values are drawn as steps one
+    position wide, filled down to zero, with missing values left as gaps.
+    They are grey, or in the colour given with them as a (values, colour)
+    pair. Such tracks must be as long as the sequence. The sequence can be
+    left out when every track is a signal.
 
-    Each track gets its own y-axis unless ``sharey`` is ``True``, which puts
-    the logos on one scale and the heatmaps on one colour scale, so that the
-    sizes of scores can be compared between tracks, while signal tracks keep
-    their own scales. ``heights`` sets the relative heights of the tracks, by
-    default a little taller for heatmaps and shorter for signal than for
-    logos. ``start``, ``region``, ``colour_scheme`` and ``flip_neg``
-    work as for [`view_attributions()`][universalmotif.view_attributions],
-    and each of ``hits`` is shaded once through every track and labelled
-    above the top one.
+    Each track gets its own y-axis unless ``sharey`` is ``True``. That puts
+    the logos on one scale and the heatmaps on one colour scale, so the
+    sizes of scores can be compared between tracks. Signal tracks keep
+    their own scales. ``heights`` sets the relative heights of the tracks.
+    By default heatmaps are a little taller than logos and signal tracks a
+    little shorter.
+
+    ``start``, ``region``, ``colour_scheme`` and ``flip_neg`` work as for
+    [`view_attributions()`][universalmotif.view_attributions]. Each of
+    ``hits`` is shaded once through every track and labelled above the top
+    one.
 
     Needs the ``plot`` extra.
 

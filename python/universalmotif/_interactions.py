@@ -38,7 +38,8 @@ _SUMMARIES = ("mean", "strongest", "min", "max")
 def _pair_substitutions(sequence: str, alphabet: str, region, alt) -> tuple[int, int, np.ndarray,
                                                                                np.ndarray, bool]:
     """The region and the substitutions made in it, as positions and letter
-    indices in order, and whether there is exactly one per position."""
+    indices in order. Also returns whether there is exactly one per
+    position."""
     a, b = _mutagenesis_region(sequence, region)
     if len(set(alphabet)) != len(alphabet):
         raise ValueError("the alphabet has repeated letters")
@@ -86,8 +87,8 @@ def _pair_rows(pos: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _pair_batch(ref: np.ndarray, pos, let, first, second, r0: int, r1: int) -> np.ndarray:
-    """Rows ``r0`` to ``r1`` of the batch: the sequence, then each single
-    substitution, then each pair."""
+    """Rows ``r0`` to ``r1`` of the batch, which holds the sequence, then
+    each single substitution, then each pair."""
     rows = np.arange(r0, r1)
     out = np.repeat(ref, r1 - r0, axis=0)
     s = len(pos)
@@ -131,39 +132,50 @@ def pair_mutagenesis(
     """Single and double substitutions of a sequence, one-hot encoded for a
     model, for measuring which positions it treats as interacting.
 
-    The batch starts with the sequence itself, followed by the sequence
-    with each single substitution, in order of position, and then by the
-    sequence with each pair of substitutions at different positions, the
-    first substitution of each pair before the second and the pairs in the
-    order of their first and then their second. A model's predictions for
-    the batch, in the same order, are turned into a matrix of interactions
-    between positions by
-    [`interaction_effects()`][universalmotif.interaction_effects].
-    ``region`` is a (start, end) pair counted from 0 with the end left out,
-    and is the whole sequence by default.
+    The batch holds, in this order:
+
+    1. the sequence itself;
+    2. the sequence with each single substitution, in order of position;
+    3. the sequence with each pair of substitutions at different
+       positions.
+
+    Within each pair the first substitution comes before the second. The
+    pairs are ordered by their first and then their second substitution.
+    [`interaction_effects()`][universalmotif.interaction_effects] turns a
+    model's predictions for the batch, in the same order, into a matrix of
+    interactions between positions. ``region`` is a (start, end) pair
+    counted from 0 with the end left out. It is the whole sequence by
+    default.
 
     Every pair of positions needs its own sequence, so by default each
-    position gets a single substitution, its complement, which swaps A with
-    T and C with G. This always changes the letter, and breaks the sites of
-    most motifs while keeping the GC content of the sequence, so that a
-    model's response to composition is not mistaken for an interaction.
-    ``alt="transition"`` swaps A with G and C with T instead, and ``alt``
-    can also give one letter for each position of the region, as a string
-    or a list, such as the letter with the strongest effect at each
-    position in [`mutagenesis_effects()`][universalmotif.mutagenesis_effects],
-    which suits other alphabets too. With these rules, letters outside the
-    alphabet, such as N, are replaced by its first letter. ``alt="all"``
-    makes every substitution, as [`mutagenesis()`][universalmotif.mutagenesis]
-    does, and every pair of them.
+    position gets a single substitution. ``alt`` chooses it.
+
+    - ``None`` (the default) takes the complement, which swaps A with T and
+      C with G. This always changes the letter and breaks the sites of
+      most motifs. It also keeps the GC content of the sequence, so a
+      model's response to composition is not mistaken for an interaction.
+    - ``"transition"`` swaps A with G and C with T instead.
+    - A string or list gives one letter for each position of the region.
+      An example is the letter with the strongest effect at each position
+      in [`mutagenesis_effects()`][universalmotif.mutagenesis_effects].
+      This suits other alphabets too.
+    - ``"all"`` makes every substitution, as
+      [`mutagenesis()`][universalmotif.mutagenesis] does, and every pair of
+      them.
+
+    With the two rules, letters outside the alphabet, such as N, are
+    replaced by its first letter.
 
     For a region of L positions, the batch has 1 + L + L(L - 1)/2 sequences
-    with one substitution per position, 20,101 for 200 positions, and with
-    ``alt="all"`` on DNA, 1 + 3L + 9L(L - 1)/2, or 179,701 for 200
-    positions. ``batch_size`` returns the batch as an iterable of arrays of
-    up to that many sequences, made one at a time as they are needed, so
-    that the whole batch is never held in memory; the predictions for them
-    are joined, for example with ``np.concatenate``, before being passed on.
-    Without it, the batch is returned as one array of shape (sequences,
+    with one substitution per position, or 20,101 for 200 positions. With
+    ``alt="all"`` on DNA it has 1 + 3L + 9L(L - 1)/2, or 179,701 for 200
+    positions.
+
+    ``batch_size`` returns the batch as an iterable of arrays of up to that
+    many sequences. They are made one at a time as they are needed, so the
+    whole batch is never held in memory. Join the predictions for them,
+    for example with ``np.concatenate``, before passing them on. Without
+    ``batch_size``, the batch is returned as one array of shape (sequences,
     letters, length).
 
     Examples
@@ -210,31 +222,37 @@ def interaction_effects(
     [`pair_mutagenesis()`][universalmotif.pair_mutagenesis].
 
     ``predictions`` holds one prediction per entry of the batch, in order,
-    with the sequence's own first; ``sequence``, ``alphabet``, ``region`` and
-    ``alt`` must be those the batch was made with. The epistasis between
-    substitutions at positions i and j is how far the effect of making both
-    differs from the sum of their effects alone,
-    f(ij) - f(i) - f(j) + f(sequence), which is 0 for a model that adds up
-    the effects of its positions. Breaking two sites the model needs
-    together, or a site twice over, costs less than the two substitutions
-    apart, which gives positive values when the substitutions lower the
-    prediction.
+    with the sequence's own first. ``sequence``, ``alphabet``, ``region``
+    and ``alt`` must be those the batch was made with.
 
-    Returns a pair of arrays. The first is the symmetric matrix of
-    epistasis, of shape (positions, positions) over ``region``, with a
-    diagonal of NaN since a position does not interact with itself in this
-    sense, ready for [`plot_interactions()`][universalmotif.plot_interactions].
-    The second holds the effect of each single substitution, the prediction
-    minus the sequence's, with one value per position, or with
-    ``alt="all"``, an array of shape (letters, positions) like that of
-    [`mutagenesis_effects()`][universalmotif.mutagenesis_effects]. With
-    ``alt="all"``, each pair of positions has several values, which
-    ``summary`` reduces to one: their ``"mean"``, the ``"strongest"``, of
-    the largest size, or the ``"min"`` or ``"max"``. ``summary=None`` keeps
-    them all, as an array of shape (letters, positions, letters, positions)
-    with NaN for the letters of the sequence. With several outputs per
-    prediction, given as an array of shape (sequences, outputs), each array
-    gets the outputs as its first axis.
+    The epistasis between substitutions at positions i and j is how far
+    the effect of making both differs from the sum of their effects alone.
+    This is f(ij) - f(i) - f(j) + f(sequence), which is 0 for a model that
+    adds up the effects of its positions. Breaking two sites the model
+    needs together, or a site twice over, costs less than the two
+    substitutions apart. That gives positive values when the substitutions
+    lower the prediction.
+
+    Returns a pair of arrays.
+
+    - The symmetric matrix of epistasis, of shape (positions, positions)
+      over ``region``, ready for
+      [`plot_interactions()`][universalmotif.plot_interactions]. Its
+      diagonal is NaN, since a position does not interact with itself in
+      this sense.
+    - The effect of each single substitution, as the prediction minus the
+      sequence's. It has one value per position, or with ``alt="all"`` an
+      array of shape (letters, positions) like that of
+      [`mutagenesis_effects()`][universalmotif.mutagenesis_effects].
+
+    With ``alt="all"``, each pair of positions has several values, and
+    ``summary`` reduces them to one. The choices are their ``"mean"``, the
+    ``"strongest"`` (of the largest size), the ``"min"`` or the ``"max"``.
+    ``summary=None`` keeps them all, as an array of shape (letters,
+    positions, letters, positions) with NaN for the letters of the
+    sequence. With several outputs per prediction, given as an array of
+    shape (sequences, outputs), each array gets the outputs as its first
+    axis.
 
     Examples
     --------
@@ -312,8 +330,8 @@ def interaction_effects(
 
 
 def _robust_limit(values: np.ndarray) -> float:
-    """The 99th percentile of the sizes of the values other than 0, so that a
-    few strong values do not wash out the rest of the scale."""
+    """The 99th percentile of the sizes of the values other than 0. A few
+    strong values then do not wash out the rest of the scale."""
     sizes = np.abs(values[np.isfinite(values)])
     sizes = sizes[sizes > 0]
     return float(np.percentile(sizes, 99)) if sizes.size else 1.0
@@ -376,9 +394,9 @@ def _strip_glyphs(m: np.ndarray, alphabet: str):
 
 
 def _draw_strip(ax: Axes, glyphs, limits, colours, n: int, vertical: bool, zero: bool) -> None:
-    """Draw a logo along a strip beside the map, with the positions along x,
-    or along y from the top with the letters standing on the edge of the
-    map, as those above it do."""
+    """Draw a logo along a strip beside the map, with the positions along x.
+    A vertical strip has them along y from the top, with the letters
+    standing on the edge of the map as those above it do."""
     from matplotlib.collections import PolyCollection
 
     def turned(g):
@@ -430,42 +448,50 @@ def plot_interactions(
     """Draw a matrix of interactions between the positions of a sequence as
     a heatmap, with the sequence or a logo of its scores along the edges.
 
-    ``matrix`` is any square array with a row and a column per position,
-    such as the epistasis from
-    [`interaction_effects()`][universalmotif.interaction_effects] or a
+    ``matrix`` is any square array with a row and a column per position.
+    Examples are the epistasis from
+    [`interaction_effects()`][universalmotif.interaction_effects], or a
     matrix of feature interactions computed with a model's own library,
-    for example the change in the attribution of each position as each
-    other position is changed. Values are drawn on a diverging colour scale
-    centred on 0, which runs to ``vmax`` either way, by default the 99th
-    percentile of their sizes, so that a few strong values do not wash out
-    the rest, and missing values, such as the diagonal of epistasis, are
-    grey. The colour bar is labelled with ``label``.
+    such as the change in the attribution of each position as each other
+    position is changed.
 
-    Positions are labelled from ``start`` on both axes, and the matrix
-    covers the whole of ``sequence``, or with a matrix shorter than the
-    sequence, the part of it given by ``region``, a (start, end) pair in
-    the same positions with the end left out, as made by
-    ``interaction_effects()`` with a region. With a matrix as long as the
-    sequence, ``region`` draws only part of it. ``sequence`` is drawn along
-    the top and left edges, and ``scores``, one per position or one per
-    letter and position in any of the forms
-    [`view_attributions()`][universalmotif.view_attributions] takes and as
-    long as the sequence or the matrix, are drawn there as a logo of the
-    letters of the sequence instead, such as the contributions of a model
-    or minus the single substitution effects. ``hits``, such as from
-    [`scan_sequences()`][universalmotif.scan_sequences] run on ``sequence``
-    and so with positions counted along it from 0, are shaded along the
-    edges in ``colour``, labelled with their ``motif`` if the table has one,
-    and each pair of hits is outlined on the map, where the interactions
-    between and within their sites lie.
+    Values are drawn on a diverging colour scale centred on 0, which runs
+    to ``vmax`` either way. By default ``vmax`` is the 99th percentile of
+    their sizes, so a few strong values do not wash out the rest. Missing
+    values, such as the diagonal of epistasis, are grey. The colour bar is
+    labelled with ``label``.
+
+    Positions are labelled from ``start`` on both axes. ``region`` is a
+    (start, end) pair in the same positions, with the end left out. A
+    matrix as long as the sequence covers the whole of it, and ``region``
+    then draws only part of it. A matrix shorter than the sequence covers
+    the part given by ``region``, as made by ``interaction_effects()``
+    with a region.
+
+    ``sequence`` is drawn along the top and left edges. ``scores`` are
+    drawn there instead, as a logo of the letters of the sequence. Examples
+    are the contributions of a model, or minus the single substitution
+    effects. They can be one per position or one per letter and position,
+    in any of the forms
+    [`view_attributions()`][universalmotif.view_attributions] takes, and
+    as long as the sequence or the matrix.
+
+    ``hits`` are shaded along the edges in ``colour``, such as those from
+    [`scan_sequences()`][universalmotif.scan_sequences] run on
+    ``sequence``, with positions counted along it from 0. They are
+    labelled with their ``motif`` if the table has one. Each pair of hits
+    is outlined on the map, where the interactions between and within
+    their sites lie.
 
     ``triangle=True`` draws only the upper triangle, turned so that the
-    diagonal lies flat, as is usual for Hi-C maps, with the sequence or
-    logo below it and the distance between two positions as the height.
+    diagonal lies flat, as is usual for Hi-C maps. The sequence or logo is
+    drawn below it, and the height is the distance between two positions.
     ``max_distance`` then cuts the triangle off at that distance, which
-    suits long regions where only nearby positions interact. Letters are
-    coloured by ``colour_scheme``, by default the package's colours for DNA,
-    RNA and amino acids, and ``text_size`` sets the size of labels.
+    suits long regions where only nearby positions interact.
+
+    Letters are coloured by ``colour_scheme``, which defaults to the
+    package's colours for DNA, RNA and amino acids. ``text_size`` sets the
+    size of labels.
 
     Needs the ``plot`` extra.
 

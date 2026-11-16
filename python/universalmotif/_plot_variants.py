@@ -30,7 +30,7 @@ _LANE_INCHES = 0.17
 
 
 def _summarize(df: pl.DataFrame, summary: str) -> pl.DataFrame:
-    """One variant per position: the mean effect, or the variant with the
+    """One variant per position, as the mean effect or the variant with the
     lowest, highest or largest absolute effect."""
     if summary not in _SUMMARIES:
         raise ValueError(f"summary must be one of {', '.join(map(repr, _SUMMARIES))}, or None")
@@ -85,8 +85,8 @@ def _stack(ax: Axes, legends: list, make) -> Any:
 
 
 def _fit_figure(fig: Figure, axes: list, legends: list, own_figure: bool) -> None:
-    """Make room for legends running off the figure: a figure made here is
-    widened and made taller with its panels kept the same size, and axes
+    """Make room for legends running off the figure. A figure made here is
+    widened and made taller, with its panels kept the same size. Axes
     passed in are narrowed."""
     renderer = fig.canvas.get_renderer()
     boxes = [leg.get_window_extent(renderer) for leg in legends]
@@ -137,23 +137,24 @@ def plot_variant_effects(
     """Draw the effects of many variants along a sequence.
 
     Each variant is a lollipop at its position, rising or falling from zero
-    to its effect, such as a model's predicted change in signal for the
-    variants of a VCF file or a QTL study, or for every substitution from
+    to its effect. The effect could be a model's predicted change in signal
+    for the variants of a VCF file or a QTL study, or for every
+    substitution from
     [`mutagenesis_effects()`][universalmotif.mutagenesis_effects]. Below
     them, motif hits along the sequence are drawn as arrows pointing along
-    their strand, as [`plot_hits()`][universalmotif.plot_hits] draws them,
-    and the letters of the sequence when there is room for them.
+    their strand, as [`plot_hits()`][universalmotif.plot_hits] draws them.
+    The letters of the sequence are drawn too when there is room for them.
 
     With ``motifs``, the hits are found by scanning ``sequence`` at the
-    ``pvalue`` cutoff, unless ``hits`` are given, and each single-letter
+    ``pvalue`` cutoff, unless ``hits`` are given. Each single-letter
     variant's change to the motif sites it falls in is found with
-    [`variant_motif_effects()`][universalmotif.variant_motif_effects], which
-    gives the full table. The head of a variant that strengthens or
-    creates a site then points up, and that of one that weakens or destroys
-    a site points down, after the site it changes most. With ``highlight``,
-    variants inside a drawn hit are ringed. The variants with the largest
-    effects are labelled with their position and change, and with the site
-    they change most.
+    [`variant_motif_effects()`][universalmotif.variant_motif_effects],
+    which gives the full table. The head of a variant then points up when
+    it strengthens or creates a site, and down when it weakens or destroys
+    one, going by the site it changes most. With ``highlight``, variants
+    inside a drawn hit are ringed. The variants with the largest effects
+    are labelled with their position and change, and with the site they
+    change most.
 
     Needs the ``plot`` extra.
 
@@ -161,14 +162,14 @@ def plot_variant_effects(
     ----------
     variants
         The variants, as a polars or pandas DataFrame with ``position``,
-        ``ref`` and ``alt`` columns and an ``effect`` column, or as a list
-        of (position, ref, alt, effect) rows. Column names are matched
-        without regard to case, so ``REF`` and ``ALT`` work too, and other
-        columns can be used for ``size_by`` and ``label_by``. Positions
-        are counted from 0 at the first letter of the sequence, or from
-        ``start``. An array of shape (letters, length) from
-        ``mutagenesis_effects()`` draws every substitution, with the
-        letters in the order of ``alphabet``.
+        ``ref``, ``alt`` and ``effect`` columns, or as a list of
+        (position, ref, alt, effect) rows. Column names are matched without
+        regard to case, so ``REF`` and ``ALT`` work too. Other columns can
+        be used for ``size_by`` and ``label_by``. Positions are counted
+        from 0 at the first letter of the sequence, or from ``start``. An
+        array of shape (letters, length) from ``mutagenesis_effects()``
+        draws every substitution, with the letters in the order of
+        ``alphabet``.
     effects
         The name of the column of effects, ``"effect"`` by default, or the
         effects themselves as an array with one per variant.
@@ -186,8 +187,8 @@ def plot_variant_effects(
         ``sequence``, with positions counted along the sequence from 0.
     start
         The position of the first letter of the sequence, such as its
-        genomic position, which the axis and the positions of variants
-        count from.
+        genomic position. The axis and the positions of variants count
+        from it.
     region
         Draw only the positions from the first of this (start, end) pair up
         to the second, counted as the axis is.
@@ -195,16 +196,16 @@ def plot_variant_effects(
         The letters of the sequence, in the order of the rows of an array of
         effects.
     summary
-        Draw one variant per position: ``"mean"`` for the mean effect of
-        those at the position, or ``"min"``, ``"max"`` or ``"strongest"``
-        for the one with the lowest, highest or largest absolute effect.
+        Draw one variant per position. ``"mean"`` gives the mean effect of
+        those at the position. ``"min"``, ``"max"`` and ``"strongest"``
+        give the one with the lowest, highest or largest absolute effect.
     colour_by
         ``"sign"`` to colour effects above zero red and those below blue,
         or ``"alt"`` to colour them by their alternative letter.
     colour_scheme
         Colours of the letters for ``colour_by="alt"`` and for the letters
-        of the sequence, by default the package's colours for DNA, RNA and
-        amino acids.
+        of the sequence. The default is the package's colours for DNA, RNA
+        and amino acids.
     size_by
         A numeric column to size the heads by, from its smallest value to
         its largest, such as an allele frequency or the significance of a
@@ -212,9 +213,9 @@ def plot_variant_effects(
     labels
         How many of the variants with the largest absolute effects to
         label. Labels are set in a row below the lowest effect, or above
-        the highest, and joined to their variants by lines, so that those
-        of variants bunched together stay apart; when they do not fit there,
-        they are placed beside their variants instead.
+        the highest, and joined to their variants by lines. This keeps the
+        labels of variants bunched together apart. When they do not fit
+        there, they are placed beside their variants instead.
     label_by
         A column to label variants by, such as variant IDs, instead of
         their position and change.
@@ -232,8 +233,8 @@ def plot_variant_effects(
         The size of a new figure, in inches.
     ax
         Axes to draw into, which are split to make room for the hits and
-        letters below the effects. The axes of the effects are returned,
-        and otherwise a new figure is.
+        letters below the effects. The axes of the effects are then
+        returned. Otherwise a new figure is returned.
 
     Returns
     -------
@@ -242,7 +243,7 @@ def plot_variant_effects(
 
     Examples
     --------
-    A stand-in for a model scores a sequence by its best GATA site, so that
+    A stand-in for a model scores a sequence by its best GATA site, so
     only the variants in that site have an effect:
 
     >>> import matplotlib
@@ -349,7 +350,7 @@ def plot_variant_effects(
     if hits is not None and hits.height:
         pos = df["position"].to_numpy() - start
         end = pos + np.maximum(df["ref"].str.len_chars().to_numpy(), 1)
-        # The hits are merged into disjoint spans, so that each variant need
+        # The hits are merged into disjoint spans. Each variant then need
         # only be checked against the last span starting before its end.
         spans = hits.select("start", "end").sort("start")
         hs, he = spans["start"].to_numpy(), np.maximum.accumulate(spans["end"].to_numpy())
@@ -563,8 +564,9 @@ def plot_variant_effects(
 
 def _spread(want: np.ndarray, widths: np.ndarray, lo: float, hi: float, gap: float) -> np.ndarray | None:
     """Centres for boxes of the given widths on a line from ``lo`` to
-    ``hi``, as near the wanted centres as they can be without overlapping,
-    found by merging boxes that collide into blocks centred on their wanted
+    ``hi``, as near the wanted centres as they can be without overlapping.
+
+    Boxes that collide are merged into blocks centred on their wanted
     places. Returns ``None`` when they do not fit."""
     if widths.sum() + gap * (len(widths) - 1) > hi - lo:
         return None
@@ -601,9 +603,11 @@ def _spread(want: np.ndarray, widths: np.ndarray, lo: float, hi: float, gap: flo
 
 def _label_rows(ax: Axes, x, y, area, chosen: list[int], text: list[str], size: float) -> bool:
     """Label the chosen variants in rows below the lowest effect and above
-    the highest, spread out along the axis and joined to their variants by
-    leader lines, making room for the rows on the y-axis. Returns ``False``,
-    drawing nothing, when they do not fit."""
+    the highest.
+
+    Labels are spread out along the axis and joined to their variants by
+    leader lines, and the y-axis makes room for the rows. Returns
+    ``False``, drawing nothing, when they do not fit."""
     fig = ax.figure
     renderer = fig.canvas.get_renderer()
     to_pt = 72.0 / fig.dpi

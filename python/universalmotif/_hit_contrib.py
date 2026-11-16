@@ -36,18 +36,19 @@ class HitContributions:
 
     ``hits`` is the hit table with a ``contribution`` column added, the
     total observed contribution of the letters of each hit. ``observed`` is
-    an array of shape (hits, columns) holding the contribution of the letter
-    present at each position of a window around each hit, and
-    ``hypothetical``, when kept, one of shape (hits, letters, columns) with
-    the scores of every letter. Windows are read along each hit's strand, so
-    that every row reads like its motif, and start ``flank`` positions
-    before the hit. Hits of a motif narrower than the widest in the table
-    have their windows padded with NaN on the right, as do positions
-    beyond the ends of a sequence.
+    an array of shape (hits, columns). It holds the contribution of the
+    letter present at each position of a window around each hit.
+    ``hypothetical``, when kept, is an array of shape (hits, letters,
+    columns) with the scores of every letter.
+
+    Windows are read along each hit's strand, so that every row reads like
+    its motif, and start ``flank`` positions before the hit. The windows of
+    a motif narrower than the widest in the table are padded with NaN on
+    the right. Positions beyond the ends of a sequence are NaN too.
 
     Indexing with a motif name, or a list of names, gives the hits of those
-    motifs, and indexing with a boolean mask or row numbers gives those
-    rows, each with the columns trimmed to the hits kept.
+    motifs. Indexing with a boolean mask or row numbers gives those rows.
+    Either way, the columns are trimmed to the hits kept.
 
     Examples
     --------
@@ -95,12 +96,13 @@ class HitContributions:
         position of its hits, and with ``hypothetical`` of their flanks too.
 
         From the observed scores, each position's score goes to the letter
-        of the hit there, read from the hits' ``match`` column, as
-        [`scan_sequences()`][universalmotif.scan_sequences] gives it. With
-        ``hypothetical``, the mean hypothetical scores of every letter are
-        used instead, which needs them kept by
-        [`hit_contributions()`][universalmotif.hit_contributions]. The
-        CWMs are named after their motifs, in the order the motifs first
+        of the hit there. The letters are read from the hits' ``match``
+        column, as [`scan_sequences()`][universalmotif.scan_sequences] gives
+        it. With ``hypothetical``, the mean hypothetical scores of every
+        letter are used instead, which needs them kept by
+        [`hit_contributions()`][universalmotif.hit_contributions].
+
+        The CWMs are named after their motifs, in the order the motifs first
         appear, with ``nsites`` the number of hits. Gapped hits, whose
         widths vary, are left out.
 
@@ -184,9 +186,9 @@ class HitContributions:
 @dataclass
 class _Scores:
     """Contribution scores of a set of sequences as one array, padded to the
-    longest sequence: ``values`` of shape (sequences, length) for observed
-    scores or (sequences, letters, length), and the letters of the
-    sequences as codes 0 to 3 for ACGT and 4 for anything else, when known."""
+    longest sequence. ``values`` has shape (sequences, length) for observed
+    scores or (sequences, letters, length). The letters of the sequences
+    are kept as codes, 0 to 3 for ACGT and 4 for anything else, when known."""
 
     values: np.ndarray
     codes: np.ndarray | None
@@ -360,9 +362,9 @@ def _per_motif(value: Any, names: list[str], what: str) -> list[float]:
 
 def _window_letters(codes: np.ndarray | None, projected: np.ndarray, seq: np.ndarray, start: np.ndarray,
                     end: np.ndarray, minus: np.ndarray) -> np.ndarray:
-    """The letters of each window, read along its strand, from the codes of
-    the sequences or, without them, from the letters carrying the projected
-    scores, which only the windows need."""
+    """The letters of each window, read along its strand. They come from the
+    codes of the sequences or, without them, from the letters carrying the
+    projected scores, which only the windows need."""
     out = np.empty(len(seq), dtype=object)
     widths = end - start
     letters = np.frombuffer(b"ACGTN", dtype=np.uint8)
@@ -400,64 +402,76 @@ def scan_contributions(
     """Find motif hits in the contribution scores a sequence model gives its
     inputs, by matching CWMs against the scores.
 
-    This is the usual step after TF-MoDISco: where
+    This is the usual step after TF-MoDISco.
     [`scan_sequences()`][universalmotif.scan_sequences] finds the sites that
-    look like a motif, this finds those the model relied on, by comparing
-    each CWM, such as the patterns of
+    look like a motif, while this finds those the model relied on. It
+    compares each CWM, such as the patterns of
     [`read_modisco()`][universalmotif.read_modisco], with every window of
     the scores of the letters present. A window is a hit when two measures
-    reach the motif's thresholds: its similarity, the cosine between its
-    scores and the CWM, which says whether the scores have the shape of the
-    pattern, and its importance, the sum of its absolute scores, which says
-    whether the model gave the window much weight at all. Every motif is
-    matched on its own, so motifs that share a site all have hits there.
+    reach the motif's thresholds.
+
+    - Its similarity, the cosine between its scores and the CWM, says
+      whether the scores have the shape of the pattern.
+    - Its importance, the sum of its absolute scores, says whether the
+      model gave the window much weight at all.
+
+    Every motif is matched on its own, so motifs that share a site all have
+    hits there.
 
     FiNeMo, the other common way to call hits from contribution scores,
-    instead fits all the motifs to each region at once, rebuilding the
-    region's scores as a sparse sum of CWMs placed along it, so that motifs
-    compete for the same signal and redundant patterns at a site usually
+    instead fits all the motifs to each region at once. It rebuilds the
+    region's scores as a sparse sum of CWMs placed along it. Motifs thus
+    compete for the same signal, and redundant patterns at a site usually
     leave a single hit. That suits composite and overlapping motifs, whose
-    signal has to be shared out between them, but takes many rounds of
-    optimisation per region, best run on a GPU, and gives scores relative to
-    each region's own scale. This function takes a single pass, matches
-    10,000 regions of 1,000 bases against 60 CWMs in under half a second on
-    two CPU threads, keeps the scale of the scores, and leaves overlaps
-    between motifs to ``no_overlaps_across_motifs``. On the regions of an ENCODE
-    ATAC-seq model, both covered about 95% of TF-MoDISco's seqlets with a
-    hit of the right pattern, while FiNeMo called over twice as many hits
-    per region, many of them weak.
+    signal has to be shared out between them. But it takes many rounds of
+    optimization per region, best run on a GPU, and gives scores relative
+    to each region's own scale.
 
-    Thresholds are given for every motif at once or one per motif, as a
-    list or a mapping from motif names, and
+    This function takes a single pass and keeps the scale of the scores. It
+    matches 10,000 regions of 1,000 bases against 60 CWMs in under half a
+    second on two CPU threads. Overlaps between motifs are left to
+    ``no_overlaps_across_motifs``. On the regions of an ENCODE ATAC-seq
+    model, both covered about 95% of TF-MoDISco's seqlets with a hit of the
+    right pattern. FiNeMo, however, called over twice as many hits per
+    region, many of them weak.
+
+    Thresholds are given for every motif at once, or one per motif as a
+    list or a mapping from motif names.
     [`modisco_thresholds()`][universalmotif.modisco_thresholds] sets them
     from the seqlets each TF-MoDISco pattern was built from, so that they
     follow how alike each pattern's seqlets are. That is the better choice
-    for TF-MoDISco patterns, whose seqlets differ widely in this; the
+    for TF-MoDISco patterns, whose seqlets differ widely in this. The
     defaults suit patterns whose seqlets are fairly alike.
 
-    The hits have the columns of ``scan_sequences()`` results, so that
-    [`dedup_hits()`][universalmotif.dedup_hits],
-    [`motif_coocc()`][universalmotif.motif_coocc],
-    [`motif_peaks()`][universalmotif.motif_peaks],
-    [`plot_hits()`][universalmotif.plot_hits] and the other functions taking
-    hits work on them. [`genomic_hits()`][universalmotif.genomic_hits] moves
-    them to the genome, given the regions the scores came from.
+    The hits have the columns of ``scan_sequences()`` results, so the
+    functions taking hits work on them. These include the following.
 
-    With ``hypothetical``, each window is matched instead by the model's
-    hypothetical scores, those every letter would have had at each position,
-    which say which letters the model wants there even where a site has the
-    wrong one. They are compared, after centring each position so that only
-    the preferences among letters count, with the motif centred the same
-    way. The motifs can then be CWMs, best built from hypothetical scores,
-    or motifs of any other type, such as those of a database, matched
-    through their log2 probabilities; JASPAR's vertebrate motifs, matched
-    this way against the hypothetical scores of an ENCODE ATAC-seq model,
-    called hits as precisely as the model's own TF-MoDISco CWMs matched
-    against its observed scores, and named the right family of factor at
-    nine in ten of the sites of its eight commonest patterns, though less
-    often for families whose motifs look alike. Importance still comes from the
-    observed scores, so a hit is a site the model both relied on and wants
-    to look like the motif.
+    - [`dedup_hits()`][universalmotif.dedup_hits]
+    - [`motif_coocc()`][universalmotif.motif_coocc]
+    - [`motif_peaks()`][universalmotif.motif_peaks]
+    - [`plot_hits()`][universalmotif.plot_hits]
+
+    [`genomic_hits()`][universalmotif.genomic_hits] moves them to the
+    genome, given the regions the scores came from.
+
+    With ``hypothetical``, each window is matched by the model's
+    hypothetical scores instead. These are the scores every letter would
+    have had at each position. They say which letters the model wants there,
+    even where a site has the wrong one. Each position is centred so that
+    only the preferences among letters count, and the motif is centred the
+    same way before they are compared. The motifs can then be CWMs, best
+    built from hypothetical scores. They can also be motifs of any other
+    type, such as those of a database, matched through their log2
+    probabilities. Importance still comes from the observed scores, so a
+    hit is a site the model both relied on and wants to look like the
+    motif.
+
+    JASPAR's vertebrate motifs were matched this way against the
+    hypothetical scores of an ENCODE ATAC-seq model. They called hits as
+    precisely as the model's own TF-MoDISco CWMs matched against its
+    observed scores. They also named the right family of factor at nine in
+    ten of the sites of its eight commonest patterns, though less often for
+    families whose motifs look alike.
 
     Parameters
     ----------
@@ -470,25 +484,25 @@ def scan_contributions(
         such as a [`ContributionScores`][universalmotif.ContributionScores]
         or an array of shape (sequences, 4, length). Hypothetical scores of
         every letter, or observed scores of one per position, need the
-        ``sequences`` to pick the letters present; scores of every letter
+        ``sequences`` to pick the letters present. Scores of every letter
         given without them are taken to be projected already. With
         ``hypothetical``, they must be hypothetical scores of every letter,
         with their sequences.
     min_similarity
         The least cosine between a window's scores and the motif, from -1 to
-        1; 0.7 by default. Probabilistic motifs matched with
+        1, and 0.7 by default. Probabilistic motifs matched with
         ``hypothetical`` differ in shape from contributions where they are
-        loose, so theirs is 0.5 by default.
+        loose, so their default is 0.5.
     min_importance
         The least importance of a window, as a fraction of the sum of the
         CWM's absolute values, 0.5 by default. A CWM from TF-MoDISco is the
         average of its seqlets, so 1 is about the importance of a typical
         seqlet. With ``hypothetical``, a CWM's is a fraction of the sum of
-        its columns' largest absolute values, the importance of a site with
-        its favoured letters. Other motifs carry no scale, so theirs is the
-        least mean absolute observed score per position, by default the
-        97th percentile of that mean over every window of 20 positions in
-        the scores given.
+        its columns' largest absolute values, which is the importance of a
+        site with its favoured letters. Other motifs carry no scale, so
+        theirs is the least mean absolute observed score per position. By
+        default it is the 97th percentile of that mean over every window of
+        20 positions in the scores given.
     thresholds
         Per-motif thresholds as a table with ``motif``, ``min_similarity``
         and ``min_importance`` columns, such as ``modisco_thresholds()``
@@ -497,31 +511,32 @@ def scan_contributions(
     rc
         Also match the reverse complement of each CWM.
     normalize
-        Scale up the scores of each sequence whose root mean square score,
-        per position, is below the median of all the sequences given, to
-        that median, before matching. The similarity of a window does not
-        depend on scale, but its importance does, so this lets sites in
+        Before matching, scale up the scores of each sequence whose root
+        mean square score per position is below the median of all the
+        sequences given, to that median. The similarity of a window does
+        not depend on scale, but its importance does. Scaling lets sites in
         sequences the model gave little weight overall reach the importance
         threshold, much as hit callers that rescale each region allow.
         Sequences at or above the median keep their scale, so thresholds
-        from ``modisco_thresholds()`` still apply to them; scaling them down
-        too would lose many of the seqlets in the strongest sequences. ``score``
-        and ``importance`` are those of the scaled scores. A single sequence
-        is its own median, so it needs others alongside it.
+        from ``modisco_thresholds()`` still apply to them. Scaling them down
+        too would lose many of the seqlets in the strongest sequences.
+        ``score`` and ``importance`` are those of the scaled scores. A
+        single sequence is its own median, so it needs others alongside it.
     use_gaps
         Match gapped CWMs, such as from
-        [`add_gap()`][universalmotif.add_gap], with their gaps, trying
-        every combination of gap sizes and keeping the best at each start.
+        [`add_gap()`][universalmotif.add_gap], with their gaps. Every
+        combination of gap sizes is tried, keeping the best at each start.
         The letters in a gap belong to no column of the CWM, so they count
-        towards neither the similarity nor the importance, and they are
-        shown as dots in ``match``, as in ``scan_sequences()``. Otherwise the
-        columns are matched as if they followed one another.
+        towards neither the similarity nor the importance. They are shown
+        as dots in ``match``, as in ``scan_sequences()``. Without
+        ``use_gaps``, the columns are matched as if they followed one
+        another.
     no_overlaps, no_overlaps_by, no_overlaps_across_strands, no_overlaps_across_motifs
-        Remove overlapping hits of each motif in each sequence, keeping
-        those with the highest ``no_overlaps_by``, the ``score``,
-        ``similarity`` or ``importance``, as ``dedup_hits()`` does. Hits on
-        opposite strands are compared, unless
-        ``no_overlaps_across_strands`` is false, and with
+        Remove overlapping hits of each motif in each sequence, as
+        ``dedup_hits()`` does. The hits kept are those with the highest
+        ``no_overlaps_by``, which is ``score``, ``similarity`` or
+        ``importance``. Hits on opposite strands are compared unless
+        ``no_overlaps_across_strands`` is false. With
         ``no_overlaps_across_motifs``, hits of different motifs are compared
         too, so that each site keeps only its best motif.
     nthreads
@@ -539,9 +554,10 @@ def scan_contributions(
         ``start``, ``end``, ``strand``, ``score``, ``similarity``,
         ``importance`` and ``match``. Positions are counted from 0 with the
         end left out. ``score`` is the dot product of the window's scores
-        with the CWM scaled to unit norm, the similarity times the size of
-        the scores, which ranks hits that are both well shaped and strong
-        first. ``match`` holds the window's letters along its strand.
+        with the CWM scaled to unit norm. This is the similarity times the
+        size of the scores, so it ranks first the hits that are both well
+        shaped and strong. ``match`` holds the window's letters along its
+        strand.
         Sequences are named as the scores are, or ``seq1``, ``seq2`` and so
         on.
 
@@ -556,8 +572,8 @@ def scan_contributions(
 
     Examples
     --------
-    A CWM of GAT matched against the scores of two sequences, of which only
-    the first gives GAT much weight:
+    A CWM of GAT is matched against the scores of two sequences. Only the
+    first of them gives GAT much weight:
 
     >>> import numpy as np
     >>> import universalmotif as um
@@ -673,28 +689,29 @@ def hit_contributions(
     For each hit, such as those of
     [`scan_sequences()`][universalmotif.scan_sequences] or the seqlets of
     [`read_seqlets()`][universalmotif.read_seqlets], this reads the scores
-    in a window of the hit and ``flank`` positions on either side, along
-    the hit's strand so that hits on the ``-`` strand are reverse
-    complemented and every row reads like the motif. The observed scores,
-    the contribution of the letter present at each position, are always
-    kept, and with ``hypothetical`` the scores of every letter too. The
-    total observed contribution of the letters of each hit, without the
-    flanks, is added to the hits as a ``contribution`` column, which makes
-    it easy to compare with the hits' scores. Positions beyond the ends of
-    a sequence are NaN.
+    in a window of the hit and ``flank`` positions on either side. The
+    window is read along the hit's strand, so hits on the ``-`` strand are
+    reverse complemented and every row reads like the motif. The observed
+    scores, the contribution of the letter present at each position, are
+    always kept. With ``hypothetical``, the scores of every letter are kept
+    too. The total observed contribution of the letters of each hit,
+    without the flanks, is added to the hits as a ``contribution`` column.
+    This makes it easy to compare with the hits' scores. Positions beyond
+    the ends of a sequence are NaN.
 
     Windows are aligned on the first letter of each hit. They are as wide
-    as the widest hit plus the flanks, and those of motifs narrower than
-    the widest are padded with NaN on the right, so that indexing the
-    result with a motif name gives windows the width of that motif.
+    as the widest hit plus the flanks. Those of motifs narrower than the
+    widest are padded with NaN on the right, so that indexing the result
+    with a motif name gives windows the width of that motif.
 
-    Hits pick their sequence by its ``sequence`` name when the contributions
-    or sequences are a mapping from names, or are a ContributionScores
-    whose names every hit shares, and otherwise with ``sequence_i``,
-    counted from 0. Hits with a ``chrom`` column, such as seqlets read with
-    regions, are taken to be in genome positions, and are placed with the
-    genomic ranges of the contributions, which a ContributionScores read
-    from chromBPNet files knows and ``ranges`` gives otherwise.
+    Hits pick their sequence by its ``sequence`` name when the
+    contributions or sequences are a mapping from names. They do the same
+    with a ContributionScores whose names every hit shares. Otherwise they
+    use ``sequence_i``, counted from 0. Hits with a ``chrom`` column, such
+    as seqlets read with regions, are taken to be in genome positions. They
+    are placed with the genomic ranges of the contributions. A
+    ContributionScores read from chromBPNet files knows these ranges, and
+    ``ranges`` gives them otherwise.
 
     Parameters
     ----------
@@ -703,16 +720,21 @@ def hit_contributions(
         positions counted from 0 with the end left out, and ``motif``,
         ``sequence_i`` or ``sequence`` columns.
     contributions
-        The scores, as a [`ContributionScores`][universalmotif.ContributionScores],
-        an array of shape (sequences, 4, length) with the letters in the
-        order ACGT, an array of shape (sequences, length) of observed
-        scores such as those read from a bigWig file with
-        [`signal_values()`][universalmotif.signal_values], or a list or
-        mapping of such arrays, one per sequence, which may differ in
-        length. The scores of a single sequence can be given on their own,
-        with that sequence as a string.
+        The scores, in one of these forms.
+
+        - A [`ContributionScores`][universalmotif.ContributionScores].
+        - An array of shape (sequences, 4, length), with the letters in the
+          order ACGT.
+        - An array of shape (sequences, length) of observed scores, such as
+          those read from a bigWig file with
+          [`signal_values()`][universalmotif.signal_values].
+        - A list or mapping of such arrays, one per sequence, which may
+          differ in length.
+
+        The scores of a single sequence can be given on their own, with
+        that sequence as a string.
     sequences
-        The sequences the scores are for, as text or one-hot encoded, to
+        The sequences the scores are for, as text or one-hot encoded. They
         pick the letters present from scores of every letter. Without them,
         scores of every letter are taken to be projected, zero for all but
         the letter present, and the observed score is their sum.
@@ -721,8 +743,8 @@ def hit_contributions(
     hypothetical
         Also keep the scores of every letter, which are the projected
         scores for projected contributions. They take four times the
-        memory of the observed scores, 180 MB for 100,000 hits with flanks
-        of 50.
+        memory of the observed scores, which is 180 MB for 100,000 hits
+        with flanks of 50.
     ranges
         The genomic range of each sequence of the contributions, as a BED
         file or range table, for hits in genome positions.
@@ -931,15 +953,17 @@ def plot_hit_profile(
 
     The line is the mean observed contribution at each position of the
     windows from [`hit_contributions()`][universalmotif.hit_contributions],
-    with a band around it, the hit itself shaded and its flanks on either
-    side, so that contributions that stay above zero past the edges of the
+    with a band around it. The hit itself is shaded, with its flanks on
+    either side. Contributions that stay above zero past the edges of the
     hit show that the model reads more than the motif, such as a spacer or
-    a partner site. Below it, a heatmap shows the hits themselves, one row
-    each sorted by their total contribution from the largest down, and
-    above it, when the hypothetical scores were kept, a logo of the mean
-    hypothetical contribution of every letter shows which letters the model
-    would favour at each position. Several motifs are drawn side by side,
-    each with its own panels.
+    a partner site.
+
+    Below the line, a heatmap shows the hits themselves, one row each,
+    sorted by their total contribution from the largest down. Above it,
+    when the hypothetical scores were kept, a logo of the mean hypothetical
+    contribution of every letter shows which letters the model would
+    favour at each position. Several motifs are drawn side by side, each
+    with its own panels.
 
     Needs the ``plot`` extra.
 
@@ -965,9 +989,10 @@ def plot_hit_profile(
         Draw the logo of the mean hypothetical contributions above the
         mean, by default when the hypothetical scores were kept.
     max_hits
-        Draw at most this many rows in the heatmap, picked evenly along the
-        sorted hits so that the whole range is shown, or all of them with
-        ``None``. The mean and logo are always made from every hit.
+        Draw at most this many rows in the heatmap, or all of them with
+        ``None``. The rows are picked evenly along the sorted hits so that
+        the whole range is shown. The mean and logo are always made from
+        every hit.
     vmax
         The contribution at either end of the heatmap's colour scale, by
         default the 99.5th percentile of the absolute contributions drawn.
@@ -976,9 +1001,9 @@ def plot_hit_profile(
         By default a single motif is drawn in blue, and several in the
         colours [`plot_hits()`][universalmotif.plot_hits] gives them.
     title
-        The title above the plot, by default the name of the motif, or
-        nothing when there are several, each panel then being named after
-        its motif.
+        The title above the plot, by default the name of the motif. With
+        several motifs there is no title by default, and each panel is
+        named after its motif.
     text_size
         The size of the text, in points.
     figsize
@@ -1249,20 +1274,21 @@ def plot_hit_contributions(
     """Draw the total contribution of each motif hit against its motif score,
     to see which sites a sequence model relies on.
 
-    Each hit is a point at its score, or ``-log10`` P-value with
-    ``x="pvalue"``, and the total contribution of its letters from
-    [`hit_contributions()`][universalmotif.hit_contributions], coloured by
-    motif. Hits that score well but contribute little are sites the model
-    ignores, and weak sites that contribute a lot are ones it relies on
-    anyway, often because of what lies around them. The legend gives the
-    Spearman correlation of the two for each motif, and histograms along
-    the edges show how each motif's hits spread along either axis.
+    Each hit is a point, coloured by motif, at its score and the total
+    contribution of its letters from
+    [`hit_contributions()`][universalmotif.hit_contributions]. With
+    ``x="pvalue"``, the ``-log10`` P-value takes the place of the score.
+    Hits that score well but contribute little are sites the model ignores.
+    Weak sites that contribute a lot are ones it relies on anyway, often
+    because of what lies around them. The legend gives the Spearman
+    correlation of the two for each motif. Histograms along the edges show
+    how each motif's hits spread along either axis.
 
-    Points are drawn in a random order so that no motif hides another, and
-    as an image within the plot, which keeps files small with hundreds of
-    thousands of hits. With that many, ``hexbin`` draws the density of all
-    hits in grey instead, with a line per motif through the median
-    contribution of its hits at each score.
+    Points are drawn in a random order so that no motif hides another. They
+    are drawn as an image within the plot, which keeps files small with
+    hundreds of thousands of hits. With that many, ``hexbin`` draws the
+    density of all hits in grey instead. A line per motif then runs through
+    the median contribution of its hits at each score.
 
     Needs the ``plot`` extra.
 

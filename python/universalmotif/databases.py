@@ -1,10 +1,10 @@
 """Motifs from public databases: JASPAR, HOCOMOCO and CIS-BP.
 
 Each function downloads what it needs the first time it is called and keeps
-it in a cache directory, so later calls work offline and return the same
-motifs. Pass ``refresh=True`` to download again, for example to pick up a
-new JASPAR release when asking for the latest one. Only the standard library
-is used for downloading.
+it in a cache directory. Later calls work offline and return the same motifs.
+Pass ``refresh=True`` to download again, for example to pick up a new JASPAR
+release when asking for the latest one. Only the standard library is used for
+downloading.
 """
 
 from __future__ import annotations
@@ -41,10 +41,12 @@ _TIMEOUT = 120
 def cache_dir() -> Path:
     """The directory downloads are kept in.
 
-    It is the ``UNIVERSALMOTIF_CACHE`` environment variable if that is set,
-    and otherwise a ``universalmotif`` folder in the usual place for caches:
-    ``~/Library/Caches`` on macOS, ``%LOCALAPPDATA%`` on Windows, and
-    ``$XDG_CACHE_HOME`` or ``~/.cache`` elsewhere.
+    It is the ``UNIVERSALMOTIF_CACHE`` environment variable if that is set.
+    Otherwise it is a ``universalmotif`` folder in the usual place for caches.
+
+    - ``~/Library/Caches`` on macOS
+    - ``%LOCALAPPDATA%`` on Windows
+    - ``$XDG_CACHE_HOME`` or ``~/.cache`` elsewhere
 
     Examples
     --------
@@ -136,23 +138,29 @@ def jaspar(
 ) -> list[Motif]:
     """Count matrices from JASPAR, through its REST API.
 
-    The filters are those of the API: ``collection`` (such as ``"CORE"``,
-    ``"UNVALIDATED"`` or ``"CNE"``), ``tax_group`` (such as
-    ``"vertebrates"``, ``"plants"`` or ``"insects"``), ``name`` for the
-    transcription factor, ``tax_id`` for the NCBI taxonomy ID of a species
-    (9606 for human), ``tf_class``, ``tf_family`` and ``data_type`` (such
-    as ``"ChIP-seq"`` or ``"SELEX"``). Text filters must match JASPAR's
-    names exactly, and the API ignores filters it does not know, so a
-    misspelt name gives the unfiltered set rather than an error. ``release`` picks a JASPAR release by
-    year, the latest by default, and only the latest version of each matrix
-    is returned unless ``all_versions``.
+    The filters are those of the API.
+
+    | Filter | Meaning |
+    | --- | --- |
+    | ``collection`` | such as ``"CORE"``, ``"UNVALIDATED"`` or ``"CNE"`` |
+    | ``tax_group`` | such as ``"vertebrates"``, ``"plants"`` or ``"insects"`` |
+    | ``name`` | the transcription factor |
+    | ``tax_id`` | the NCBI taxonomy ID of a species, 9606 for human |
+    | ``tf_class``, ``tf_family`` | the factor's class and family |
+    | ``data_type`` | such as ``"ChIP-seq"`` or ``"SELEX"`` |
+
+    Text filters must match JASPAR's names exactly. The API ignores filters
+    it does not know, so a misspelled name gives the unfiltered set rather
+    than an error. ``release`` picks a JASPAR release by year, the latest by
+    default. Only the latest version of each matrix is returned unless
+    ``all_versions``.
 
     Motifs are PCMs named by their matrix ID, with the transcription factor
-    as the alternative name. The list of matrices does not say more than
-    that, so with ``metadata`` each matrix's record is also fetched, one
-    request per matrix the first time, which fills in the family, the
-    species as the organism, and the class, taxonomic group, data type,
-    UniProt IDs and PubMed IDs in ``extrainfo``.
+    as the alternative name. The list of matrices says nothing more. With
+    ``metadata``, each matrix's record is also fetched, one request per
+    matrix the first time. This fills in the family and the species as the
+    organism. The class, taxonomic group, data type, UniProt IDs and PubMed
+    IDs go in ``extrainfo``.
 
     Downloads are cached, so asking for the latest release keeps returning
     the motifs of the first download until ``refresh`` is given.
@@ -254,15 +262,15 @@ def hocomoco(
     """Count matrices from HOCOMOCO, for human and mouse transcription factors.
 
     Version 12 has the collections ``"CORE"``, ``"INVIVO"``, ``"INVITRO"``
-    and ``"RSNP"``, each with motifs for human and mouse together, and
+    and ``"RSNP"``, each with motifs for human and mouse together. There
     ``species`` keeps only those built from ``"HUMAN"`` or ``"MOUSE"`` data.
     Version 11 has ``"CORE"`` and ``"FULL"``, with separate files for each
-    species, so there ``species`` picks one and defaults to ``"HUMAN"``.
+    species, so ``species`` picks one and defaults to ``"HUMAN"``.
 
     Motifs are PCMs named by their HOCOMOCO ID, such as
-    ``AHR.H12CORE.0.P.B``, with the transcription factor as the alternative
-    name and its TFClass family as the family. The quality grade, A to D, and
-    a few more details go in ``extrainfo``.
+    ``AHR.H12CORE.0.P.B``. The transcription factor is the alternative name
+    and its TFClass family is the family. The quality grade, A to D, and a
+    few more details go in ``extrainfo``.
 
     References
     ----------
@@ -374,14 +382,14 @@ def cisbp(
 ) -> list[Motif]:
     """Motifs from CIS-BP for one species.
 
-    CIS-BP builds an archive of a species' motifs on request, which is
-    downloaded and cached, and then read with
+    CIS-BP builds an archive of a species' motifs on request. The archive is
+    downloaded, cached and read with
     [`read_cisbp_archive()`][universalmotif.databases.read_cisbp_archive].
     ``species`` is written as in CIS-BP, such as ``"Homo_sapiens"``, though
-    spaces may be used instead of underscores. ``family`` keeps only motifs of
-    some transcription factor families, such as ``"bZIP"``, and ``inferred``
-    adds the motifs CIS-BP assigns to a factor from similar factors, which by
-    default are left out.
+    spaces may be used instead of underscores. ``family`` keeps only motifs
+    of some transcription factor families, such as ``"bZIP"``. ``inferred``
+    adds the motifs CIS-BP assigns to a factor from similar factors, which
+    are left out by default.
 
     References
     ----------
@@ -426,14 +434,16 @@ def read_cisbp_archive(
     """Read a CIS-BP download, either the zip archive from its bulk download
     page or the folder it unpacks to.
 
-    The archive needs ``TF_Information_all_motifs.txt``, or
+    The archive needs ``TF_Information_all_motifs.txt`` or
     ``TF_Information.txt``, and the ``pwms_all_motifs`` folder of
-    probability matrices. Motifs are PPMs named by their CIS-BP motif ID,
-    with the transcription factors they belong to as the alternative name,
-    the family and the species, and the experiment type and source in
-    ``extrainfo``. Motifs CIS-BP infers from similar factors are left out
-    unless ``inferred``, ``family`` keeps only some families, and motifs
-    whose matrix file is empty are skipped.
+    probability matrices. Motifs are PPMs named by their CIS-BP motif ID.
+    The transcription factors they belong to give the alternative name, the
+    family and the species. The experiment type and source go in
+    ``extrainfo``.
+
+    Motifs CIS-BP infers from similar factors are left out unless
+    ``inferred``. ``family`` keeps only some families. Motifs whose matrix
+    file is empty are skipped.
 
     References
     ----------

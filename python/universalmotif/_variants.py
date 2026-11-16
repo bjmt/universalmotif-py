@@ -1,6 +1,7 @@
-"""Sequence variants: reading them from VCF files, their effects on the motif
-sites they fall in, along one sequence or across a genome, and their
-sequences one-hot encoded for a model."""
+"""Sequence variants.
+
+This covers reading variants from VCF files, their effects on the motif
+sites they fall in, and their sequences one-hot encoded for a model."""
 
 from __future__ import annotations
 
@@ -33,17 +34,19 @@ _CHROM_NAMES = ("chrom", "#chrom", "chr", "chromosome", "seqnames", "sequence")
 
 
 def read_vcf(file: str | os.PathLike) -> pl.DataFrame:
-    r"""Read the variants of a VCF file into a DataFrame that
-    [`variant_motif_effects()`][universalmotif.variant_motif_effects] and
-    [`variant_batches()`][universalmotif.variant_batches] take.
+    r"""Read the variants of a VCF file into a DataFrame.
 
-    The columns are ``chrom``, ``position``, ``id``, ``ref``, ``alt``,
-    ``qual``, ``filter`` and ``info``. Positions are counted from 0, so that
-    they are one less than in the file, as in BED files and the rest of the
-    package. A line listing several alternative alleles becomes one row per
-    allele, and the ``.`` the format writes for a value not given is read as
-    null, except for an alternative allele, which stays ``.``. Genotypes and
-    any other columns after ``info`` are not read.
+    The result suits
+    [`variant_motif_effects()`][universalmotif.variant_motif_effects] and
+    [`variant_batches()`][universalmotif.variant_batches]. The columns are
+    ``chrom``, ``position``, ``id``, ``ref``, ``alt``, ``qual``, ``filter``
+    and ``info``. Positions are counted from 0, as in BED files and the
+    rest of the package, so they are one less than in the file.
+
+    A line listing several alternative alleles becomes one row per allele.
+    The ``.`` the format writes for a value not given is read as null,
+    except in an alternative allele, which stays ``.``. Genotypes and any
+    other columns after ``info`` are not read.
 
     Parameters
     ----------
@@ -79,9 +82,9 @@ def read_vcf(file: str | os.PathLike) -> pl.DataFrame:
     │ chr1  ┆ 204      ┆ null ┆ CTT ┆ C   │
     └───────┴──────────┴──────┴─────┴─────┘
     """
-    # Only the lines before the header are read here, and polars reads the
-    # rest, decompressing it itself, so that a large file takes about as
-    # much memory as its table.
+    # Only the lines before the header are read here. polars reads and
+    # decompresses the rest itself, so a large file takes about as much
+    # memory as its table.
     with open(file, "rb") as fh:
         gzipped = fh.read(2) == b"\x1f\x8b"
     with (gzip.open(file, "rb") if gzipped else open(file, "rb")) as fh:
@@ -196,8 +199,8 @@ def _from_array(variants: Any, sequence: str | None, alphabet: str, start: int) 
 
 def _variants(variants: Any, effects: Any, sequence: str | None, alphabet: str, start: int,
               need_effects: bool) -> pl.DataFrame:
-    """Variants as a table with position, ref and alt columns, and an effect
-    column when ``need_effects``, with any other columns kept after them."""
+    """Variants as a table with position, ref and alt columns, plus an effect
+    column when ``need_effects``. Any other columns are kept after them."""
     df = _as_frame(variants)
     if df is None:
         if effects is not None:
@@ -341,8 +344,8 @@ def _usable(ref: list[str], alt: list[str | None]) -> np.ndarray:
 
 
 def _trim(p: int, r: str, a: str) -> tuple[int, str, str]:
-    """A variant with the letters its alleles share at either end taken off,
-    the end first, so that a variant in a repeat is placed leftmost."""
+    """A variant with the letters its alleles share at either end taken off.
+    The end is trimmed first, so a variant in a repeat is placed leftmost."""
     k = 0
     n = min(len(r), len(a))
     while k < n and r[-1 - k].upper() == a[-1 - k].upper():
@@ -385,87 +388,97 @@ def variant_motif_effects(
     """How variants change the motif sites they fall in, along a sequence or
     across a genome.
 
-    Every window of each motif's width that a variant changes is scored in
-    the reference sequence and in the sequence with the variant, as
-    [`scan_sequences()`][universalmotif.scan_sequences] scores it, on both
-    strands of DNA and RNA with ``rc``, which is on by default for DNA and
-    off for RNA, and on the one strand of a motif whose ``strand`` is
-    ``"+"`` or ``"-"``. A window is kept when it reaches the ``pvalue``
-    cutoff with either allele, so that the table holds sites a variant
-    weakens or destroys and sites it strengthens or creates. With ``hits``,
-    such as from ``scan_sequences()`` run on the same sequence or genome,
-    only those sites are scored instead, whatever their scores. Each
-    variant is applied on its own, without any others near it. Gapped motifs
-    are scored without their gaps.
+    Every window of each motif's width that a variant changes is scored
+    twice, in the reference sequence and in the sequence with the variant.
+    Scoring follows [`scan_sequences()`][universalmotif.scan_sequences].
+    With ``rc``, both strands of DNA and RNA are scored; it is on by default
+    for DNA and off for RNA. A motif whose ``strand`` is ``"+"`` or ``"-"``
+    is scored on that strand only.
+
+    A window is kept when it reaches the ``pvalue`` cutoff with either
+    allele. The table thus holds sites a variant weakens or destroys as well
+    as sites it strengthens or creates. With ``hits``, such as from
+    ``scan_sequences()`` run on the same sequence or genome, only those
+    sites are scored instead, whatever their scores. Each variant is applied
+    on its own, without any others near it. Gapped motifs are scored
+    without their gaps.
 
     Variants can be substitutions of any length, insertions and deletions.
     A window that starts before a variant is the same window in both
-    sequences, and so is one that starts at the same letter of both
-    alleles, but an insertion or deletion leaves windows starting in the
+    sequences. So is one that starts at the same letter of both alleles.
+    An insertion or deletion, though, leaves windows starting in the
     letters only the longer allele has with no counterpart. These are sites
     made or lost with those letters, and their score in the other sequence
-    is missing. Variants whose alternative allele is missing or symbolic,
-    such as ``.`` or ``<DEL>`` in a VCF file, or is the same as the
-    reference, are left out with a warning.
+    is missing.
+
+    Some variants are left out with a warning. These are variants whose
+    alternative allele is missing or symbolic, such as ``.`` or ``<DEL>``
+    in a VCF file, or is the same as the reference.
 
     Parameters
     ----------
     variants
         A table of variants with ``position``, ``ref`` and ``alt`` columns,
-        as a polars or pandas DataFrame or a list of (position, ref, alt)
-        rows, such as from [`read_vcf()`][universalmotif.read_vcf].
+        such as from [`read_vcf()`][universalmotif.read_vcf]. It can be a
+        polars or pandas DataFrame or a list of (position, ref, alt) rows.
         Positions are counted from 0 and are those of the first letter of
-        ``ref``, which can be empty, or ``-``, for an insertion before that
-        position. Along one sequence it can also be an array of effects from
+        ``ref``. For an insertion before that position, ``ref`` can be empty
+        or ``-``.
+
+        Along one sequence, this can also be an array of effects from
         [`mutagenesis_effects()`][universalmotif.mutagenesis_effects], or
         ``None`` for every single-letter substitution of the sequence. On a
-        genome the table needs a chromosome column too, named ``chrom``,
+        genome, the table also needs a chromosome column named ``chrom``,
         ``chr``, ``chromosome``, ``seqnames`` or ``sequence``.
     sequence
-        The sequence the variants are in, or a genome, as a
+        The sequence the variants are in, or a genome. A genome can be a
         [`Genome`][universalmotif.Genome], packed sequences, sequences by
-        name or the path of a FASTA or 2bit file as a ``pathlib.Path``,
-        since a string is taken as the sequence. Only the letters around
-        each variant are read from a genome.
+        name or the path of a FASTA or 2bit file. Give a path as a
+        ``pathlib.Path``, since a string is taken as the sequence. Only the
+        letters around each variant are read from a genome.
     motifs
         A motif or a list of motifs, all of one alphabet.
     pvalue
         The P-value a site must reach with either allele to be kept.
     start
         Along one sequence, the position of its first letter, such as its
-        position in the genome, from which the positions of the variants and
-        sites are counted. The positions of ``hits`` are counted along the
+        position in the genome. The positions of the variants and sites are
+        counted from it. The positions of ``hits`` are counted along the
         sequence from 0, as ``scan_sequences()`` gives them.
     hits
-        Sites to score in place of those found at the ``pvalue`` cutoff,
-        with ``motif``, ``start`` and ``strand`` columns, and on a genome the
-        chromosome in a ``sequence`` column, as ``scan_sequences()`` gives
-        them, or ``chrom``.
+        Sites to score in place of those found at the ``pvalue`` cutoff.
+        They need ``motif``, ``start`` and ``strand`` columns. On a genome
+        they also need the chromosome, in a ``sequence`` column as
+        ``scan_sequences()`` gives it, or in ``chrom``.
     rc
-        Also score the reverse strand of DNA and RNA, by default for DNA
-        only.
+        Also score the reverse strand of DNA and RNA. By default this is
+        done for DNA only.
     nthreads
-        Threads to use, with 0 for all available; by default the package
-        setting from [`set_nthreads()`][universalmotif.set_nthreads].
+        Threads to use, with 0 for all available. By default this is the
+        package setting from [`set_nthreads()`][universalmotif.set_nthreads].
     progress
-        Show a progress bar on stderr once the scan has run for a second; by
-        default the package setting from
+        Show a progress bar on stderr once the scan has run for a second. By
+        default this is the package setting from
         [`set_progress()`][universalmotif.set_progress].
 
     Returns
     -------
     polars.DataFrame
-        One row per variant and motif site, with the columns ``variant``,
-        the row of the variant in ``variants``, then on a genome ``chrom``,
-        then ``position``, ``ref`` and ``alt`` as given, ``id`` when the
-        variants have one, ``motif``, ``start``, ``end``, ``strand``,
-        ``ref_score``, ``alt_score``, ``delta``, the change in score,
-        ``ref_pvalue`` and ``alt_pvalue``. A site's ``start`` and ``end``
-        are counted like the positions, with the end left out, and for a
-        site found only with an insertion or deletion they are its place in
-        the sequence that has it, which past the variant is shifted by the
-        change in length. Its missing scores and P-values, and its
-        ``delta``, are null.
+        One row per variant and motif site, with these columns in order.
+
+        - ``variant``, the row of the variant in ``variants``
+        - ``chrom``, on a genome only
+        - ``position``, ``ref`` and ``alt`` as given
+        - ``id``, when the variants have one
+        - ``motif``, ``start``, ``end`` and ``strand``
+        - ``ref_score``, ``alt_score`` and ``delta``, the change in score
+        - ``ref_pvalue`` and ``alt_pvalue``
+
+        A site's ``start`` and ``end`` are counted like the positions, with
+        the end left out. A site found only with an insertion or deletion is
+        placed in the sequence that has it. Past the variant, that place is
+        shifted by the change in length. The site's missing scores and
+        P-values, and its ``delta``, are null.
 
     Examples
     --------
@@ -522,8 +535,8 @@ def variant_motif_effects(
         genome = {"": sequence}
         chrom = pl.lit("")
         offset = start
-    # Only the columns used are kept, so that the variants' other columns
-    # cannot clash with those added here.
+    # Only the columns used are kept, so the variants' other columns cannot
+    # clash with those added here.
     id_col = _column(df, "id")
     df = df.select(chrom.alias("_chrom"), "position", "ref", "alt",
                    *([pl.col(id_col).alias("_id")] if id_col else [])).with_row_index("_row")
@@ -545,8 +558,8 @@ def variant_motif_effects(
     if use.height == 0:
         return pl.DataFrame(schema=schema)
 
-    # Each variant's alleles, with the letters they share taken off, and
-    # the letters around it, enough for the widest motif on either side.
+    # Each variant's alleles with the letters they share taken off. Around
+    # each, enough letters are read for the widest motif on either side.
     chroms = use["_chrom"].to_list()
     pos = use["position"].to_numpy() - offset
     refs = _ref_letters(use["ref"].to_list())
@@ -670,9 +683,9 @@ def _joined(seqs: list[str], sep: str) -> tuple[str, np.ndarray]:
 
 def _window_scores(motif: Motif, seq: str, at: np.ndarray, w: int, valid: np.ndarray,
                    minus: np.ndarray) -> np.ndarray:
-    """The scores of the windows of width ``w`` starting at ``at``, read on
-    the minus strand where ``minus``, as NaN where not ``valid`` or holding
-    a letter the motif lacks."""
+    """The scores of the windows of width ``w`` starting at ``at``. Windows
+    are read on the minus strand where ``minus``. A window is NaN where not
+    ``valid`` or when it holds a letter the motif lacks."""
     from ._utils import score_match
 
     out = np.full(len(at), np.nan)
@@ -712,8 +725,9 @@ def _with_pvalues(part: pl.DataFrame, motif: Motif) -> pl.DataFrame:
 
 def _sites_from_hits(hits: pl.DataFrame, names: list[str], widths: np.ndarray, chroms: list[str],
                      tp: np.ndarray, lr: np.ndarray, offset: int, on_genome: bool) -> pl.DataFrame:
-    """The sites of ``hits`` that overlap the variants, as the variant, the
-    motif and the site's start from the variant's first changed letter."""
+    """The sites of ``hits`` that overlap the variants. Each is given as the
+    variant, the motif and the site's start from the variant's first
+    changed letter."""
     for col in ("motif", "start"):
         if col not in hits.columns:
             raise ValueError(f"hits must have a {col!r} column")
@@ -768,28 +782,32 @@ def variant_batches(
     """The reference and alternative sequences around each variant, one-hot
     encoded in batches for a model.
 
-    Each variant gets a window of ``width`` letters of ``genome``, a
-    [`Genome`][universalmotif.Genome], packed sequences, sequences by name
-    or the path of a FASTA or 2bit file, with the variant's first reference
-    letter at ``width // 2``, the middle or the letter after it. The
-    alternative sequence has the same letters before that, then the
-    alternative allele and the letters that follow the reference allele, so
-    that an insertion pushes letters off the right end and a deletion pulls
-    more in. Windows running off the end of a chromosome are filled out
-    with columns of zeros, as for N.
+    ``genome`` is a [`Genome`][universalmotif.Genome], packed sequences,
+    sequences by name or the path of a FASTA or 2bit file. Each variant gets
+    a window of ``width`` letters of it. The variant's first reference
+    letter sits at ``width // 2``, the middle or the letter after it.
+
+    The alternative sequence has the same letters before that point. Then
+    come the alternative allele and the letters that follow the reference
+    allele. An insertion thus pushes letters off the right end, and a
+    deletion pulls more in. Windows running off the end of a chromosome are
+    filled out with columns of zeros, as for N.
 
     ``variants`` is a table such as from
-    [`read_vcf()`][universalmotif.read_vcf], with a chromosome column named
-    ``chrom``, ``chr``, ``chromosome``, ``seqnames`` or ``sequence``, and
-    ``position``, ``ref`` and ``alt`` columns, with positions counted from 0.
-    Every variant is checked before any batch is made: its reference letters
-    must match the genome, and its alternative allele must be letters, so
-    that symbolic alleles such as ``<DEL>`` must be filtered out first.
+    [`read_vcf()`][universalmotif.read_vcf]. It needs ``position``, ``ref``
+    and ``alt`` columns, with positions counted from 0. It also needs a
+    chromosome column named ``chrom``, ``chr``, ``chromosome``,
+    ``seqnames`` or ``sequence``. Every variant is checked before any batch
+    is made. Its reference letters must match the genome, and its
+    alternative allele must be letters. Symbolic alleles such as ``<DEL>``
+    must therefore be filtered out first.
 
     Returns an iterable of pairs of arrays ``(ref, alt)``, each of shape
-    (variants, letters, width), up to ``batch_size`` variants each and in
-    the order of the table, with a length so that progress can be shown. A
-    model's predictions for the two give each variant's effect, such as
+    (variants, letters, width). Each batch holds up to ``batch_size``
+    variants in the order of the table. The iterable has a length so that
+    progress can be shown.
+
+    A model's predictions for the two give each variant's effect, such as
     ``model(alt) - model(ref)``, for
     [`plot_variant_effects()`][universalmotif.plot_variant_effects]. For a
     model's average over both strands, ``x[:, ::-1, ::-1]`` is the reverse
@@ -860,8 +878,9 @@ class _VariantBatches:
             chroms = self._chroms[rows]
             pos, lr = self._pos[rows], self._lr[rows]
             n = np.array([self._lengths[c] for c in chroms])
-            # Enough letters for the reference window and for the letters
-            # a deletion pulls in, padded where they run off the chromosome.
+            # Enough letters for the reference window and for those a
+            # deletion pulls in. They are padded where they run off the
+            # chromosome.
             a, b = pos - half, pos + lr + (w - half)
             lo, hi = np.maximum(a, 0), np.minimum(b, n)
             got = _fetch(self._genome, chroms, lo, hi, self._nthreads)

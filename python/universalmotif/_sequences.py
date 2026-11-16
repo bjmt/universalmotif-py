@@ -86,10 +86,10 @@ def get_kmers(letters: str | Sequence[str], k: int = 1) -> list[str]:
 def count_kmers(string: str, k: int = 1, alph: str | Sequence[str] | None = None) -> pl.DataFrame:
     """Count the k-mers in a string.
 
-    Every k-mer of ``alph``, which defaults to the letters in the string,
-    gets a row in sorted order; k-mers with letters outside ``alph`` are not
-    counted. Returns a DataFrame with columns ``kmer`` and ``count``, as in
-    [`get_bkg()`][universalmotif.get_bkg].
+    Every k-mer of ``alph`` gets a row, in sorted order. ``alph`` defaults
+    to the letters in the string, and k-mers with letters outside it are
+    not counted. Returns a DataFrame with columns ``kmer`` and ``count``, as
+    in [`get_bkg()`][universalmotif.get_bkg].
 
     Examples
     --------
@@ -117,7 +117,9 @@ def count_kmers(string: str, k: int = 1, alph: str | Sequence[str] | None = None
 
 def calc_windows(n: int, window: int = 1, overlap: int = 0, return_incomp: bool = True) -> pl.DataFrame:
     """Start and end positions of sliding windows over a sequence of length
-    ``n``, counted from 0 with the end left out, so that each window is
+    ``n``.
+
+    Positions count from 0 with the end left out, so each window is
     ``sequence[start:end]``.
 
     The last window may be shorter than the others unless ``return_incomp``
@@ -175,15 +177,21 @@ def calc_complexity(
 ):
     """Sequence complexity.
 
-    ``complexity_method`` is one of ``"WoottonFederhen"``, its approximation
-    ``"WoottonFederhenFast"``, ``"Trifonov"``, ``"TrifonovFast"`` or
-    ``"DUST"``. The methods come from Wootton and Federhen 1993, Trifonov
-    1990 and Morgulis et al. 2006, and lower DUST values mean higher
-    complexity. ``alph`` gives the possible letters. By default it is ``ACGT``
-    when the strings hold only those letters and N, ``ACGU`` likewise for RNA,
-    and otherwise every letter found in the strings, so that all strings are
-    scored against the same alphabet. Returns a float for one string and a
-    numpy array for several.
+    ``complexity_method`` is one of these.
+
+    | Method | Reference |
+    | --- | --- |
+    | ``"WoottonFederhen"`` | Wootton and Federhen 1993 |
+    | ``"WoottonFederhenFast"`` | Wootton and Federhen 1993, approximated |
+    | ``"Trifonov"``, ``"TrifonovFast"`` | Trifonov 1990 |
+    | ``"DUST"`` | Morgulis et al. 2006 |
+
+    Lower DUST values mean higher complexity. ``alph`` gives the possible
+    letters, so that all strings are scored against the same alphabet. By
+    default it is ``ACGT`` when the strings hold only those letters and N,
+    and ``ACGU`` likewise for RNA. Otherwise it is every letter found in
+    the strings. Returns a float for one string and a numpy array for
+    several.
 
     References
     ----------
@@ -227,12 +235,14 @@ def sequence_complexity(
 ) -> pl.DataFrame:
     """Complexity in sliding windows along sequences.
 
-    ``window_size`` below 1 is a fraction of each sequence's length, and so
-    is ``window_overlap`` between 0 and 1, which defaults to half the
-    window, rounded. A window longer than a sequence shrinks to it. See
-    [`calc_complexity()`][universalmotif.calc_complexity] for the methods. Returns a DataFrame with
-    columns ``sequence``, ``start``, ``end`` and ``complexity``, where
-    positions count from 0 and leave the end out.
+    A ``window_size`` below 1 is a fraction of each sequence's length, and
+    so is a ``window_overlap`` between 0 and 1. ``window_overlap`` defaults
+    to half the window, rounded. A window longer than a sequence shrinks to
+    it. See [`calc_complexity()`][universalmotif.calc_complexity] for the
+    methods.
+
+    Returns a DataFrame with columns ``sequence``, ``start``, ``end`` and
+    ``complexity``, where positions count from 0 and leave the end out.
 
     ``nthreads`` defaults to the package setting from
     [`set_nthreads()`][universalmotif.set_nthreads].
@@ -308,8 +318,8 @@ def get_bkg(
         Added to every count.
     alphabet
         Letters to count. Sequences made only of A, C, G, T and N count as
-        DNA and those made of A, C, G, U and N as RNA, with their four
-        letters as the default; otherwise the default is the letters in the
+        DNA, and those made of A, C, G, U and N as RNA. For these the four
+        letters are the default. Otherwise the default is the letters in the
         sequences.
     rc
         Also count the reverse complements.
@@ -321,10 +331,12 @@ def get_bkg(
         ``window_overlap`` between 0 and 1, are fractions of each sequence's
         length. Merged windowed counts need sequences of equal length.
     to_meme
-        A path or text file to write a MEME background file to instead of
-        returning the counts. This needs ``k`` to run from 1 upwards, merged
-        counts without windows, and no frequencies of exactly 0 or 1, which
-        a pseudocount avoids.
+        A path or text file to write a MEME background file to, instead of
+        returning the counts. This needs the following.
+
+        - ``k`` running from 1 upwards.
+        - Merged counts without windows.
+        - No frequencies of exactly 0 or 1, which a pseudocount avoids.
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
@@ -332,15 +344,19 @@ def get_bkg(
     Returns
     -------
     polars.DataFrame
-        A DataFrame with columns ``kmer``, ``count`` and ``probability``, plus
-        ``sequence`` for per-sequence counts and ``start`` and ``end`` for
-        windows, counted from 0 with the end left out. Without windows, rows are sorted by k-mer size and then
-        alphabetically, and per-sequence counts list every sequence in turn
+        A DataFrame with columns ``kmer``, ``count`` and ``probability``.
+        Per-sequence counts add ``sequence``, and windows add ``start`` and
+        ``end``, counted from 0 with the end left out.
+
+        Without windows, rows are sorted by k-mer size and then
+        alphabetically. Per-sequence counts then list every sequence in turn
         under each k-mer. With windows, k-mers are sorted alphabetically
-        whatever their size and each k-mer's windows follow one another,
-        with per-sequence counts grouped by sequence first. Merged counts
-        can be given as they are as the background of a motif, or wherever
-        else a background is taken, where the single letters are used.
+        whatever their size, and each k-mer's windows follow one another.
+        Per-sequence windowed counts are grouped by sequence first.
+
+        Merged counts can be given as they are wherever a background is
+        taken, such as the background of a motif. The single letters are
+        then used.
 
     References
     ----------
@@ -401,13 +417,13 @@ def shuffle_sequences(
 ):
     """Shuffle sequences while preserving their k-mer composition.
 
-    By default ``k`` is 2, keeping dinucleotide counts, since the
-    dinucleotide make-up of DNA, CpG depletion above all, changes how often
+    By default ``k`` is 2, which keeps dinucleotide counts. The
+    dinucleotide make-up of DNA, above all CpG depletion, changes how often
     motifs match, and shuffled sequences mostly serve as backgrounds for
-    them. Results depend on ``seed`` but not on ``nthreads``.
+    motifs. Results depend on ``seed`` but not on ``nthreads``.
 
     One-hot sequences are shuffled as the sequences they encode, with
-    positions holding no letter read as N, so that the result is the one-hot
+    positions holding no letter read as N. The result is the one-hot
     encoding of shuffling the sequences as text, in the same layout and
     dtype. For several shuffles of each sequence that keep any Ns in place,
     as references for attribution, see
@@ -423,17 +439,20 @@ def shuffle_sequences(
     k
         The size of the k-mers whose counts are kept, at least 1.
     method
-        ``"euler"`` keeps k-mer counts exactly, along with the first and
-        last k-1 letters. ``"linear"`` shuffles non-overlapping blocks of k
-        letters, keeping only those blocks' counts, and ``"markov"`` draws a
-        new sequence from the k-mer frequencies, keeping them only
-        approximately.
+        How to shuffle.
+
+        - ``"euler"`` keeps k-mer counts exactly, along with the first and
+          last k-1 letters.
+        - ``"linear"`` shuffles non-overlapping blocks of k letters, keeping
+          only those blocks' counts.
+        - ``"markov"`` draws a new sequence from the k-mer frequencies,
+          keeping them only approximately.
     seed
         Seed for the shuffles; a fresh one by default.
     window
         Shuffle each sliding window of each sequence in turn, rather than
-        whole sequences, which keeps changes in composition along them. A
-        sequence shorter than the window is shuffled whole.
+        whole sequences. This keeps changes in composition along the
+        sequences. A sequence shorter than the window is shuffled whole.
     window_size
         The width of the windows, as a fraction of each sequence's length
         when below 1 and as a number of letters otherwise. It must come to
@@ -448,7 +467,6 @@ def shuffle_sequences(
     alphabet
         The letters of one-hot sequences, in the order of their rows or
         columns. Not used for sequences given as text.
-
     progress
         Show a progress bar on stderr once the call has run for a second,
         and let Ctrl-C stop it; by default the package setting from
@@ -512,22 +530,29 @@ def shuffle_region(
     alphabet: str = "ACGT",
 ):
     """Shuffle one stretch of each sequence ``n`` times, leaving the rest as
-    it is, for measuring what a model loses when a site or region is taken
-    apart.
+    it is.
 
+    This is for measuring what a model loses when a site or region is taken
+    apart.
     Letters from ``start`` up to ``end``, counted from 0 with the end left
     out, are shuffled as by
     [`shuffle_sequences()`][universalmotif.shuffle_sequences], keeping their
-    k-mer counts, and the region must lie within every sequence. Comparing a
+    k-mer counts. The region must lie within every sequence. Comparing a
     model's predictions for the sequences with the mean of those for their
     shuffles gives the effect of the region, as with
     [`plot_marginalization()`][universalmotif.plot_marginalization].
 
     Sequences are given as for ``shuffle_sequences()``, including as one-hot
-    arrays. A string gives a list of ``n`` strings, a list gives a list of
-    lists and a dict a dict of lists, while one-hot sequences of shape
-    (sequences, letters, length) give an array of shape (sequences, n,
-    letters, length), in the layout and dtype of the input, which takes
+    arrays. The output depends on the input.
+
+    | Input | Output |
+    | --- | --- |
+    | a string | a list of ``n`` strings |
+    | a list | a list of lists |
+    | a dict | a dict of lists |
+    | one-hot, shape (sequences, letters, length) | an array of shape (sequences, n, letters, length) |
+
+    A one-hot result keeps the layout and dtype of the input, and takes
     ``n`` times its memory. Results depend on ``seed`` and ``n`` but not on
     ``nthreads``, which defaults to the package setting from
     [`set_nthreads()`][universalmotif.set_nthreads].
@@ -591,10 +616,9 @@ def create_sequences(
 
     Letters are drawn independently and uniformly by default. With
     ``freqs``, sequences are drawn from the Markov model of order k-1
-    defined by the frequencies of every k-mer of the alphabet, so that
-    frequencies of single letters give independent letters with those
-    frequencies, and those of dinucleotides keep features such as CpG
-    depletion.
+    defined by the frequencies of every k-mer of the alphabet. Frequencies
+    of single letters thus give independent letters with those frequencies.
+    Frequencies of dinucleotides keep features such as CpG depletion.
 
     Parameters
     ----------
@@ -606,11 +630,16 @@ def create_sequences(
     seqlen
         The length of each sequence, at least 1.
     freqs
-        The frequency of every k-mer of the alphabet, either as a mapping
-        from k-mers, as a table from [`get_bkg()`][universalmotif.get_bkg],
-        whose largest k-mers are used, or in the sorted order that
-        [`get_kmers()`][universalmotif.get_kmers] gives. Their number sets
-        k. Uniform letters by default.
+        The frequency of every k-mer of the alphabet, given in one of these
+        forms.
+
+        - A mapping from k-mers.
+        - A table from [`get_bkg()`][universalmotif.get_bkg], whose largest
+          k-mers are used.
+        - Values in the sorted order that
+          [`get_kmers()`][universalmotif.get_kmers] gives.
+
+        Their number sets k. Uniform letters by default.
     seed
         Seed for drawing the sequences; a fresh one by default.
     nthreads
@@ -700,10 +729,12 @@ def shuffle_motifs(motifs: Motif | Iterable[Motif], k: int = 2, seed: int | None
 
 
 def sample_sites(motif: Motif, n: int = 100, seed: int | None = None) -> list[str]:
-    """Draw ``n`` sites from a motif, each letter chosen with the motif's
-    probabilities at its position. Sites of a gapped motif have a spacer in
-    each gap, of a size drawn uniformly within its range, filled with
-    letters drawn from the motif's background.
+    """Draw ``n`` sites from a motif.
+
+    Each letter is chosen with the motif's probabilities at its position.
+    Sites of a gapped motif have a spacer in each gap, of a size drawn
+    uniformly within its range. Spacers are filled with letters drawn from
+    the motif's background.
 
     Examples
     --------
@@ -745,30 +776,32 @@ def implant_motifs(
 ):
     """Plant sites sampled from DNA or RNA motifs into sequences.
 
-    Each sequence gets ``n_per_seq`` sites, a Poisson number with mean
-    ``rate`` times its length if ``rate`` is given, or one site at each of
-    its ``positions``, given as starts counted from 0 with one list per
-    sequence.
-    Every site
-    comes from a motif chosen at random, on a random strand unless
-    ``strand="+"``, and overwrites the sequence where it lands.
+    How many sites each sequence gets depends on the arguments.
+
+    - By default, ``n_per_seq`` sites.
+    - With ``rate``, a Poisson number with mean ``rate`` times its length.
+    - With ``positions``, one site at each position, given as starts
+      counted from 0 with one list per sequence.
+
+    Every site comes from a motif chosen at random, on a random strand
+    unless ``strand="+"``. It overwrites the sequence where it lands.
 
     A gapped motif's sites get a spacer in each gap, of a size drawn
-    uniformly within its range, which keeps the sequence's own letters, so
-    that only the motif's columns are written.
+    uniformly within its range. The spacer keeps the sequence's own
+    letters, so only the motif's columns are written.
 
     Random positions are the mean of ``centre_bias`` uniform draws, so values
-    above 1 favour the middle of sequences, and keep at least
-    ``min_spacing`` letters from other sites; a site that cannot be placed
+    above 1 favour the middle of sequences. They keep at least
+    ``min_spacing`` letters from other sites. A site that cannot be placed
     in ``max_retries`` attempts is skipped with a warning.
 
-    Returns the new sequences in the same form as the input, which may be
+    Returns the new sequences in the same form as the input. This may be
     one-hot as for [`insert_sites()`][universalmotif.insert_sites], with the
-    letters in the order of ``alphabet``, and with
-    ``return_indices`` also a DataFrame of the sites with the columns
+    letters in the order of ``alphabet``. With ``return_indices``, a
+    DataFrame of the sites is returned too, with the columns
     ``sequence_i``, ``motif_i``, ``start``, ``width``, ``strand`` and
-    ``planted``. The indices and ``start`` count from 0, ``width``
-    includes any spacers, and ``planted`` is the site as it reads on the
+    ``planted``. The indices and ``start`` count from 0, and ``width``
+    includes any spacers. ``planted`` is the site as it reads on the
     forward strand.
 
     Examples
@@ -848,31 +881,37 @@ def motif_finder(
 ) -> pl.DataFrame:
     """Discover motifs enriched in DNA or RNA sequences.
 
-    A minimal STREME-like search (Bailey 2021). At each width, k-mers that a
-    one-sided Fisher's exact test finds in more positive than background
-    sequences seed PPMs built from their Hamming-1 neighbours, which are
-    refined over two rescans. A motif whose hits are enriched with a P-value
-    of at most ``stop_pvalue`` is kept and its sites masked, and the search
-    at that width goes on for the next. Motifs from different widths that
-    share too many sites are deduplicated, Benjamini-Hochberg q-values are
-    computed, low-information flanks are trimmed, and motifs with q-values
-    above ``qvalue`` are dropped. Motifs found on one strand have the
-    ``strand`` ``"+"``, so that they are scanned on that strand alone.
+    This is a minimal STREME-like search (Bailey 2021). At each width, it
+    runs as follows.
 
-    Each motif is the best of many candidate words, so its P-value, from
-    Fisher's exact test on the sequences with hits, is multiplied by the
-    number of words tested in the search that found it, given in
-    ``candidates``, and the q-values count every word tested at every width.
-    This keeps random sequences from giving motifs, though the refinement of
-    each motif from its word is not accounted for, so the P-values are still
-    somewhat optimistic.
+    1. A one-sided Fisher's exact test finds k-mers in more positive than
+       background sequences.
+    2. Each such k-mer seeds a PPM built from its Hamming-1 neighbours,
+       which is refined over two rescans.
+    3. A motif whose hits are enriched with a P-value of at most
+       ``stop_pvalue`` is kept and its sites masked. The search at that
+       width then goes on for the next motif.
 
-    Shuffles suit sequences without much structure, but genomic sequences
-    hold many loose repeats, such as GA-rich stretches, that shuffling breaks
-    up, so such repeats come back as motifs enriched over the shuffles even
+    Afterwards, motifs from different widths that share too many sites are
+    deduplicated, and Benjamini-Hochberg q-values are computed.
+    Low-information flanks are trimmed, and motifs with q-values above
+    ``qvalue`` are dropped. Motifs found on one strand have the ``strand``
+    ``"+"``, so they are scanned on that strand alone.
+
+    Each motif is the best of many candidate words. Its P-value, from
+    Fisher's exact test on the sequences with hits, is therefore multiplied
+    by the number of words tested in the search that found it, given in
+    ``candidates``. The q-values count every word tested at every width.
+    This keeps random sequences from giving motifs. The refinement of each
+    motif from its word is not accounted for, though, so the P-values are
+    still somewhat optimistic.
+
+    Shuffles suit sequences without much structure. Genomic sequences hold
+    many loose repeats, such as GA-rich stretches, that shuffling breaks up.
+    Such repeats then come back as motifs enriched over the shuffles, even
     in regions with nothing to find. For genomic sequences, a background
-    drawn from the genome and matched for composition, as from
-    [`match_bkg()`][universalmotif.match_bkg], gives far fewer false motifs.
+    drawn from the genome and matched for composition gives far fewer false
+    motifs, as from [`match_bkg()`][universalmotif.match_bkg].
 
     Parameters
     ----------
@@ -908,10 +947,10 @@ def motif_finder(
         at least 1. Only used without ``bkg_sequences``.
     bkg_shuffles
         How many shuffles of the sequences make up the background, without
-        ``bkg_sequences``. Several steady the background, so that motifs in
-        only a few percent of the sequences are found whatever the seed:
-        with one, a motif in a tenth of 400 sequences was missed with three
-        seeds in eight, and with three it was found with all of them.
+        ``bkg_sequences``. Several steady the background, so motifs in only
+        a few percent of the sequences are found whatever the seed. With
+        one shuffle, a motif in a tenth of 400 sequences was missed with
+        three seeds in eight. With three, it was found with all of them.
     seed
         Seed for shuffling the background; a fresh one by default.
     pseudocount
@@ -921,36 +960,38 @@ def motif_finder(
         Threads to use, with 0 for all available, each searching one width
         at a time; by default the package setting from
         [`set_nthreads()`][universalmotif.set_nthreads].
-
     progress
         Show a progress bar on stderr once the call has run for a second,
         and let Ctrl-C stop it; by default the package setting from
         [`set_progress()`][universalmotif.set_progress].
     stability, stability_fraction
-        With ``stability`` above 0, rerun the search that many times, each
-        on a random ``stability_fraction`` of the sequences and of the
-        background with the same options, and give each motif the share of
-        reruns that find a motif with a similarity of at least 0.9 to it, as
-        [`compare_motifs()`][universalmotif.compare_motifs] scores it by
-        default. Motifs found in most reruns are those the search would
-        find again in other data, so keeping them makes the motifs found
-        from one sample of sequences to the next more alike; the reruns
-        take about as long again as the search, each.
+        With ``stability`` above 0, rerun the search that many times with
+        the same options. Each rerun uses a random ``stability_fraction`` of
+        the sequences and of the background. Each motif is given the share
+        of reruns that find a motif with a similarity of at least 0.9 to
+        it, as [`compare_motifs()`][universalmotif.compare_motifs] scores it
+        by default. Motifs found in most reruns are those the search would
+        find again in other data. Keeping them makes the motifs found from
+        one sample of sequences to the next more alike. Each rerun takes
+        about as long as the search itself.
 
     Returns
     -------
     polars.DataFrame
-        A DataFrame in order of P-value, with the motifs in an object column
-        ``motif`` alongside ``name``, ``consensus``, ``rank``, ``width``,
+        A DataFrame in order of P-value. The motifs are in an object column
+        ``motif``, alongside ``name``, ``consensus``, ``rank``, ``width``,
         ``nsites``, ``seqs_pos``, ``seqs_neg``, ``sites_pos``,
         ``sites_neg``, ``n_pos``, ``n_neg``, ``candidates``, ``pvalue``,
-        ``log10_pvalue``, ``qvalue`` and ``log10_qvalue``. The motifs are
-        PPMs named ``motif_1``, ``motif_2`` and so on, with their q-values
-        as E-values. ``seqs_pos`` and ``seqs_neg`` count sequences with a
-        hit, and ``sites_pos`` and ``sites_neg`` count hits.
-        ``log10_pvalue`` and ``log10_qvalue`` stay finite when the P-values
-        are too small for a double. With ``stability``, a ``stability``
-        column gives the share of reruns that found each motif again.
+        ``log10_pvalue``, ``qvalue`` and ``log10_qvalue``.
+
+        - The motifs are PPMs named ``motif_1``, ``motif_2`` and so on,
+          with their q-values as E-values.
+        - ``seqs_pos`` and ``seqs_neg`` count sequences with a hit, and
+          ``sites_pos`` and ``sites_neg`` count hits.
+        - ``log10_pvalue`` and ``log10_qvalue`` stay finite when the
+          P-values are too small for a double.
+        - With ``stability``, a ``stability`` column gives the share of
+          reruns that found each motif again.
 
     References
     ----------

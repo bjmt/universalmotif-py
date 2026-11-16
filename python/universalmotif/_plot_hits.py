@@ -25,9 +25,9 @@ _LANE_INCHES = 0.17
 
 
 def _motif_colours(names: list[str], places: Iterable[int]) -> dict[str, str]:
-    """Colours for motifs by their places: tab10 for the first ten, and
-    the light half of tab20 after them, so that neighbouring motifs never
-    get a dark and a light shade of the same hue."""
+    """Colours for motifs by their places, with tab10 for the first ten and
+    the light half of tab20 after them. Neighbouring motifs then never get
+    a dark and a light shade of the same hue."""
     import matplotlib
 
     tab20 = matplotlib.colormaps["tab20"].colors
@@ -36,9 +36,9 @@ def _motif_colours(names: list[str], places: Iterable[int]) -> dict[str, str]:
 
 
 def _lengths(sequences) -> dict[str, int]:
-    """Sequence lengths from a mapping of lengths or of sequences, a list of
-    sequences named as scan_sequences() names them, or anything with a
-    ``lengths`` mapping such as PackedSequences and Genome."""
+    """Sequence lengths from a mapping of lengths or of sequences, or from a
+    list of sequences named as scan_sequences() names them. Anything with a
+    ``lengths`` mapping, such as PackedSequences and Genome, works too."""
     lengths = getattr(sequences, "lengths", None)
     if isinstance(lengths, Mapping):
         return {str(k): int(v) for k, v in lengths.items()}
@@ -52,7 +52,7 @@ def _lengths(sequences) -> dict[str, int]:
 
 def _lanes(starts: np.ndarray, ends: np.ndarray, gap: float) -> tuple[np.ndarray, int]:
     """Put intervals in lanes so that none in a lane overlap or come within
-    ``gap`` of each other, each going in the lowest lane free at its start.
+    ``gap`` of each other. Each goes in the lowest lane free at its start.
     Returns the lane of each and the number of lanes."""
     lane = np.zeros(len(starts), dtype=np.int64)
     busy: list[tuple[float, int]] = []
@@ -147,61 +147,61 @@ def plot_hits(
 ) -> Figure | Axes:
     """Draw motif hits along the sequences they were found in.
 
-    Each sequence is a track, drawn as a thin line, with each hit from
-    [`scan_sequences()`][universalmotif.scan_sequences] drawn on it from its
-    start to its end as an arrow pointing along its strand, or as a block
-    when it has none. Hits that overlap are stacked in lanes below the line
-    so that none hide another, and are coloured by motif.
+    Each sequence is a track, drawn as a thin line. Each hit from
+    [`scan_sequences()`][universalmotif.scan_sequences] is drawn on it
+    from its start to its end, as an arrow pointing along its strand or as
+    a block when it has none. Hits are coloured by motif. Hits that overlap
+    are stacked in lanes below the line so that none hide another.
 
     Hits moved to the genome with [`genomic_hits()`][universalmotif.genomic_hits]
-    are drawn in genomic coordinates. With ``ranges``, each range is a track
-    showing the hits that overlap it, with the x-axis in genomic positions
-    for a single range and in positions from the start of each range for
-    several. Without ``ranges``, each chromosome is a track.
+    are drawn in genomic coordinates. With ``ranges``, each range is a
+    track showing the hits that overlap it. For a single range the x-axis
+    is in genomic positions, and for several it is in positions from the
+    start of each range. Without ``ranges``, each chromosome is a track.
 
     Parameters
     ----------
     hits
-        Hits with ``motif``, ``start`` and ``end`` columns, positions counted
-        from 0 with the end left out, and a ``sequence`` or ``chrom``
-        column. A ``strand`` column sets the direction of the arrows.
+        Hits with ``motif``, ``start`` and ``end`` columns, with positions
+        counted from 0 and the end left out. They also need a ``sequence``
+        or ``chrom`` column. A ``strand`` column sets the direction of the
+        arrows.
     sequences
-        The sequences scanned, as a list, a mapping from names to sequences,
-        [`PackedSequences`][universalmotif.PackedSequences] or a
-        [`Genome`][universalmotif.Genome], or a mapping from names to
-        lengths. Every sequence is then drawn at its full length in the
-        order given, including those without hits. Otherwise the sequences
-        with hits are drawn up to their last hit. It is not used with
-        ``ranges``.
+        The sequences scanned, as a list, a mapping from names to
+        sequences, [`PackedSequences`][universalmotif.PackedSequences] or a
+        [`Genome`][universalmotif.Genome]. A mapping from names to lengths
+        also works. Every sequence is then drawn at its full length in the
+        order given, including those without hits. Without ``sequences``,
+        the sequences with hits are drawn up to their last hit. It is not
+        used with ``ranges``.
     ranges
-        Genomic ranges to draw, as a range table or (chrom, start, end)
-        tuples, for hits with a ``chrom`` column. A ``name`` column in the
-        table labels the tracks, which are otherwise labelled
+        Genomic ranges to draw, for hits with a ``chrom`` column. They can
+        be a range table or (chrom, start, end) tuples. A ``name`` column
+        in the table labels the tracks, which are otherwise labelled
         ``chrom:start-end``.
     names, max_tracks
-        Draw only the tracks with these names, in this order, and at most
-        ``max_tracks`` of them, or all of them with ``None``. A note above
-        the plot says when tracks were left out.
+        Draw only the tracks with these names, in this order. At most
+        ``max_tracks`` of them are drawn, or all of them with ``None``. A
+        note above the plot says when tracks were left out.
     motifs
-        Motifs to draw, by name or as the motifs scanned, which sets their
-        order in the legend and adds their logos to it. Duplicated names are
-        made unique as ``scan_sequences()`` makes them.
+        Motifs to draw, by name or as the motifs scanned. They set the
+        order of motifs in the legend and add their logos to it. Duplicated
+        names are made unique as ``scan_sequences()`` makes them.
     colours
         A mapping from motif names to colours. Motifs default to the tab10
-        palette in the order they were scanned or given in ``motifs``,
-        followed by the lighter colours of tab20 when there are more than
-        ten.
+        palette, in the order they were scanned or given in ``motifs``.
+        With more than ten, the lighter colours of tab20 follow.
     shade_by, size_by
         A numeric column to set the opacity or the height of the hits by,
         from the smallest value to the largest, such as ``"score"`` or
-        ``"pvalue"``. P-values are taken as -log10, so that stronger hits
-        are always darker and taller.
+        ``"pvalue"``. P-values are taken as -log10, so stronger hits are
+        always darker and taller.
     labels
         Name the motif on each hit long enough to hold it.
     legend
         Draw a legend of the motifs beside the plot.
     text_size
-        Size of the track names and the legend; labels on hits are a little
+        Size of the track names and the legend. Labels on hits are a little
         smaller.
     ax
         Draw on these axes, such as a panel of a larger figure, instead of
@@ -427,10 +427,11 @@ def plot_hits(
 
 
 def _tracks(hits: pl.DataFrame, sequences, ranges):
-    """The tracks to draw: their labels, the position each is drawn from,
-    their (start, end) bounds in drawn positions, the track of each hit,
-    the hits, and the x-axis label. Hits in several ranges are drawn in
-    each."""
+    """The tracks to draw.
+
+    Returns their labels, the position each is drawn from, their (start,
+    end) bounds in drawn positions, the track of each hit, the hits, and
+    the x-axis label. Hits in several ranges are drawn in each."""
     if ranges is not None:
         from ._genomic import _range_table, _ranges_frame
 
@@ -535,7 +536,7 @@ def _draw_legends(ax, motif_names, palette, logos, value_legends, text_size, hit
             continue
         breaks = [v for v in MaxNLocator(nbins=3).tick_values(lo, hi) if lo <= v <= hi]
         # Markers keep the hits' proportions but are no taller than a line
-        # and a half of text, and the rows are spaced to fit the largest.
+        # and a half of text. The rows are spaced to fit the largest.
         largest = min(hit_pts, 1.5 * text_size)
         handles = []
         for v in breaks:

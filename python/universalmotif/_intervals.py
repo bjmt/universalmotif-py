@@ -45,21 +45,29 @@ def _bed_format(file, format: str | None) -> str:
 
 def read_bed(file: str | os.PathLike, format: str | None = None) -> pl.DataFrame:
     r"""Read a BED file, or a narrowPeak, broadPeak or bedGraph file, into a
-    DataFrame of ranges that the functions taking ranges accept, such as
+    DataFrame of ranges.
+
+    Any function taking ranges accepts the result, such as
     [`extract_ranges()`][universalmotif.extract_ranges],
     [`mask_ranges()`][universalmotif.mask_ranges] and
-    [`match_bkg()`][universalmotif.match_bkg].
+    [`match_bkg()`][universalmotif.match_bkg]. Positions are kept as they
+    are in the file, counted from 0 with the end left out.
 
-    Positions are kept as they are in the file, counted from 0 with the end
-    left out. Columns are named after the format: ``chrom``, ``start`` and
-    ``end``, then for BED files as many of ``name``, ``score``, ``strand``,
-    ``thick_start``, ``thick_end``, ``item_rgb``, ``block_count``,
-    ``block_sizes`` and ``block_starts`` as there are, with any further
-    columns named ``column_13`` and so on. narrowPeak and broadPeak files
-    have ``name``, ``score``, ``strand``, ``signal``, ``neg_log10_pvalue``
-    and ``neg_log10_qvalue``, and narrowPeak files the summit as ``peak``,
-    counted from ``start``; the -1 these formats write for a value not given
-    is read as null. bedGraph files have ``value``.
+    Columns are named after the format, always starting with ``chrom``,
+    ``start`` and ``end``. The further columns are as follows.
+
+    - BED files have as many of ``name``, ``score``, ``strand``,
+      ``thick_start``, ``thick_end``, ``item_rgb``, ``block_count``,
+      ``block_sizes`` and ``block_starts`` as there are. Any further
+      columns are named ``column_13`` and so on.
+    - narrowPeak and broadPeak files have ``name``, ``score``, ``strand``,
+      ``signal``, ``neg_log10_pvalue`` and ``neg_log10_qvalue``.
+      narrowPeak files also have the summit as ``peak``, counted from
+      ``start``.
+    - bedGraph files have ``value``.
+
+    The -1 that narrowPeak and broadPeak files write for a value not given
+    is read as null.
 
     Parameters
     ----------
@@ -67,10 +75,10 @@ def read_bed(file: str | os.PathLike, format: str | None = None) -> pl.DataFrame
         The file, which may be gzipped. Blank lines, comments and ``track``
         and ``browser`` lines are skipped.
     format
-        ``"bed"``, ``"narrowPeak"``, ``"broadPeak"`` or ``"bedGraph"``; by
-        default from the file's extension (``.narrowPeak``, ``.broadPeak``,
-        ``.bedGraph`` or ``.bg``, with or without ``.gz``), and otherwise
-        BED.
+        ``"bed"``, ``"narrowPeak"``, ``"broadPeak"`` or ``"bedGraph"``. By
+        default it comes from the file's extension, which is one of
+        ``.narrowPeak``, ``.broadPeak``, ``.bedGraph`` or ``.bg``, with or
+        without ``.gz``. Other files are read as BED.
 
     References
     ----------
@@ -164,12 +172,12 @@ def resize_ranges(
 ) -> pl.DataFrame:
     """Give every range the same width, such as a window around each peak.
 
-    Each range is resized around its ``anchor``: its centre, its start or
-    end on its strand, or for narrowPeak files read with
-    [`read_bed()`][universalmotif.read_bed] its summit. Windows that run off
-    a chromosome are dropped or trimmed when ``genome`` is given. The other
-    columns are kept, and a narrowPeak ``peak`` column is moved so that it
-    still marks the summit, or set to null when the window leaves it out.
+    Each range is resized around its ``anchor``. This is its centre, its
+    start or end on its strand, or its summit for narrowPeak files read
+    with [`read_bed()`][universalmotif.read_bed]. Windows that run off a
+    chromosome are dropped or trimmed when ``genome`` is given. The other
+    columns are kept. A narrowPeak ``peak`` column is moved so that it still
+    marks the summit, or set to null when the window leaves it out.
 
     Parameters
     ----------
@@ -180,13 +188,12 @@ def resize_ranges(
     width
         The width of every range.
     anchor
-        ``"centre"`` (also spelt ``"center"``), ``"start"``, ``"end"`` or
-        ``"summit"``. A centre falls
-        on the boundary between two bases, rounding up when the range and
-        the width differ by an odd number. Start and end follow the strand,
-        so that the start of a range on the ``-`` strand is its last base.
-        Summits come from a ``peak`` column counted from the start, and
-        ranges without one are centred.
+        ``"centre"`` (also spelled ``"center"``), ``"start"``, ``"end"`` or
+        ``"summit"``. A centre falls on the boundary between two bases,
+        rounding up when the range and the width differ by an odd number.
+        Start and end follow the strand, so the start of a range on the
+        ``-`` strand is its last base. Summits come from a ``peak`` column
+        counted from the start, and ranges without one are centred.
     genome
         A [`Genome`][universalmotif.Genome], sequences by name or lengths by
         name, to keep windows within the chromosomes.
@@ -273,13 +280,13 @@ def write_bed(
     score: str | None = None,
     overwrite: bool = False,
 ) -> None:
-    r"""Write ranges, or hits moved to the genome with
-    [`genomic_hits()`][universalmotif.genomic_hits], to a BED file, for a
-    genome browser or other tools. A path ending in ``.gz`` is gzipped.
+    r"""Write ranges to a BED file, for a genome browser or other tools.
 
-    Ranges without names, scores or strands are written as BED3, and others
-    as BED6, whose name, score and strand are ``.`` where missing and whose
-    unstranded ranges have the strand ``.``.
+    The ranges may be hits moved to the genome with
+    [`genomic_hits()`][universalmotif.genomic_hits]. A path ending in
+    ``.gz`` is gzipped. Ranges without names, scores or strands are written
+    as BED3, and others as BED6. In BED6, a missing name or score is
+    written as ``.``, and so is the strand of an unstranded range.
 
     Parameters
     ----------
@@ -290,11 +297,11 @@ def write_bed(
     file
         The file to write.
     name, score
-        Columns to write as the name and score. By default ``name``, or
-        ``motif`` for hits, and ``score``. Genome browsers expect whole
-        numbers from 0 to 1000 as scores, which motif scores are not, so for
-        hits give a column made for them, or ``score=""`` to leave scores
-        out.
+        Columns to write as the name and score. By default these are
+        ``name`` (or ``motif`` for hits) and ``score``. Genome browsers
+        expect whole numbers from 0 to 1000 as scores, which motif scores
+        are not. For hits, give a column made for them, or ``score=""`` to
+        leave scores out.
     overwrite
         Replace ``file`` if it exists.
 
@@ -355,8 +362,8 @@ def _merged_ranges(ranges) -> pl.DataFrame:
 
 
 def _scan_ranges(motifs, genome, ranges, nthreads, kwargs) -> pl.DataFrame:
-    """scan_sequences(ranges=): scan the merged ranges of a genome and place
-    the hits on it."""
+    """Scan the merged ranges of a genome and place the hits on it, for
+    scan_sequences(ranges=)."""
     from ._analysis import scan_sequences
     from ._genome import Genome, extract_ranges
     from ._packed import PackedSequences
@@ -373,32 +380,31 @@ def genomic_hits(hits: pl.DataFrame, ranges=None) -> pl.DataFrame:
     """Hits from scanning genomic ranges, moved to genomic coordinates.
 
     [`scan_sequences()`][universalmotif.scan_sequences] counts positions
-    from the start of each sequence scanned. When those sequences are
-    ranges taken from a genome, such as peaks read with
-    [`extract_ranges()`][universalmotif.extract_ranges], this puts the hits
-    back on the genome: each gets a ``chrom`` column, and ``start``, ``end``
-    and ``strand`` become positions on the chromosome's forward strand,
-    counted from 0 with the end left out. Hits in ranges that were reverse
-    complemented have their strand flipped. The other columns are kept, so
-    ``sequence`` still names the range each hit came from.
+    from the start of each sequence scanned. Those sequences may be ranges
+    taken from a genome, such as peaks read with
+    [`extract_ranges()`][universalmotif.extract_ranges]. This function puts
+    the hits back on the genome. Each gets a ``chrom`` column, and
+    ``start``, ``end`` and ``strand`` become positions on the chromosome's
+    forward strand, counted from 0 with the end left out. Hits in ranges
+    that were reverse complemented have their strand flipped. The other
+    columns are kept, so ``sequence`` still names the range each hit came
+    from.
 
-    By default the ranges are read from the sequence names, which must be
-    ``chrom:start-end`` with ``(-)`` after ranges on the minus strand, as
+    By default the ranges are read from the sequence names. These must be
+    ``chrom:start-end``, with ``(-)`` after ranges on the minus strand, as
     [`extract_ranges()`][universalmotif.extract_ranges] and
     [`match_bkg()`][universalmotif.match_bkg] name them. Otherwise
     ``ranges`` gives them in the order of the sequences scanned, as a range
-    table or (chrom, start, end[, strand]) tuples, and hits are matched to
+    table or (chrom, start, end[, strand]) tuples. Hits are then matched to
     them by ``sequence_i``.
 
-    Hits that already have a ``chrom`` column, such as those of
-    ``scan_sequences(ranges=)`` or of
-    [`read_seqlets()`][universalmotif.read_seqlets] given regions, are on the
-    genome already and are refused.
+    Hits that already have a ``chrom`` column are on the genome already and
+    are refused. Examples are the hits of ``scan_sequences(ranges=)`` and of
+    [`read_seqlets()`][universalmotif.read_seqlets] given regions.
 
     Hits in overlapping ranges are reported once for each, so the same site
-    can appear more than once, and
-    ``.unique(["motif", "chrom", "start", "end", "strand"], maintain_order=True)``
-    keeps one of each.
+    can appear more than once. To keep one of each, use
+    ``.unique(["motif", "chrom", "start", "end", "strand"], maintain_order=True)``.
 
     Examples
     --------
@@ -489,11 +495,11 @@ def _chrom_column(df: pl.DataFrame) -> str:
 def to_pyranges(df: pl.DataFrame):
     """A table of ranges, such as hits or peaks, as a PyRanges object.
 
-    The chromosome column, which can be any of ``chrom``, ``seqnames``,
-    ``sequence``, ``chr`` or ``chromosome``, becomes ``Chromosome``, and
-    ``start``, ``end`` and ``strand`` become ``Start``, ``End`` and
+    The chromosome column becomes ``Chromosome``. It can be any of
+    ``chrom``, ``seqnames``, ``sequence``, ``chr`` or ``chromosome``. The
+    ``start``, ``end`` and ``strand`` columns become ``Start``, ``End`` and
     ``Strand``. Positions are 0-based and half-open in both, so they are
-    kept as they are. Other columns are kept too. PyRanges objects can be
+    kept as they are, and so are other columns. PyRanges objects can be
     given back to any function that takes ranges.
 
     Needs the ``pyranges`` extra.
@@ -531,11 +537,15 @@ def to_polars_bio(df: pl.DataFrame) -> pl.DataFrame:
 
     polars-bio works on polars DataFrames with ``chrom``, ``start`` and
     ``end`` columns, and keeps their coordinate system as metadata. This
-    renames the chromosome column to ``chrom`` if it has another name, such
-    as the ``sequence`` of hits, moves it first, and marks the positions as
-    0-based, as they are throughout this package, so that polars-bio's
-    range operations treat them correctly. polars-bio frames can be given
-    back to any function that takes ranges.
+    function does three things.
+
+    - It renames the chromosome column to ``chrom`` if it has another name,
+      such as the ``sequence`` of hits.
+    - It moves that column first.
+    - It marks the positions as 0-based, as they are throughout this
+      package, so that polars-bio's range operations treat them correctly.
+
+    polars-bio frames can be given back to any function that takes ranges.
 
     Needs the ``polars-bio`` extra.
 

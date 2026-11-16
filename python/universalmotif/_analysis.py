@@ -34,7 +34,7 @@ def motif_pvalue(
 
     Give either ``score`` or ``pvalue``. A motif's P-value for a score is the
     probability that a random site, drawn from the background, scores at
-    least that much; it is computed exactly from the motif's score
+    least that much. It is computed exactly from the motif's score
     distribution. A score above the motif's highest possible score has a
     P-value of 0, with a warning. Going the other way gives the lowest score
     reached with at most that probability, or infinity if no score is that
@@ -46,18 +46,22 @@ def motif_pvalue(
     Parameters
     ----------
     motifs
-        A motif or a list of motifs. They are converted to PWMs; a motif
+        A motif or a list of motifs. They are converted to PWMs. A motif
         whose PWM would have infinite values gets its pseudocount reapplied
         first.
     score, pvalue
         For a single motif, a number or a sequence of numbers. For a list of
-        motifs, a number used for every motif, one number per motif, or a
-        list of sequences with either one per motif or a single one for all.
+        motifs, one of the following.
+
+        - A number used for every motif.
+        - One number per motif.
+        - A list of sequences, with either one per motif or a single one
+          for all.
     bkg
         Background frequencies, either one set for all motifs or a list with
-        one per motif, where a set is a sequence in alphabet order, a
-        mapping from letters or a [`get_bkg()`][universalmotif.get_bkg]
-        table. Each motif's own background by default.
+        one per motif. A set is a sequence in alphabet order, a mapping from
+        letters or a [`get_bkg()`][universalmotif.get_bkg] table. Each
+        motif's own background is used by default.
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
@@ -310,14 +314,16 @@ def scan_sequences(
     Motifs and sequences of any alphabet can be scanned. Each motif's score
     threshold comes from the ``pvalue`` cutoff, and every window scoring at
     least that much is reported with its P-value. Only DNA and RNA have a
-    reverse strand, which is scanned with ``rc``, and a motif whose
-    ``strand`` is ``"+"`` or ``"-"`` is scanned on that strand alone.
+    reverse strand, which is scanned with ``rc``. A motif whose ``strand``
+    is ``"+"`` or ``"-"`` is scanned on that strand alone.
 
-    A motif too short or too degenerate to reach the ``pvalue`` cutoff can
-    have no hits, and is named in a warning with the smallest P-value it can
-    give. There are warnings too when DNA motifs meet sequences that look
-    like RNA or the other way round, and when a string that names a file is
-    given as the sequence.
+    Warnings are given in these cases.
+
+    - A motif is too short or too degenerate to reach the ``pvalue`` cutoff,
+      so it can have no hits. The warning names it with the smallest
+      P-value it can give.
+    - DNA motifs meet sequences that look like RNA, or the other way round.
+    - A string that names a file is given as the sequence.
 
     Parameters
     ----------
@@ -327,14 +333,17 @@ def scan_sequences(
         A sequence, a list of sequences, or a mapping from names to
         sequences such as the result of
         [`read_fasta()`][universalmotif.read_fasta]. DNA, RNA and protein
-        letters are matched case-insensitively and custom alphabets exactly;
-        anything else, such as ``N`` or ``X``, never forms part of a hit.
-        [`PackedSequences`][universalmotif.PackedSequences] are scanned
-        without decoding them, and a gzipped or plain FASTA file given as a
-        path object such as a ``pathlib.Path`` is read and scanned a batch at
-        a time, so a genome can be scanned in a few hundred MB. A
-        [`Genome`][universalmotif.Genome] is scanned a few chromosomes at a
-        time, about 64 Mb of them or one if it is longer.
+        letters are matched case-insensitively, and custom alphabets
+        exactly. Anything else, such as ``N`` or ``X``, never forms part of
+        a hit. Larger inputs can be given in these forms.
+
+        - [`PackedSequences`][universalmotif.PackedSequences] are scanned
+          without decoding them.
+        - A gzipped or plain FASTA file, given as a path object such as a
+          ``pathlib.Path``, is read and scanned a batch at a time. A genome
+          can thus be scanned in a few hundred MB.
+        - A [`Genome`][universalmotif.Genome] is scanned a few chromosomes
+          at a time, about 64 Mb of them, or one if it is longer.
     pvalue
         The P-value a window's score must reach to be reported, which sets
         each motif's score threshold.
@@ -355,7 +364,7 @@ def scan_sequences(
         lowest P-value or ``"score"`` to keep the highest score.
     no_overlaps_across_strands
         With ``no_overlaps``, compare hits on opposite strands too, so that
-        a palindromic site is kept once; if false, each strand is
+        a palindromic site is kept once. If false, each strand is
         deduplicated on its own.
     no_overlaps_across_motifs
         With ``no_overlaps``, also compare hits of different motifs, so that
@@ -363,52 +372,54 @@ def scan_sequences(
     use_gaps
         Scan gapped motifs, such as those made with
         [`add_gap()`][universalmotif.add_gap], with every combination of
-        their gap sizes; otherwise their gaps are ignored. A gapped hit's
-        ``match`` shows the gap as dots, and its P-value is that of its score
+        their gap sizes. Otherwise their gaps are ignored. A gapped hit's
+        ``match`` shows the gap as dots. Its P-value is that of its score
         under the motif without the gap. Gapped motifs are scanned on both
         strands like any other.
     correct_gaps
         Bonferroni-correct gapped motifs' P-values for the number of
-        combinations of gap sizes tried, since each window is scored once
-        per combination and the best is kept: hits must reach ``pvalue``
-        divided by that number, and their P-values are multiplied by it and
-        capped at 1. Turn it off to give each hit the P-value of its score
-        under the motif without its gaps. Motifs without gaps are not
-        affected.
+        combinations of gap sizes tried. This is needed because each window
+        is scored once per combination and the best is kept. Hits must then
+        reach ``pvalue`` divided by that number, and their P-values are
+        multiplied by it and capped at 1. Turn it off to give each hit the
+        P-value of its score under the motif without its gaps. Motifs
+        without gaps are not affected.
     first_hit
         Keep only the first hit of each motif in each sequence, the one
-        listed first without this option: the hit with the lowest ``start``,
-        and of a ``+`` and a ``-`` strand hit at the same start, the ``+``
-        one. This is the leftmost hit rather than the best, and its score and
-        P-value are the same as in a full scan. Scanning a sequence stops for
-        a motif soon after its first hit, so the time saved grows with the
-        share of sequences that contain the motif, and is small for motifs
-        that few sequences contain. To know only which sequences contain
-        each motif, [`match_motifs()`][universalmotif.match_motifs] does
-        the same without building a table of hits. It cannot be combined
+        listed first without this option. That is the hit with the lowest
+        ``start``, and the ``+`` strand hit when both strands hit at the same
+        start. This is the leftmost hit rather than the best. Its score and
+        P-value are the same as in a full scan.
+
+        Scanning a sequence stops for a motif soon after its first hit. The
+        time saved thus grows with the share of sequences that contain the
+        motif, and is small for motifs that few sequences contain. To know
+        only which sequences contain each motif,
+        [`match_motifs()`][universalmotif.match_motifs] does the same
+        without building a table of hits. ``first_hit`` cannot be combined
         with ``no_overlaps``.
     trim_names
         When scanning a FASTA file from its path, name each sequence by the
         first word of its header, as
-        [`read_fasta()`][universalmotif.read_fasta] does, which fails if two
-        sequences then share a name; otherwise names are whole headers.
+        [`read_fasta()`][universalmotif.read_fasta] does. This fails if two
+        sequences then share a name. Otherwise names are whole headers.
     ranges
-        Scan only these ranges of a genome, given as ``sequences``: a
-        [`Genome`][universalmotif.Genome], packed sequences, sequences by
-        name or the path of a FASTA file. The ranges can be a DataFrame such
-        as [`read_bed()`][universalmotif.read_bed] returns, or any form
+        Scan only these ranges of a genome. The genome is given as
+        ``sequences``, either as a [`Genome`][universalmotif.Genome],
+        packed sequences, sequences by name or the path of a FASTA file. The
+        ranges can be a DataFrame such as
+        [`read_bed()`][universalmotif.read_bed] returns, or any form
         [`extract_ranges()`][universalmotif.extract_ranges] takes.
-        Overlapping and touching ranges are merged first, so that their
-        union is scanned and each site is reported once, even one spanning
-        two ranges; their strands are ignored, since both strands are
-        scanned as ``rc`` says. A site must lie wholly inside the ranges, so
-        pad them, for example with
-        [`resize_ranges()`][universalmotif.resize_ranges], when sites at
-        their edges matter.
+
+        Overlapping and touching ranges are merged first, so their union is
+        scanned and each site is reported once, even one spanning two
+        ranges. Their strands are ignored, since both strands are scanned as
+        ``rc`` says. A site must lie wholly inside the ranges. Pad them when
+        sites at their edges matter, for example with
+        [`resize_ranges()`][universalmotif.resize_ranges].
     no_overlaps_by_strand, no_overlaps_by_motif
         Old names of ``no_overlaps_across_strands`` and
         ``no_overlaps_across_motifs``, which still work for now.
-
     progress
         Show a progress bar on stderr once the call has run for a second,
         and let Ctrl-C stop it; by default the package setting from
@@ -420,16 +431,21 @@ def scan_sequences(
         A DataFrame with one row per hit and the columns ``motif``,
         ``motif_i``, ``sequence``, ``sequence_i``, ``start``, ``end``,
         ``strand``, ``score``, ``score_pct``, ``match`` and ``pvalue``.
-        ``score_pct`` is the score as a percentage of the motif's maximum, and
-        ``match`` is the matched sequence, reverse complemented on the ``-``
-        strand. ``motif_i`` and ``sequence_i`` are 0-based indices into the
-        inputs; ``start`` and ``end`` are positions on the forward strand,
-        counted from 0 with the end left out, so a hit's letters are
-        ``sequence[start:end]``. Rows are ordered by motif, sequence and
-        start. With ``ranges``, hits are placed on the genome as
-        [`genomic_hits()`][universalmotif.genomic_hits] places them: a
-        ``chrom`` column is added, ``start`` and ``end`` are positions on the
-        chromosome, and ``sequence`` names the merged range each hit came
+        Rows are ordered by motif, sequence and start.
+
+        - ``score_pct`` is the score as a percentage of the motif's maximum.
+        - ``match`` is the matched sequence, reverse complemented on the
+          ``-`` strand.
+        - ``motif_i`` and ``sequence_i`` are 0-based indices into the
+          inputs.
+        - ``start`` and ``end`` are positions on the forward strand, counted
+          from 0 with the end left out, so a hit's letters are
+          ``sequence[start:end]``.
+
+        With ``ranges``, hits are placed on the genome as
+        [`genomic_hits()`][universalmotif.genomic_hits] places them. A
+        ``chrom`` column is added, and ``start`` and ``end`` are positions
+        on the chromosome. ``sequence`` names the merged range each hit came
         from.
 
     Examples
@@ -537,16 +553,18 @@ def dedup_hits(
     """Remove overlapping hits.
 
     Hits are grouped by sequence and motif. Within a group, overlapping hits
-    are taken in order of the ``by`` column and each is kept unless it
-    overlaps one already kept. Lower values come first for columns whose name
-    starts with ``pval`` and higher values otherwise; ``reverse`` flips this,
-    and ties go to the earlier row. Hits on opposite strands are compared by
-    default, so that a palindromic site is kept once, as
-    [`scan_sequences()`][universalmotif.scan_sequences] does with
-    ``no_overlaps``; ``across_strands=False`` keeps the strands apart, and
-    ``across_motifs`` compares hits of different motifs too. ``start`` and
-    ``end`` columns are required, with the end left out as in a slice. Hits
-    without a ``pvalue`` column, such as seqlets from
+    are taken in order of the ``by`` column, and each is kept unless it
+    overlaps one already kept. Lower values come first for columns whose
+    name starts with ``pval``, and higher values otherwise. ``reverse``
+    flips this, and ties go to the earlier row.
+
+    Hits on opposite strands are compared by default, so a palindromic site
+    is kept once, as [`scan_sequences()`][universalmotif.scan_sequences]
+    does with ``no_overlaps``. ``across_strands=False`` keeps the strands
+    apart, and ``across_motifs`` compares hits of different motifs too.
+
+    ``start`` and ``end`` columns are required, with the end left out as in
+    a slice. Hits without a ``pvalue`` column, such as seqlets from
     [`read_seqlets()`][universalmotif.read_seqlets], are ranked by ``score``
     instead when ``by`` is left at its default. ``ignore_strand`` and
     ``ignore_motif`` are the old names of ``across_strands`` and

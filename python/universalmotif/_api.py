@@ -1,6 +1,8 @@
-"""User-facing functions. The work is done by the compiled Rust
-bindings in ``universalmotif._core``; this module handles argument checking
-and lets most functions take either a single motif or a list of them."""
+"""User-facing functions.
+
+The work is done by the compiled Rust bindings in ``universalmotif._core``.
+This module checks arguments and lets most functions take either a single
+motif or a list of them."""
 
 from __future__ import annotations
 
@@ -41,7 +43,7 @@ def _apply(motifs, f):
 def _bkg_table(bkg):
     """A table with ``kmer`` and ``probability`` columns, as
     [`get_bkg()`][universalmotif.get_bkg] returns, as a dict from k-mers to
-    probabilities; anything else as it is."""
+    probabilities. Anything else is returned as it is."""
     cols = getattr(bkg, "columns", None)
     if cols is not None and "kmer" in cols and "probability" in cols:
         return dict(zip((str(k) for k in bkg["kmer"]), (float(p) for p in bkg["probability"])))
@@ -50,8 +52,8 @@ def _bkg_table(bkg):
 
 def _bkg_letters(bkg) -> list[float]:
     """Background values in alphabet order from a sequence, a mapping or a
-    get_bkg() table, where the letters of a mapping are taken in sorted
-    order, which is the order of the package's alphabets."""
+    get_bkg() table. The letters of a mapping are taken in sorted order,
+    which is the order of the package's alphabets."""
     bkg = _bkg_table(bkg)
     if bkg is None:
         return []
@@ -84,9 +86,9 @@ def create_motif(
 ) -> Motif:
     """Create a motif.
 
-    Dots and dashes are not taken as letters when the alphabet is guessed
-    from strings of DNA, RNA or amino acids, since they usually stand for
-    gaps; they make an error instead, and count as letters only when given
+    When the alphabet is guessed from strings of DNA, RNA or amino acids,
+    dots and dashes are not taken as letters, since they usually stand for
+    gaps. They raise an error instead, and count as letters only when given
     in a custom ``alphabet``. Gapped motifs are made from sites with
     ``pieces``.
 
@@ -103,9 +105,9 @@ def create_motif(
         - A sequence of equal-length strings: aligned sites, which are
           counted. ``nsites`` then defaults to the number of strings. With
           ``pieces``, the sites may differ in length.
-        - A 2-D array of shape (letters, positions). Give the row letters
-          with ``letters``, which are sorted with the rows reordered to
-          match, or give ``alphabet`` and supply the rows in alphabet order.
+        - A 2-D array of shape (letters, positions). Either give the row
+          letters with ``letters``, which are sorted with the rows reordered
+          to match, or give ``alphabet`` and the rows in alphabet order.
           The type is detected from the values.
     alphabet
         ``"DNA"``, ``"RNA"``, ``"AA"``, or a string of letters for a custom
@@ -121,19 +123,21 @@ def create_motif(
     pseudocount
         Pseudocount used when converting between types.
     bkg
-        Background frequencies: one value per letter in alphabet order, a
-        mapping from letters to values, or the table that
-        [`get_bkg()`][universalmotif.get_bkg] returns. Uniform by default.
+        Background frequencies, uniform by default. Give one value per
+        letter in alphabet order, a mapping from letters to values, or the
+        table that [`get_bkg()`][universalmotif.get_bkg] returns.
     seed
         Random seed, for random motifs only.
     pieces
-        For sites made of two parts with a spacer of varying length between
-        them, such as the half-sites of nuclear receptors: the widths of the
-        two parts, as ``(left, right)``. The first ``left`` and last
-        ``right`` letters of each site are counted as the motif's columns,
-        and the motif gets a gap after its first ``left`` columns, from the
-        shortest to the longest spacer among the sites, as
-        [`add_gap()`][universalmotif.add_gap] gives it. Sites without a
+        The widths of the two parts of each site, as ``(left, right)``. Use
+        this for sites made of two parts with a spacer of varying length
+        between them, such as the half-sites of nuclear receptors. The first
+        ``left`` and last ``right`` letters of each site are counted as the
+        motif's columns.
+
+        The motif gets a gap after its first ``left`` columns, as
+        [`add_gap()`][universalmotif.add_gap] gives it. The gap runs from
+        the shortest to the longest spacer among the sites. Sites without a
         spacer give an ungapped motif. Gapped motifs are matched with their
         gaps by [`scan_sequences()`][universalmotif.scan_sequences].
 
@@ -340,7 +344,7 @@ def trim_motifs(motifs, min_ic: float = 0.25, trim_from: TrimFrom = "both"):
 
     Columns with an information content below ``min_ic`` are removed from the
     chosen ends until a column at or above it is reached. Motifs that are
-    trimmed away completely are dropped from a list with a warning; a single
+    trimmed away completely are dropped from a list with a warning. A single
     motif that is trimmed away raises ``ValueError``.
 
     Examples
@@ -393,10 +397,9 @@ def trim_cwm(
 def round_motif(motifs, pct_tolerance: float | str = 0.05):
     """Set small probabilities to zero.
 
-    Probabilities below ``pct_tolerance``, given as a fraction or as a
-    string such as ``"5%"``, are set to zero and each column is
-    renormalized. The motif is
-    returned in its original type.
+    Probabilities below ``pct_tolerance`` are set to zero and each column is
+    renormalized. The tolerance is a fraction or a string such as ``"5%"``.
+    The motif is returned in its original type.
 
     Examples
     --------
@@ -444,10 +447,10 @@ def position_icscore(
     """Information content of a single motif column.
 
     PPM columns are rounded to ``nsites`` counts and given the pseudocount
-    before their information content is taken, as they are for a motif's
-    total IC, so with the defaults a column of pure A gives about 1.93 bits
-    rather than 2; set ``pseudocount=0`` for the information content of the
-    column as it is. PCM columns get the pseudocount directly.
+    before their information content is taken, as for a motif's total IC.
+    With the defaults, a column of pure A thus gives about 1.93 bits rather
+    than 2. Set ``pseudocount=0`` for the information content of the column
+    as it is. PCM columns get the pseudocount directly.
 
     Examples
     --------
@@ -514,10 +517,11 @@ def get_consensus_aa(
 
 
 def consensus_to_ppm(letter: str) -> np.ndarray:
-    """The DNA probability column for an IUPAC letter. A single base gets
-    0.997, leaving 0.001 for each of the others, unlike a motif made by
-    [`create_motif()`][universalmotif.create_motif] from a consensus string,
-    whose columns hold exact zeros.
+    """The DNA probability column for an IUPAC letter.
+
+    A single base gets 0.997, leaving 0.001 for each of the others. A motif
+    made by [`create_motif()`][universalmotif.create_motif] from a consensus
+    string differs, since its columns hold exact zeros.
 
     Examples
     --------

@@ -63,12 +63,12 @@ def enrich_motifs(
 
     Target and background sequences of any alphabet are scanned with
     [`scan_sequences()`][universalmotif.scan_sequences], keeping hits with
-    P-values below ``pvalue``, and each motif gets a one-sided Fisher's exact
-    test with ``pseudocount`` added to every cell. Q-values are
+    P-values that reach ``pvalue``. Each motif then gets a one-sided Fisher's
+    exact test with ``pseudocount`` added to every cell. Q-values are
     Benjamini-Hochberg adjusted across all motifs. As in
     ``scan_sequences()``, motifs whose ``strand`` is ``"+"`` or ``"-"`` are
-    scanned on that strand only, and gapped motifs' P-values are corrected
-    for the combinations of gap sizes tried.
+    scanned on that strand only. Gapped motifs' P-values are corrected for
+    the combinations of gap sizes tried.
 
     Parameters
     ----------
@@ -86,14 +86,14 @@ def enrich_motifs(
     pvalue
         The P-value a site must reach to count as a hit.
     qvalue
-        Keep only motifs with q-values up to this, in (0, 1]; by default
+        Keep only motifs with q-values up to this, in (0, 1]. By default
         every motif is returned.
     test
         ``"seqs"`` to test the number of sequences with a hit, or
         ``"sites"`` to test the number of hits out of all the positions the
         motif could occupy.
     rc
-        Also scan the reverse strand; by default on for DNA and off for RNA.
+        Also scan the reverse strand. By default on for DNA and off for RNA.
     shuffle_k
         The size of the k-mers whose counts the shuffled background keeps,
         at least 1. Only used without ``bkg_sequences``.
@@ -105,7 +105,6 @@ def enrich_motifs(
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
-
     progress
         Show a progress bar on stderr once the call has run for a second,
         and let Ctrl-C stop it; by default the package setting from
@@ -115,14 +114,17 @@ def enrich_motifs(
     -------
     polars.DataFrame
         A DataFrame of every motif in order of P-value, or with ``qvalue``
-        only those with q-values up to it, with the columns ``motif``,
+        only those with q-values up to it. Its columns are ``motif``,
         ``motif_i``, ``consensus``, ``target_seq_n``, ``target_seq_hits``,
         ``target_site_hits``, ``bkg_seq_n``, ``bkg_seq_hits``,
         ``bkg_site_hits``, ``enrichment``, ``log2_enrichment``, ``pvalue``,
-        ``log10_pvalue``, ``qvalue`` and ``log10_qvalue``. ``motif_i`` is
-        0-based, ``enrichment`` is the ratio of hit rates, with a floor of
-        half a hit on the background rate, and the log columns stay finite
-        when the P-values are too small for a double.
+        ``log10_pvalue``, ``qvalue`` and ``log10_qvalue``.
+
+        - ``motif_i`` is 0-based.
+        - ``enrichment`` is the ratio of hit rates, with a floor of half a
+          hit on the background rate.
+        - The log columns stay finite when the P-values are too small for a
+          double.
 
     References
     ----------
@@ -256,16 +258,16 @@ def motif_coocc(
 ) -> pl.DataFrame:
     """Find motif pairs that share sequences more often than expected.
 
-    Every pair of motifs gets a one-sided Fisher's exact test on the 2x2
-    table of sequences with hits from one motif, the other, both or neither,
-    with ``pseudocount`` added to every cell. Pairs sharing fewer than
-    ``min_coocc`` sequences are not tested. Q-values are Benjamini-Hochberg
-    adjusted across the tested pairs.
+    Every pair of motifs gets a one-sided Fisher's exact test on a 2x2
+    table. The table counts sequences with hits from one motif, the other,
+    both or neither, with ``pseudocount`` added to every cell. Pairs sharing
+    fewer than ``min_coocc`` sequences are not tested. Q-values are
+    Benjamini-Hochberg adjusted across the tested pairs.
 
     The hits come either from scanning ``sequences`` with
-    [`scan_sequences()`][universalmotif.scan_sequences] or from a ``hits``
-    table given with ``n_sequences``, which works for any alphabet, such as
-    seqlets from [`read_seqlets()`][universalmotif.read_seqlets].
+    [`scan_sequences()`][universalmotif.scan_sequences], or from a ``hits``
+    table given with ``n_sequences``. A table works for any alphabet, such
+    as seqlets from [`read_seqlets()`][universalmotif.read_seqlets].
 
     Parameters
     ----------
@@ -276,44 +278,45 @@ def motif_coocc(
         The sequences to scan, as a list or a mapping from names to
         sequences. Give either these or ``hits``.
     hits
-        A table of hits instead of ``sequences``, with a 0-based
+        A table of hits instead of ``sequences``. It needs a 0-based
         ``sequence_i`` column and either a 0-based ``motif_i`` column or a
-        ``motif`` column of names, plus a ``start`` column with
-        ``max_distance``.
+        ``motif`` column of names. With ``max_distance`` it also needs a
+        ``start`` column.
     n_sequences
         With ``hits``, the number of sequences they came from, counting
         those without hits.
     pvalue
         When scanning, the P-value a site must reach to count as a hit.
     rc
-        When scanning, also scan the reverse strand; by default on for DNA
+        When scanning, also scan the reverse strand. By default on for DNA
         and off for RNA.
     no_overlaps
         When scanning, remove overlapping hits of the same motif, keeping
-        the best by ``no_overlaps_by``. Since pairs of different motifs are
-        tested on presence alone, this changes only self pairs and the
+        the best by ``no_overlaps_by``. Pairs of different motifs are tested
+        on presence alone, so this changes only self pairs and the
         ``max_distance`` columns.
     no_overlaps_by
         Which overlapping hit to keep, ``"pvalue"`` or ``"score"``.
     no_overlaps_across_strands
         Compare hits on opposite strands as well when removing overlaps, so
-        that a palindromic site counts once; if false, the strands are kept
+        that a palindromic site counts once. If false, the strands are kept
         apart.
     max_distance
-        Add two descriptive columns that do not affect the test:
-        ``both_clustered``, the number of shared sequences whose nearest
-        pair of hits by start position is within this many letters, and
-        ``median_distance``, the median of those nearest distances.
+        Add two descriptive columns that do not affect the test.
+
+        - ``both_clustered``, the number of shared sequences whose nearest
+          pair of hits by start position is within this many letters.
+        - ``median_distance``, the median of those nearest distances.
     min_coocc
         The fewest sequences a pair must share to be tested.
     pseudocount
         A non-negative count added to every cell of each Fisher's exact
         test.
     self_pairs
-        Also pair each motif with itself. Such a pair is not tested:
-        ``both`` counts the sequences with hits at two or more positions
-        and ``a_only`` those with a hit at only one, and distances are
-        between a motif's own hits.
+        Also pair each motif with itself. Such a pair is not tested.
+        ``both`` counts the sequences with hits at two or more positions,
+        and ``a_only`` those with a hit at only one. Distances are between a
+        motif's own hits.
     nthreads
         Threads for the scan and for testing the pairs, with 0 for all
         available; by default the package setting from
@@ -322,11 +325,12 @@ def motif_coocc(
     Returns
     -------
     polars.DataFrame
-        A DataFrame with the columns ``motif_a``, ``motif_b``, ``a_only``,
-        ``b_only``, ``both``, ``neither``, ``odds_ratio``, ``pvalue`` and
-        ``qvalue``, and with ``max_distance`` ``both_clustered`` and
-        ``median_distance``, sorted by q-value then P-value. Untested pairs
-        come last, with their odds ratios, P-values and q-values missing.
+        A DataFrame sorted by q-value and then P-value, with the columns
+        ``motif_a``, ``motif_b``, ``a_only``, ``b_only``, ``both``,
+        ``neither``, ``odds_ratio``, ``pvalue`` and ``qvalue``.
+        ``max_distance`` adds ``both_clustered`` and ``median_distance``.
+        Untested pairs come last, with their odds ratios, P-values and
+        q-values missing.
 
     References
     ----------
@@ -421,16 +425,21 @@ def motif_peaks(
 ) -> pl.DataFrame:
     """Test whether motif hits cluster along sequences of equal length.
 
-    A CentriMo-style test (Bailey and Machanick 2012). Only each motif's
-    highest-scoring hit per sequence is used, at its centre ``(start + end) /
-    2``. If centres were uniform along the sequences, the number falling in a
-    window of width ``w`` would be binomial with probability ``w /
-    seq_length``. Windows from ``min_window`` to ``max_window`` in steps of
-    ``window_step`` are tested, centred on the middle of the sequences with
-    ``mode="central"`` or every ``position_step`` along them with
-    ``mode="local"``, and ``max_window`` defaults to half the sequence length.
-    The best window's P-value is Bonferroni-corrected for the number of windows
-    tested, and q-values are Benjamini-Hochberg adjusted across motifs.
+    This is a CentriMo-style test (Bailey and Machanick 2012). Only each
+    motif's highest-scoring hit per sequence is used, at its centre
+    ``(start + end - 1) / 2``, midway between its first and last letters. If centres were uniform along the sequences, the
+    number falling in a window of width ``w`` would be binomial with
+    probability ``w / seq_length``.
+
+    Windows from ``min_window`` to ``max_window`` in steps of
+    ``window_step`` are tested. ``max_window`` defaults to half the sequence
+    length. Where the windows sit depends on ``mode``.
+
+    - ``"central"`` centres them on the middle of the sequences.
+    - ``"local"`` places them every ``position_step`` along the sequences.
+
+    The best window's P-value is Bonferroni-corrected for the number of
+    windows tested. Q-values are Benjamini-Hochberg adjusted across motifs.
 
     Parameters
     ----------
@@ -442,8 +451,8 @@ def motif_peaks(
     seq_strand
         A mapping from the values in the sequence column to ``"+"`` or
         ``"-"``. Centres on ``-`` sequences are reflected to
-        ``seq_length - 1 - centre`` so they read in the feature's
-        orientation, which matters only for local mode.
+        ``seq_length - 1 - centre``, so they read in the feature's
+        orientation. This matters only for local mode.
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
@@ -452,15 +461,17 @@ def motif_peaks(
     -------
     polars.DataFrame
         A DataFrame of every motif in order of P-value, or with ``qvalue``
-        only those with q-values up to it, with the columns ``motif``,
+        only those with q-values up to it. Its columns are ``motif``,
         ``motif_i``, ``mode``, ``seq_length``, ``nhits``, ``best_window``,
         ``best_centre``, ``hits_in``, ``hits_out``, ``expected_in``,
         ``enrichment``, ``log2_enrichment``, ``pvalue``, ``qvalue`` and
         ``centres``.
-        ``motif_i`` is the motif's ``motif_i`` from
-        [`scan_sequences()`][universalmotif.scan_sequences] if ``hits`` has
-        one, and otherwise the 0-based rank of its name among those in
-        ``hits``, and ``centres`` holds the rounded hit centres used.
+
+        - ``motif_i`` is the motif's ``motif_i`` from
+          [`scan_sequences()`][universalmotif.scan_sequences] if ``hits``
+          has one. Otherwise it is the 0-based rank of its name among those
+          in ``hits``.
+        - ``centres`` holds the rounded hit centres used.
 
     References
     ----------

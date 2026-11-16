@@ -1,9 +1,9 @@
 """Progress bars for long-running functions.
 
-A function given ``progress=True`` runs on a worker thread while this thread
-reads its progress handle and draws a bar on stderr, from a second after the
-call starts, so that quick calls show nothing. Ctrl-C cancels the call and
-waits for it to stop before raising.
+A function given ``progress=True`` runs on a worker thread. Meanwhile this
+thread reads its progress handle and draws a bar on stderr. The bar starts a
+second after the call, so quick calls show nothing. Ctrl-C cancels the call
+and waits for it to stop before raising.
 """
 
 from __future__ import annotations
@@ -30,14 +30,17 @@ _outers: dict[int, _Outer] = {}
 def set_progress(enabled: bool | None) -> None:
     """Show progress bars for long-running functions by default.
 
-    Functions that can take a while, such as
-    [`scan_sequences()`][universalmotif.scan_sequences] on a genome,
-    [`motif_finder()`][universalmotif.motif_finder] and
-    [`enrich_motifs()`][universalmotif.enrich_motifs], take a ``progress``
-    argument; when it is left out, this setting decides. A bar appears on
-    stderr once a call has run for a second, so quick calls show nothing,
-    and pressing Ctrl-C stops the call. The ``UNIVERSALMOTIF_PROGRESS``
-    environment variable, set to 1, turns bars on for every session.
+    Functions that can take a while take a ``progress`` argument, and this
+    setting decides when it is left out. Such functions include
+
+    - [`scan_sequences()`][universalmotif.scan_sequences] on a genome,
+    - [`motif_finder()`][universalmotif.motif_finder],
+    - [`enrich_motifs()`][universalmotif.enrich_motifs].
+
+    A bar appears on stderr once a call has run for a second, so quick calls
+    show nothing. Pressing Ctrl-C stops the call. Setting the
+    ``UNIVERSALMOTIF_PROGRESS`` environment variable to 1 turns bars on for
+    every session.
 
     Parameters
     ----------
@@ -77,17 +80,18 @@ def get_progress() -> bool:
 
 class _Outer:
     """Progress kept in Python, for functions that loop over several calls
-    to the extension: ``total`` units, of which ``done`` are finished and
-    ``part`` belong to the call under way."""
+    to the extension. Of ``total`` units, ``done`` are finished and ``part``
+    belong to the call under way."""
 
     def __init__(self, stage: str, total: int):
         self.stage, self.total, self.done, self.part = stage, total, 0, 0
 
 
 class outer:
-    """Count units of work in Python, within a call run with a bar:
-    ``with outer("scanning", n) as o:``, setting ``o.part = k`` before a call
-    to the extension covering k units and adding k to ``o.done`` after it.
+    """Count units of work in Python, within a call run with a bar.
+
+    Use ``with outer("scanning", n) as o:``. Set ``o.part = k`` before a call
+    to the extension that covers k units, and add k to ``o.done`` after it.
     The bar then shows the whole loop rather than each call. Outside a call
     with a bar, the counts go nowhere."""
 
@@ -156,9 +160,11 @@ def _state(handle, o: _Outer | None) -> tuple[str, float | None, float]:
 
 
 def wanted(progress: bool | None) -> bool:
-    """Whether a call given ``progress`` should show a bar: when it is true
-    or, when it is None, when [`get_progress()`][universalmotif.get_progress]
-    is, unless the call is already part of one that shows a bar."""
+    """Whether a call given ``progress`` should show a bar.
+
+    It should when ``progress`` is true, or when it is None and
+    [`get_progress()`][universalmotif.get_progress] is true. A call that is
+    already part of one showing a bar never gets its own."""
     if progress is None:
         progress = get_progress()
     elif not isinstance(progress, bool):

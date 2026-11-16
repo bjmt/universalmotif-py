@@ -244,51 +244,65 @@ def pair_spacings(
     the number expected by chance.
 
     Every hit of ``first`` is paired with every hit of ``second`` in the
-    same sequence, or with every other hit of ``first`` when ``second`` is
-    not given, and the pairs are counted by the distance between them up to
-    ``max_distance``. By default the distance runs between the centres of
-    the two hits, taken as the middle letter, or the second of the two
-    middle letters for an even width, which is the usual measure in
-    studies of the syntax of motifs and the one to use for phasing along
-    the helix. With ``distance="gap"`` it is instead the number of letters
-    between the end of one hit and the start of the other, as
-    [`site_spacings()`][universalmotif.site_spacings] spaces its sites,
-    which is negative for hits that overlap.
+    same sequence. When ``second`` is not given, it is paired with every
+    other hit of ``first``. The pairs are counted by the distance between
+    them, up to ``max_distance``.
+
+    By default the distance runs between the centres of the two hits. The
+    centre is the middle letter, or the second of the two middle letters
+    for an even width. This is the usual measure in studies of the syntax
+    of motifs, and the one to use for phasing along the helix. With
+    ``distance="gap"`` it is instead the number of letters between the end
+    of one hit and the start of the other, as
+    [`site_spacings()`][universalmotif.site_spacings] spaces its sites.
+    The gap is negative for hits that overlap.
 
     Pairs are also split by their arrangement, read along the strand of
-    ``first``. Two hits on the same strand are in tandem, with ``first``
-    either upstream or downstream of ``second``, and two hits on opposite strands
-    either point towards each other, being convergent, or away from each
-    other, being divergent. Since the strand of the sequence itself is
-    arbitrary these four cover every pair, and the three of tandem,
-    convergent and divergent cover those of a motif with itself.
+    ``first``.
+
+    - Two hits on the same strand are in tandem, with ``first`` either
+      upstream or downstream of ``second``.
+    - Two hits on opposite strands that point towards each other are
+      convergent.
+    - Two hits on opposite strands that point away from each other are
+      divergent.
+
+    The strand of the sequence itself is arbitrary, so these four cover
+    every pair. The three of tandem, convergent and divergent cover those
+    of a motif with itself.
 
     The number expected counts the pairs that would be seen if the hits of
-    the two motifs lay independently of each other. With the default
-    ``null="positions"``, each hit is placed at random at one of the
-    positions where its motif was seen anywhere in the hits, and each
-    sequence keeps its number of hits, so that a preference of both motifs
-    for, say, the middle of the sequences is part of what is expected. This
-    needs nothing but the hits, and suits sequences of the same or similar
-    lengths, such as peaks or the windows of seqlets. It takes in part of
-    any preference for a spacing when the sites themselves sit at fixed
-    places, as when they were written into the same place in every
-    sequence, and so errs on the side of expecting too many pairs. With
-    ``null="uniform"``, each hit is placed with equal chance anywhere in its
-    sequence instead, which needs the ``sequences`` and suits sequences of
-    very different lengths, such as chromosomes. Either way, strands are
-    taken as independent of positions and of each other, with each motif's
-    hits falling on each strand in the shares seen. The counts expected are
-    worked out exactly rather than by shuffling, so no seed is needed.
+    the two motifs lay independently of each other. ``null`` sets how hits
+    are placed by chance.
+
+    - ``"positions"`` (the default) places each hit at random at one of the
+      positions where its motif was seen anywhere in the hits. Each
+      sequence keeps its number of hits, so a preference of both motifs
+      for, say, the middle of the sequences is part of what is expected.
+      This needs nothing but the hits and suits sequences of the same or
+      similar lengths, such as peaks or the windows of seqlets. When the
+      sites themselves sit at fixed places, as when they were written into
+      the same place in every sequence, it takes in part of any preference
+      for a spacing. It therefore errs on the side of expecting too many
+      pairs.
+    - ``"uniform"`` places each hit with equal chance anywhere in its
+      sequence. This needs the ``sequences`` and suits sequences of very
+      different lengths, such as chromosomes.
+
+    Either way, strands are taken as independent of positions and of each
+    other. Each motif's hits fall on each strand in the shares seen. The
+    counts expected are worked out exactly rather than by shuffling, so no
+    seed is needed.
 
     Parameters
     ----------
     hits
-        Hits with ``motif``, ``start`` and ``end`` columns, positions counted
-        from 0 with the end left out, a ``sequence`` or ``sequence_i``
-        column, and a ``strand`` column for the arrangements, as from
-        [`scan_sequences()`][universalmotif.scan_sequences] or
-        [`read_seqlets()`][universalmotif.read_seqlets].
+        Hits as from [`scan_sequences()`][universalmotif.scan_sequences]
+        or [`read_seqlets()`][universalmotif.read_seqlets]. They need
+        ``motif``, ``start`` and ``end`` columns, with positions counted
+        from 0 and the end left out. They also need a ``sequence`` or
+        ``sequence_i`` column, and a ``strand`` column for the
+        arrangements.
     first, second
         The two motifs, by name, by their index in ``motif_i`` or as the
         motifs scanned. Without ``second``, or with the same motif twice,
@@ -309,25 +323,25 @@ def pair_spacings(
     null
         ``"positions"`` or ``"uniform"``, how hits are placed by chance.
     sequences
-        The sequences scanned, for ``null="uniform"``, as a list, a mapping
-        from names to sequences or to lengths, or anything with a
-        ``lengths`` mapping such as
+        The sequences scanned, for ``null="uniform"``. They can be a list,
+        a mapping from names to sequences or to lengths, or anything with
+        a ``lengths`` mapping such as
         [`PackedSequences`][universalmotif.PackedSequences].
 
     Returns
     -------
     polars.DataFrame
         One row per arrangement and distance, with ``arrangement``,
-        ``distance``, ``observed`` and ``expected`` columns, and
-        ``enrichment`` for the ratio of the two, which is null where nothing
-        is expected. Without ``arrangements``, the arrangement is
+        ``distance``, ``observed`` and ``expected`` columns.
+        ``enrichment`` gives the ratio of the two, and is null where
+        nothing is expected. Without ``arrangements``, the arrangement is
         ``"all"``.
 
     Examples
     --------
-    Pairs of GATA sites written in tandem at random places in random
-    sequences, their centres 21 letters apart, stand out from those
-    expected:
+    Here pairs of GATA sites are written in tandem at random places in
+    random sequences, with their centres 21 letters apart. They stand out
+    from those expected:
 
     >>> import numpy as np
     >>> import universalmotif as um
@@ -465,19 +479,22 @@ def plot_pair_spacing(
 
     Pairs of hits of ``first`` and ``second`` in the same sequence are
     counted by the distance between them, as by
-    [`pair_spacings()`][universalmotif.pair_spacings], and drawn as bars,
-    one per letter of distance, with a line for the number expected if the
-    two motifs lay independently of each other. A preference for a spacing
-    shows as bars rising above the line at that distance, and one for
-    sites on the same face of the DNA double helix as peaks every 10 or 11
-    letters. Without ``second``, the hits of ``first`` are paired among
-    themselves.
+    [`pair_spacings()`][universalmotif.pair_spacings]. They are drawn as
+    bars, one per letter of distance. A line gives the number expected if
+    the two motifs lay independently of each other. Without ``second``,
+    the hits of ``first`` are paired among themselves.
+
+    A preference for a spacing shows as bars rising above the line at that
+    distance. A preference for sites on the same face of the DNA double
+    helix shows as peaks every 10 or 11 letters.
 
     Pairs are split by arrangement into panels stacked one above the other
-    on the same axes, each labelled with arrows for the two hits read along
-    the strand of ``first``: in tandem with either motif upstream, pointing
-    towards each other (convergent), or pointing away from each other
-    (divergent). This is the observed counterpart of
+    on the same axes. Each panel is labelled with arrows for the two hits,
+    read along the strand of ``first``. The hits can be in tandem with
+    either motif upstream, convergent (pointing towards each other) or
+    divergent (pointing away from each other).
+
+    This is the observed counterpart of
     [`plot_spacing()`][universalmotif.plot_spacing], which draws a model's
     response to sites written in at a range of spacings.
 
@@ -499,12 +516,12 @@ def plot_pair_spacing(
         between centres by default. Without ``arrangements`` all pairs are
         drawn in one panel.
     helix, helix_period
-        Mark the period of the DNA double helix, ``helix_period`` base pairs
-        and 10.5 by default, with faint vertical lines. The lines pass
-        through the distance given, or with ``True`` through the distance
-        with the largest excess of pairs over those expected. DNA wrapped
-        around nucleosomes, for one, turns a little faster, about every 10.2
-        to 10.4 base pairs.
+        Mark the period of the DNA double helix with faint vertical lines.
+        The period is ``helix_period`` base pairs, 10.5 by default. The
+        lines pass through the distance given. With ``True`` they pass
+        through the distance with the largest excess of pairs over those
+        expected. DNA wrapped around nucleosomes, for one, turns a little
+        faster, about every 10.2 to 10.4 base pairs.
     names
         Names for the two motifs in the panel labels, or one for a motif
         paired with itself. Long names of motifs are otherwise cut to their
@@ -517,8 +534,8 @@ def plot_pair_spacing(
         The size of a new figure, in inches.
     ax
         Axes to draw a single panel into, which needs
-        ``arrangements=False``. They are returned, and otherwise a new
-        figure is.
+        ``arrangements=False``. The axes are returned. Otherwise a new
+        figure is returned.
 
     Returns
     -------
@@ -527,9 +544,9 @@ def plot_pair_spacing(
 
     Examples
     --------
-    A W-box and a GATA site written into half of a set of random sequences
-    at random places, the GATA site on the reverse strand and their centres
-    21 letters apart:
+    Here a W-box and a GATA site are written into half of a set of random
+    sequences at random places. The GATA site is on the reverse strand, and
+    their centres are 21 letters apart:
 
     >>> import matplotlib
     >>> matplotlib.use("Agg")

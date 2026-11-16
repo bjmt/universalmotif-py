@@ -37,8 +37,8 @@ class MotifMatches:
 
     ``matrix`` is a SciPy CSR array with one row per sequence and one column
     per motif, named by ``sequences`` and ``motifs``. Its values are those
-    asked for with ``value``: 1 for a match, the number of hits, or the best
-    score, and pairs without a hit are left out.
+    asked for with ``value``, either 1 for a match, the number of hits, or
+    the best score. Pairs without a hit are left out.
 
     Examples
     --------
@@ -61,7 +61,9 @@ class MotifMatches:
 
     def to_polars(self) -> pl.DataFrame:
         """The matches as a long DataFrame with columns ``sequence``,
-        ``motif`` and ``value``, one row per sequence and motif with a hit.
+        ``motif`` and ``value``.
+
+        There is one row per sequence and motif with a hit.
 
         Examples
         --------
@@ -125,21 +127,20 @@ def match_motifs(
     """Which motifs match which sequences, as a sparse matrix.
 
     This is the motif annotation used by chromVAR and similar single-cell
-    ATAC methods: the sequences, usually peaks, are scanned as by
+    ATAC methods. The sequences, usually peaks, are scanned as by
     [`scan_sequences()`][universalmotif.scan_sequences] with the ``pvalue``
-    cutoff, and only a summary of the hits is kept for each sequence and
-    motif, so that hundreds of thousands of peaks and hundreds of motifs
-    take no more memory than the matrix itself. As in ``scan_sequences()``,
-    motifs whose ``strand`` is ``"+"`` or ``"-"`` are scanned on that strand
-    only.
+    cutoff. Only a summary of the hits is kept for each sequence and motif.
+    Hundreds of thousands of peaks and hundreds of motifs thus take no more
+    memory than the matrix itself. As in ``scan_sequences()``, motifs whose
+    ``strand`` is ``"+"`` or ``"-"`` are scanned on that strand only.
 
     Short or degenerate motifs cannot always reach the default ``pvalue``
-    of 5e-5: about a quarter of JASPAR motifs have a best possible match
+    of 5e-5. About a quarter of JASPAR motifs have a best possible match
     that is less significant than that, so they never match and come with a
     warning. The smallest P-value of a motif is that of the highest score
     from [`motif_range()`][universalmotif.motif_range], given to
-    [`motif_pvalue()`][universalmotif.motif_pvalue], and a looser
-    ``pvalue`` such as 1e-4 lets more of them match.
+    [`motif_pvalue()`][universalmotif.motif_pvalue]. A looser ``pvalue``
+    such as 1e-4 lets more of them match.
 
     Needs the ``scipy`` extra.
 
@@ -154,27 +155,29 @@ def match_motifs(
     pvalue
         The P-value a site must reach to count as a hit.
     value
-        What the matrix holds: ``"matches"`` for 1 where a motif has a hit,
-        ``"counts"`` for the number of hits, or ``"scores"`` for the best
-        score of any hit. For ``"matches"``, scanning a sequence stops for a
-        motif soon after its first hit, which saves time when many
-        sequences contain it.
+        What the matrix holds.
+
+        - ``"matches"``, 1 where a motif has a hit.
+        - ``"counts"``, the number of hits.
+        - ``"scores"``, the best score of any hit.
+
+        For ``"matches"``, scanning a sequence stops for a motif soon after
+        its first hit. This saves time when many sequences contain it.
     rc
-        Also scan the reverse strand; by default on for DNA and off for RNA.
+        Also scan the reverse strand. By default on for DNA and off for RNA.
     no_overlaps
         Drop overlapping hits of each motif, on either strand, before they
-        are counted, keeping the one with the lowest P-value, since
-        palindromic sites are hit on both strands.
+        are counted, keeping the one with the lowest P-value. This matters
+        because palindromic sites are hit on both strands.
     use_gaps
         Scan gapped motifs with every combination of their gap sizes, as
-        for ``scan_sequences()``; otherwise their gaps are ignored.
+        for ``scan_sequences()``. Otherwise their gaps are ignored.
     correct_gaps
         Bonferroni-correct gapped motifs' P-values for the combinations of
         gap sizes tried, as for ``scan_sequences()``.
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
-
     progress
         Show a progress bar on stderr once the call has run for a second,
         and let Ctrl-C stop it; by default the package setting from
@@ -242,12 +245,14 @@ def add_motif_matches(
 
     ``adata`` has the peaks as its variables, as in a cells by peaks matrix.
     Their sequences come from ``sequences``, either a list in the order of
-    the peaks or a mapping from peak names, and by default from
+    the peaks or a mapping from peak names. By default they come from
     ``adata.uns["peak_seq"]``, where pychromVAR's ``add_peak_seq()`` keeps
-    them. The peaks by motifs matrix from
-    [`match_motifs()`][universalmotif.match_motifs], given ``kwargs``, is
-    stored in ``adata.varm[key]``, as a dense array unless ``dense`` is
-    false, and the motif names in ``adata.uns[names_key]``. With the
+    them.
+
+    [`match_motifs()`][universalmotif.match_motifs] is called with
+    ``kwargs``, and its peaks by motifs matrix is stored in
+    ``adata.varm[key]``. It is stored as a dense array unless ``dense`` is
+    false. The motif names go in ``adata.uns[names_key]``. With the
     defaults, the result can go straight to pychromVAR's
     ``compute_deviations()``.
 

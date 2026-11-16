@@ -60,44 +60,46 @@ def plot_seqlets(
     how much each letter contributes.
 
     Each row is a seqlet read along the pattern, so seqlets on the ``-``
-    strand are turned around, and each position is coloured by the
-    contribution of the letter there on a scale centred on zero, red for
-    positive and blue for negative. A second panel beside it shows the
-    letters themselves in the package's DNA colours, which makes shifted or
-    reversed seqlets easy to spot. Above the panels are the pattern's
-    contribution weight matrix, the average contribution of the letters of
-    all its seqlets, and the information content of those letters as a
-    sequence logo.
+    strand are turned around. Each position is coloured by the
+    contribution of the letter there, on a scale centred on zero with red
+    for positive and blue for negative. A second panel beside it shows the
+    letters themselves in the package's DNA colours. This makes shifted or
+    reversed seqlets easy to spot.
+
+    Above the panels are two logos. One is the pattern's contribution
+    weight matrix, which is the average contribution of the letters of all
+    its seqlets. The other shows the information content of those letters.
 
     Needs the ``plot`` extra.
 
     Parameters
     ----------
     seqlets
-        Seqlets read with [`read_seqlets()`][universalmotif.read_seqlets]
-        with ``scores``, either hypothetical or projected, and their
-        ``match`` column. Only the rows of ``pattern`` are drawn.
+        Seqlets read with [`read_seqlets()`][universalmotif.read_seqlets],
+        with ``scores`` (hypothetical or projected) and their ``match``
+        column. Only the rows of ``pattern`` are drawn.
     pattern
-        The name of the pattern, as in the ``motif`` column, or its short
-        label such as ``pos_3`` for ``pos_patterns.<run>_pattern_3``, as
+        The name of the pattern, as in the ``motif`` column. Its short
+        label also works, such as ``pos_3`` for
+        ``pos_patterns.<run>_pattern_3``, as
         [`plot_modisco()`][universalmotif.plot_modisco] labels patterns.
     sort_by
         A numeric column to order the rows by, from the largest absolute
-        value at the top, so that the strongest seqlets of both positive
-        and negative patterns come first. The default, ``"score"``, is the
+        value at the top. The strongest seqlets of both positive and
+        negative patterns then come first. The default, ``"score"``, is the
         total contribution of each seqlet. ``None`` keeps the order of the
         table.
     max_seqlets
-        Draw at most this many rows, picked evenly along the sorted
-        seqlets so that the whole range is shown, or all of them with
-        ``None``. The logos are always made from every seqlet, and the
+        Draw at most this many rows, or all of them with ``None``. The rows
+        are picked evenly along the sorted seqlets so that the whole range
+        is shown. The logos are always made from every seqlet, and the
         title gives how many were drawn.
     letters, logo
         Draw the panel of letters, and the logos above the panels.
     vmax
         The contribution at either end of the colour scale. By default it
-        is the 99.5th percentile of the absolute contributions drawn, so
-        that a few extreme positions do not wash out the rest.
+        is the 99.5th percentile of the absolute contributions drawn, so a
+        few extreme positions do not wash out the rest.
     title
         The title above the plot, by default the short label of the
         pattern, such as ``pos_3``. The name of the factor often reads

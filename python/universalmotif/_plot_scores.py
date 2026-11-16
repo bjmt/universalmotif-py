@@ -56,10 +56,10 @@ def _score_distribution(motif: Motif, bkg, bins: int, lo: float) -> tuple[np.nda
     site scoring within each bin, and the highest score.
 
     Scores lie on a grid of steps of 0.001, so the edges are put on that
-    grid, each bin holding the same number of grid points, and the mass of a
-    bin is the difference between the P-values of its two edges. The first
-    edge has a P-value of 1 and the last one, past the highest score, of 0,
-    so the masses add up to 1."""
+    grid, with each bin holding the same number of grid points. The mass of
+    a bin is the difference between the P-values of its two edges. The
+    first edge has a P-value of 1 and the last one, past the highest score,
+    has 0, so the masses add up to 1."""
     lo_g = round(lo * 1000)
     hi_g = max(round(_score_max(motif, bkg) * 1000), lo_g)
     npts = hi_g - lo_g + 1
@@ -72,7 +72,7 @@ def _score_distribution(motif: Motif, bkg, bins: int, lo: float) -> tuple[np.nda
     if nbins > 1:
         with warnings.catch_warnings():
             # Against another background the highest score can fall a step
-            # short of the estimate above; such edges correctly get 0.
+            # short of the estimate above. Such edges correctly get 0.
             warnings.filterwarnings("ignore", message="scores above the highest possible score")
             tail[1:-1] = motif_pvalue(motif, score=(grid[1:-1] / 1000).tolist(), bkg=bkg)
     mass = np.clip(-np.diff(tail), 0.0, None)
@@ -80,8 +80,8 @@ def _score_distribution(motif: Motif, bkg, bins: int, lo: float) -> tuple[np.nda
 
 
 def _hit_scores(hits, names: list[str]) -> list[np.ndarray | None]:
-    """The hit scores for each motif, from a hit table, a mapping from motif
-    names to scores, or a list of scores for a single motif."""
+    """The hit scores for each motif. They come from a hit table, a mapping
+    from motif names to scores, or a list of scores for a single motif."""
     if hits is None:
         return [None] * len(names)
     if isinstance(hits, pl.DataFrame):
@@ -186,14 +186,15 @@ def plot_score_distribution(
     [`scan_sequences()`][universalmotif.scan_sequences].
 
     The distribution is the exact one that
-    [`motif_pvalue()`][universalmotif.motif_pvalue] works from, gathered
-    into ``bins`` bins of equal width between the lowest and highest
-    possible scores, so that the height of each bin is the probability that
-    a random site scores within it. Each cutoff in ``pvalues`` is drawn as a
-    vertical line at the lowest score with at most that P-value, labelled
-    with the P-value, the score and the score as a percentage of the
-    maximum, which the top axis also shows. Several motifs are drawn as
-    panels.
+    [`motif_pvalue()`][universalmotif.motif_pvalue] works from. It is
+    gathered into ``bins`` bins of equal width between the lowest and
+    highest possible scores. The height of each bin is then the probability
+    that a random site scores within it.
+
+    Each cutoff in ``pvalues`` is drawn as a vertical line at the lowest
+    score with at most that P-value. The line is labelled with the P-value,
+    the score, and the score as a percentage of the maximum, which the top
+    axis also shows. Several motifs are drawn as panels.
 
     Needs the ``plot`` extra.
 
@@ -213,9 +214,10 @@ def plot_score_distribution(
         Draw probabilities on a log scale, which shows the upper tail where
         cutoffs usually fall.
     hits
-        Scores of real sites to mark as ticks along the bottom: a hit table
-        from [`scan_sequences()`][universalmotif.scan_sequences], a mapping
-        from motif names to scores, or for a single motif a list of scores.
+        Scores of real sites to mark as ticks along the bottom. They can be
+        a hit table from [`scan_sequences()`][universalmotif.scan_sequences]
+        or a mapping from motif names to scores. For a single motif, a list
+        of scores also works.
     bins, ncol
         Number of bins, and of panels per row for several motifs.
     ax

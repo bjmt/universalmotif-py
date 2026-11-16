@@ -26,11 +26,11 @@ def _path(name: str) -> Path:
 def example_motifs() -> list[Motif]:
     """Twelve example DNA motifs.
 
-    The motifs are synthetic: each is built from a well-known consensus site,
-    such as the TATA box, the AP-1 site or the plant W-box and G-box, with
-    probabilities drawn at random around it and counts from a random number
-    of sites sampled from those probabilities. They come as count matrices,
-    with their family set and a pseudocount of 1.
+    The motifs are synthetic. Each is built around a well-known consensus
+    site, such as the TATA box, the AP-1 site or the plant W-box and G-box.
+    Probabilities are drawn at random around that site, and counts come from
+    a random number of sites sampled from those probabilities. The motifs are
+    count matrices with their family set and a pseudocount of 1.
 
     Examples
     --------
@@ -47,12 +47,11 @@ def example_motifs() -> list[Motif]:
 def example_sequences(kind: str = "targets") -> dict[str, str]:
     """A hundred example DNA sequences of 1000 bases each.
 
-    The sequences are random and AT-rich, much like plant promoters. The
-    ``"targets"`` have a W-box site planted in 60 of them and a G-box site
-    in 40, both drawn from [`example_motifs()`][universalmotif.example_motifs]
-    and placed towards the middle of the sequences, while the ``"controls"``
-    have nothing planted, which makes the two sets a small test case for
-    enrichment.
+    The sequences are random and AT-rich, much like plant promoters. Among
+    the ``"targets"``, 60 have a W-box site planted and 40 have a G-box site.
+    Both are drawn from [`example_motifs()`][universalmotif.example_motifs]
+    and placed towards the middle of the sequences. The ``"controls"`` have
+    nothing planted, so the two sets make a small test case for enrichment.
 
     Examples
     --------
@@ -71,10 +70,11 @@ def example_sequences(kind: str = "targets") -> dict[str, str]:
 def example_file(format: str) -> Path:
     """The path to an example file in one of the supported formats.
 
-    ``format`` is one of ``"meme"``, ``"jaspar"``, ``"homer"``,
-    ``"transfac"``, ``"cisbp"``, ``"uniprobe"`` and ``"matrix"``, each
-    holding the first four [`example_motifs()`][universalmotif.example_motifs],
-    or ``"fasta"`` for the gzipped example target sequences.
+    ``format`` is one of the motif formats ``"meme"``, ``"jaspar"``,
+    ``"homer"``, ``"transfac"``, ``"cisbp"``, ``"uniprobe"`` and
+    ``"matrix"``. Each of these files holds the first four
+    [`example_motifs()`][universalmotif.example_motifs]. Use ``"fasta"`` for
+    the gzipped example target sequences.
 
     Examples
     --------

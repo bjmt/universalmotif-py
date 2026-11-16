@@ -1,8 +1,8 @@
 """The ``universalmotif`` (or ``umotif``) command line.
 
-Each subcommand reads motifs, sequences, genomes and ranges from files,
-calls the function of the same purpose in the package, and writes motifs,
-FASTA or tab-separated tables to a file or to standard output.
+Each subcommand reads motifs, sequences, genomes and ranges from files and
+calls the package function of the same purpose. It writes motifs, FASTA or
+tab-separated tables to a file or to standard output.
 """
 
 from __future__ import annotations
@@ -105,8 +105,8 @@ def read_motifs(paths: list[str], fmt: str | None = None) -> list:
             kind, how = _EXTENSIONS.get(_stem_suffix(path)), "its extension"
         if kind is None:
             kind, how = _sniff_format(text), "its contents"
-        # A format that was guessed is named in errors, since a wrong guess
-        # otherwise shows only as a puzzling failure to read.
+        # A guessed format is named in errors. Otherwise a wrong guess shows
+        # only as a puzzling failure to read.
         hint = "" if how is None else f" (read as {_FORMAT_NAMES[kind]} from {how}; give -f if that is wrong)"
         name = "standard input" if path == "-" else path
         with tempfile.TemporaryDirectory() as tmp:
@@ -195,9 +195,10 @@ def open_genome(path: str):
 
 
 def read_ranges(path: str) -> pl.DataFrame:
-    """Ranges from a BED file, or from a tab-separated table with a header
-    naming chrom, start and end (or width) columns, with positions counted
-    from 0 and the end left out, as in BED files."""
+    """Ranges from a BED file or a tab-separated table.
+
+    A table needs a header naming chrom, start and end (or width) columns.
+    Positions count from 0 with the end left out, as in BED files."""
     if path != "-" and not Path(path).exists():
         raise CliError(f"no such file: {path}")
     lines = [ln for ln in _read_bytes(path).decode().splitlines()
@@ -271,8 +272,9 @@ def _chrom_sizes(path: str) -> dict[str, int]:
 
 def _motif_args(p: argparse.ArgumentParser, nargs: str = "+") -> None:
     p.add_argument("motifs", nargs=nargs, metavar="MOTIFS",
-                   help="motif files in any supported format, recognized from the extension or "
-                        "contents, or CIS-BP archives (.zip); - reads standard input")
+                   help="motif files in any supported format, or CIS-BP archives (.zip); the "
+                        "format is recognized from the extension or contents, and - reads "
+                        "standard input")
     p.add_argument("-f", "--format", choices=_MOTIF_FORMATS, metavar="FORMAT",
                    help="the format of the motif files, if it cannot be recognized: "
                         + _FORMAT_LIST)
@@ -299,7 +301,7 @@ def _threads_arg(p: argparse.ArgumentParser) -> None:
 
 def _progress_arg(p: argparse.ArgumentParser) -> None:
     p.add_argument("--progress", action=argparse.BooleanOptionalAction, default=None,
-                   help="show a progress bar on stderr for work that takes more than a second "
+                   help="show a progress bar on stderr for work that takes over a second "
                         "(default: on when stderr is a terminal, or UNIVERSALMOTIF_PROGRESS if set)")
 
 
@@ -427,8 +429,8 @@ def cmd_tree(a):
 
 
 def _safe_name(name: str) -> str:
-    """A motif name as a file stem, kept well within file name limits,
-    since merged motifs are named after all their members."""
+    """A motif name as a file stem. It is kept well within file name
+    limits, since merged motifs are named after all their members."""
     stem = re.sub(r"[^A-Za-z0-9._+-]+", "_", name).strip("_") or "motif"
     return stem[:100].rstrip("._+-") or "motif"
 
@@ -464,9 +466,11 @@ def cmd_logo(a):
 
 
 def _read_sites(path: str) -> dict[str, list[str]]:
-    """Aligned sites by motif name from a FASTA file, a plain list with one
-    site per line, or a table with a match column, such as umotif scan
-    writes, whose sites are grouped by its motif column if it has one."""
+    """Aligned sites by motif name.
+
+    The file is FASTA, a plain list with one site per line, or a table with
+    a match column such as umotif scan writes. A table's sites are grouped
+    by its motif column if it has one."""
     if path != "-" and not Path(path).exists():
         raise CliError(f"no such file: {path}")
     text = _read_bytes(path).decode()
@@ -624,8 +628,8 @@ def cmd_variants(a):
 
 
 def write_hits_bed(hits: pl.DataFrame, path: str | None) -> None:
-    """Hits as BED6, named by motif, on the chromosome where they have
-    one and otherwise on the sequence scanned."""
+    """Hits as BED6, named by motif. They are placed on their chromosome
+    where they have one, and otherwise on the sequence scanned."""
     import universalmotif as um
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -750,7 +754,7 @@ def cmd_find_gapped(a):
         print("no gapped motifs were found", file=sys.stderr)
         return
     # No motif format keeps gaps, so the motifs are written as their two
-    # parts joined; the table gives each gap.
+    # parts joined. The table gives each gap.
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", ".* format cannot preserve gap definitions")
         write_motifs(res["motif"].to_list(), a.output, a.to)
@@ -809,7 +813,7 @@ def cmd_bkg(a):
         raise CliError("matching on bigWig signal needs the targets as ranges, with -g and -r")
     from ._sequences import _seed
 
-    # One seed for both calls below, so that the table describes the very
+    # One seed for both calls below, so the table describes the very
     # sequences written.
     kw = {"n_per_target": a.n, "n_bins_gc": a.gc_bins, "n_bins_length": a.length_bins,
           "unique": not a.repeats, "seed": _seed(a.seed), "nthreads": a.threads}
@@ -858,8 +862,8 @@ def cmd_proximity(a):
     universe = None
     if a.universe:
         u = a.universe
-        # A .txt file can hold chromosome sizes or ranges, so it is told
-        # apart by its number of columns.
+        # A .txt file can hold chromosome sizes or ranges. Its number of
+        # columns tells them apart.
         sizes_like = (_stem_suffix(u) in (".fai", ".sizes") or u.endswith("chrom.sizes")
                       or (_stem_suffix(u) == ".txt" and _two_columns(u)))
         universe = _chrom_sizes(u) if sizes_like or _is_genome(u) else read_ranges(u)
@@ -957,7 +961,7 @@ def _add_target_args(p: argparse.ArgumentParser, what: str, genome_help: str | N
 class _formatter(argparse.HelpFormatter):
     def __init__(self, prog: str) -> None:
         super().__init__(prog, max_help_position=32)
-        # Leave room for the longest subcommand name, which is not measured
+        # Leave room for the longest subcommand name. It is not measured
         # when the subcommands are added.
         self._action_max_length = 15
 
@@ -1036,9 +1040,9 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
 
     p = command("create", cmd_create, "make motifs from consensus sequences or sites",
                 "Make motifs from consensus sequences, one per sequence, which may use IUPAC "
-                "codes, or from a file of aligned sites with --sites: a FASTA file, a list of "
-                "one site per line, or a table with a match column, such as umotif scan "
-                "writes, which gives one motif per motif named in it.")
+                "codes. Or make them from a file of aligned sites with --sites. The file can "
+                "be FASTA, a list of one site per line, or a table with a match column such "
+                "as umotif scan writes. A table gives one motif per motif named in it.")
     p.add_argument("consensus", nargs="*", metavar="CONSENSUS",
                    help="consensus sequences, such as TGASTCA")
     p.add_argument("--sites", help="file of aligned sites; - reads standard input")
@@ -1058,7 +1062,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
 
     p = command("heatmap", cmd_heatmap, "draw motif similarities as a clustered heatmap",
                 "Compare motifs all against all and draw the scores, P-values or q-values as a "
-                "heatmap, clustered and with a dendrogram, and optionally the tree cut at a "
+                "clustered heatmap with a dendrogram. The tree can also be shown cut at a "
                 "level of similarity.")
     _motif_args(p)
     p.add_argument("-o", "--output", help="file for the heatmap (PNG, PDF or SVG)")
@@ -1134,16 +1138,16 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="do not align motifs as reverse complements")
     p.add_argument("--weighted", action="store_true", help="weight motifs by their nsites")
     p.add_argument("--linkage", choices=("single", "complete"), default="single",
-                   help="join a motif to a cluster when it is similar to any member (single) or "
-                        "to every member (complete) (default: single)")
+                   help="join a motif to a cluster when it is similar to any member (single), "
+                        "or only to every member (complete) (default: single)")
     p.add_argument("--all", action="store_true", help="merge all the motifs into one")
     p.add_argument("--name", help="name of the merged motif, with --all")
     p.add_argument("--clusters", help="also write a table of which motifs were merged")
     _threads_arg(p)
 
     p = command("tree", cmd_tree, "cluster motifs into a tree",
-                "Cluster motifs by similarity and write the tree in Newick format, or with -k "
-                "or --height a table of clusters.")
+                "Cluster motifs by similarity and write the tree in Newick format. With -k "
+                "or --height, write a table of clusters instead.")
     _motif_args(p)
     _out_arg(p, "the tree or clusters")
     p.add_argument("--linkage", default="complete",
@@ -1165,8 +1169,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     _threads_arg(p)
 
     p = command("logo", cmd_logo, "draw sequence logos",
-                "Draw motifs as sequence logos, aligned in one figure written with -o, or one "
-                "file per motif in a folder with --each.")
+                "Draw motifs as sequence logos. They are aligned in one figure written with "
+                "-o, or written one file per motif to a folder with --each.")
     _motif_args(p)
     p.add_argument("-o", "--output", help="file for one figure of all the motifs (PNG, PDF, SVG)")
     p.add_argument("--each", metavar="FOLDER", help="write one logo per motif into this folder")
@@ -1179,16 +1183,17 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--no-rc", dest="rc", action="store_false",
                    help="do not reverse complement motifs to align them")
     p.add_argument("--sort-by", choices=("none", "ic", "similarity"), default="none",
-                   help="order of the motifs in the figure: as given, by decreasing information "
-                        "content, or clustered by similarity (default: none)")
+                   help="order of the motifs in the figure, either as given, by decreasing "
+                        "information content, or clustered by similarity (default: none)")
     p.add_argument("--dpi", type=int, default=150, help="resolution of PNG files (default: 150)")
     _threads_arg(p)
 
     # Sequences
     p = command("scan", cmd_scan, "scan sequences for motif hits",
-                "Scan sequences for motif hits. Sequences come from a FASTA file with -s, which "
-                "is read a batch at a time, from a whole genome with -g, or from ranges of a "
-                "genome with -g and -r, whose hits are reported in genomic coordinates.")
+                "Scan sequences for motif hits. The sequences come from one of three places. "
+                "With -s, a FASTA file is read a batch at a time. With -g, a whole genome is "
+                "scanned. With -g and -r, ranges of a genome are scanned and their hits are "
+                "reported in genomic coordinates.")
     _motif_args(p)
     _add_target_args(p, "sequences", genome_help="genome (FASTA, bgzipped FASTA or 2bit) to scan "
                                                  "whole, or in parts with -r")
@@ -1199,7 +1204,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--overlaps-by", choices=("pvalue", "score"), default="pvalue",
                    help="what makes the best hit with --no-overlaps (default: pvalue)")
     p.add_argument("--across-strands", action=argparse.BooleanOptionalAction, default=True,
-                   help="with --no-overlaps, compare hits on opposite strands, so that a "
+                   help="with --no-overlaps, compare hits on opposite strands so that a "
                         "palindromic site is kept once (default: on)")
     p.add_argument("--across-motifs", action="store_true",
                    help="with --no-overlaps, compare hits of different motifs")
@@ -1208,8 +1213,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--correct-gaps", action=argparse.BooleanOptionalAction, default=True,
                    help="correct gapped motifs' P-values for the gap sizes tried (default: on)")
     p.add_argument("--first-hit", action="store_true",
-                   help="keep only the leftmost hit of each motif in each sequence, which is quicker "
-                        "when most sequences have one")
+                   help="keep only the leftmost hit of each motif in each sequence; this is "
+                        "quicker when most sequences have one")
     p.add_argument("--local", action="store_true",
                    help="with -r, report positions within each range, not on the genome")
     p.add_argument("--bed", action="store_true",
@@ -1222,25 +1227,26 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
 
     p = command("variants", cmd_variants, "score how variants change motif sites",
                 "Score how variants change the motif sites they fall in, for substitutions, "
-                "insertions and deletions alike. Variants come from a VCF file, or from a "
-                "tab-separated table with chrom, position, ref and alt columns with positions "
-                "counted from 0, and are applied to the genome given with -g one at a time.")
+                "insertions and deletions alike. Variants come from a VCF file or a "
+                "tab-separated table. A table needs chrom, position, ref and alt columns, "
+                "with positions counted from 0. Variants are applied to the genome given "
+                "with -g one at a time.")
     _motif_args(p)
     p.add_argument("-v", "--variants", required=True,
-                   help="VCF file (plain, gzipped or bgzipped) or table of variants; - reads standard "
-                        "input")
+                   help="VCF file (plain, gzipped or bgzipped) or table of variants; - reads "
+                        "standard input")
     p.add_argument("-g", "--genome", required=True,
                    help="genome the variants are in (FASTA, bgzipped FASTA or 2bit)")
-    p.add_argument("--hits", help="table of hits from scan -g, to score only those sites, whatever their "
-                                  "scores")
+    p.add_argument("--hits", help="table of hits from scan -g; only those sites are scored, "
+                                  "whatever their scores")
     _out_arg(p)
     _scan_args(p)
     _progress_arg(p)
     _threads_arg(p)
 
     p = command("compare", cmd_compare, "compare motifs with each other or with a database",
-                "Compare motifs with each other, or with a database of motifs given with --db, "
-                "reporting the matches that pass a q-value cutoff.")
+                "Compare motifs with each other, or with a database of motifs given with --db. "
+                "The matches that pass a q-value cutoff are reported.")
     _motif_args(p)
     _out_arg(p)
     p.add_argument("--db", nargs="+", help="motif files to compare the motifs with")
@@ -1289,8 +1295,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     _threads_arg(p)
 
     p = command("find", cmd_find, "discover motifs de novo",
-                "Discover motifs enriched in target sequences, writing the motifs with -o and "
-                "a table of results with --table.")
+                "Discover motifs enriched in target sequences. The motifs are written with -o "
+                "and a table of results with --table.")
     _add_target_args(p, "target sequences")
     p.add_argument("-b", "--bkg", help="FASTA file of background sequences")
     _motif_out_args(p)
@@ -1316,11 +1322,12 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     _threads_arg(p)
 
     p = command("find-gapped", cmd_find_gapped, "discover gapped motifs de novo (experimental)",
-                "Discover motifs made of two parts with a spacer of varying length, writing the "
-                "motifs with -o and a table of results with --table. Each motif is tested in a "
-                "share of the targets and background held out from the search. No motif format "
-                "keeps gaps, so the motifs are written as their two parts joined, and the table "
-                "gives each gap. The command is experimental and may change in later releases.")
+                "Discover motifs made of two parts with a spacer of varying length. The motifs "
+                "are written with -o and a table of results with --table. Each motif is tested "
+                "in a share of the targets and background held out from the search. No motif "
+                "format keeps gaps, so the motifs are written as their two parts joined, and "
+                "the table gives each gap. The command is experimental and may change in later "
+                "releases.")
     _add_target_args(p, "target sequences")
     p.add_argument("-b", "--bkg", help="FASTA file of background sequences")
     _motif_out_args(p)
@@ -1366,8 +1373,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     _threads_arg(p)
 
     p = command("extract", cmd_extract, "extract the sequences of genomic ranges",
-                "Write the sequences of genomic ranges as FASTA, reverse complementing those "
-                "on the minus strand.")
+                "Write the sequences of genomic ranges as FASTA. Ranges on the minus strand "
+                "are reverse complemented.")
     p.add_argument("-g", "--genome", required=True,
                    help="genome (FASTA, bgzipped FASTA or 2bit)")
     p.add_argument("-r", "--ranges", required=True, help="BED file or table of ranges")
@@ -1377,8 +1384,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
 
     p = command("bkg", cmd_bkg, "draw background sequences matched to targets",
                 "Draw background sequences matched to the targets on GC content and length, "
-                "and optionally on bigWig signal, from a universe of sequences or from random "
-                "windows of a genome.")
+                "and optionally on bigWig signal. They are drawn from a universe of sequences "
+                "or from random windows of a genome.")
     p.add_argument("-s", "--sequences", help="FASTA file of target sequences")
     p.add_argument("-r", "--ranges", help="BED file or table of the targets' ranges, with -g; "
                                           "windows overlapping them are not drawn")
@@ -1406,8 +1413,9 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
 
     p = command("matrix", cmd_matrix, "make a peak by motif matrix of matches",
                 "Make a sparse peak by motif matrix of motif matches, hit counts or best "
-                "scores, written as .h5ad, as Matrix Market (.mtx, with the row and column "
-                "names alongside), or otherwise as a long table.")
+                "scores. The output file's extension sets its format. A .h5ad file is "
+                "written as AnnData, and a .mtx file as Matrix Market with the row and "
+                "column names alongside. Anything else is written as a long table.")
     _motif_args(p)
     _add_target_args(p, "peaks")
     _out_arg(p, "the matrix")
@@ -1420,8 +1428,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
 
     # Statistics on hits
     p = command("proximity", cmd_proximity, "test whether motif hits sit near anchors",
-                "Test whether motif hits sit closer to genomic anchors than chance, scanning "
-                "a genome for the motifs or using a table of hits.")
+                "Test whether motif hits sit closer to genomic anchors than chance. The hits "
+                "come from scanning a genome for the motifs, or from a table of hits.")
     _motif_args(p, nargs="*")
     p.add_argument("-a", "--anchors", required=True, help="BED file or table of anchors")
     p.add_argument("-g", "--genome", help="genome to scan, or whose lengths make the universe")
@@ -1509,8 +1517,8 @@ def _show_warning(message, category, filename, lineno, file=None, line=None):
 
 
 def _unquote(msg: str) -> str:
-    """The message without the quotes KeyError puts around it, if the whole
-    of it is wrapped in one matching pair."""
+    """The message without the quotes KeyError puts around it. They are
+    removed only if the whole message is wrapped in one matching pair."""
     if len(msg) >= 2 and msg[0] == msg[-1] and msg[0] in "'\"" and msg[0] not in msg[1:-1]:
         return msg[1:-1]
     return msg
@@ -1528,8 +1536,8 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(args, "progress"):
         from . import _progress
 
-        # The package's setting, put back afterwards, as main() also runs
-        # within Python.
+        # The package's setting is put back afterwards, since main() also
+        # runs within Python.
         setting = (_progress, _progress._setting)
         choice = args.progress
         if choice is None:
@@ -1538,7 +1546,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args.fn(args)
     except BrokenPipeError:
-        # The reader went away, as with `| head`; stop quietly.
+        # The reader went away, as with `| head`, so stop quietly.
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
         return 0

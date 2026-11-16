@@ -41,19 +41,25 @@ def from_biopython(motifs: Any) -> Motif | list[Motif]: ...
 def from_biopython(motifs):
     """Convert motifs from Biopython's ``Bio.motifs``.
 
-    Takes a ``Bio.motifs.Motif``, or a list of them such as a
-    ``Bio.motifs.Record`` read with ``Bio.motifs.parse()``, and returns a
-    motif or a list of motifs. Counts become a PCM, and frequencies that do
-    not look like counts a PPM. The alphabet is DNA, RNA or amino acids when
-    the motif's letters are exactly those, and a custom alphabet otherwise.
+    Takes a ``Bio.motifs.Motif`` or a list of them, such as a
+    ``Bio.motifs.Record`` read with ``Bio.motifs.parse()``. Returns a motif
+    or a list of motifs. Counts become a PCM, and frequencies that do not
+    look like counts become a PPM. The alphabet is DNA, RNA or amino acids
+    when the motif's letters are exactly those, and custom otherwise.
 
-    JASPAR motifs, including those from pyJASPAR, keep their matrix ID as the
-    name, the transcription factor as the alternative name, the family as
-    the family and the species as the organism, with the class, taxonomic
-    group, data type and accession kept in ``extrainfo``. MEME motifs keep
-    their alternative ID and E-value. Background frequencies come across,
-    and Biopython's per-letter pseudocounts become a single pseudocount, the
-    sum of the per-letter ones.
+    JASPAR motifs, including those from pyJASPAR, map as follows.
+
+    | Biopython | Motif |
+    | --- | --- |
+    | matrix ID | ``name`` |
+    | transcription factor | ``altname`` |
+    | family | ``family`` |
+    | species | ``organism`` |
+    | class, taxonomic group, data type, accession | ``extrainfo`` |
+
+    MEME motifs keep their alternative ID and E-value. Background
+    frequencies come across. Biopython's per-letter pseudocounts become a
+    single pseudocount, the sum of the per-letter ones.
 
     Needs the ``biopython`` extra.
 
@@ -113,8 +119,8 @@ def _from_one(m: Any) -> Motif:
 
     bkg = getattr(m, "background", None)
     # Biopython adds its pseudocount to each letter, either the same number
-    # for all of them or one per letter; the total spread over the column is
-    # the pseudocount here.
+    # for all of them or one per letter. The total over the column is the
+    # pseudocount here.
     pseudo = getattr(m, "pseudocounts", None)
     if isinstance(pseudo, dict):
         pseudo = sum(float(pseudo.get(a, 0.0)) for a in letters)
@@ -144,14 +150,15 @@ def to_biopython(motifs: Iterable[Motif], jaspar: bool = ...) -> list[Any]: ...
 def to_biopython(motifs, jaspar=False):
     """Convert motifs to Biopython's ``Bio.motifs``.
 
-    Each motif becomes a ``Bio.motifs.Motif`` holding counts, from the
-    motif's PCM with ``nsites``, or 100 sites when it has none. The name,
-    background and pseudocount come across, the pseudocount spread evenly
-    over the letters as Biopython keeps one per letter. With ``jaspar``, the
-    motifs become ``Bio.motifs.jaspar.Motif`` instead, with the name as the
-    matrix ID and the alternative name, family and organism filled in, as
-    Biopython's JASPAR writer expects. Returns a motif for a motif and a list
-    for a list.
+    Each motif becomes a ``Bio.motifs.Motif`` holding counts. These come
+    from the motif's PCM with ``nsites``, or 100 sites when it has none. The
+    name, background and pseudocount come across. Biopython keeps one
+    pseudocount per letter, so the pseudocount is spread evenly over them.
+
+    With ``jaspar``, the motifs become ``Bio.motifs.jaspar.Motif`` instead.
+    The name becomes the matrix ID, and the alternative name, family and
+    organism are filled in as Biopython's JASPAR writer expects. Returns a
+    motif for a motif and a list for a list.
 
     Needs the ``biopython`` extra.
 

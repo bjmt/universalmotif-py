@@ -91,6 +91,16 @@ def test_file_report(modisco, known):
     assert fig.axes[0].get_label() == "modisco"
 
 
+def test_matches_from_name_motifs(modisco, known):
+    ppms = [m.replace(name=f"{m.name[:3]}_{m.name.rsplit('_', 1)[1]}")
+            for m in um.read_modisco(modisco, type="PPM", trim_threshold=0.2)]
+    names = um.name_motifs(ppms, known, qvalue=0.5)
+    fig = plot_modisco(modisco, matches=names, database=known)
+    texts = _texts(fig)
+    for match in names.filter(pl.col("rank") == 1)["match"]:
+        assert match in texts
+
+
 def test_patterns_are_found_by_full_name(modisco, known):
     renamed = _matches(modisco, known)
     full = _matches(modisco, known, rename=False)

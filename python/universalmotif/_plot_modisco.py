@@ -122,11 +122,14 @@ def _select(pats: list[_Pattern], patterns) -> list[_Pattern]:
 def _find_matches(pats: list[_Pattern], every: list[_Pattern], matches: pl.DataFrame, database,
                   n_matches: int) -> None:
     if not isinstance(matches, pl.DataFrame):
-        raise TypeError("matches must be a DataFrame from compare_motifs() with compare_to")
+        raise TypeError("matches must be a DataFrame from name_motifs() or compare_motifs()")
+    if "subject" not in matches.columns and {"motif", "match"} <= set(matches.columns):
+        # A table from name_motifs(), whose motifs were named apart from one another.
+        matches = matches.rename({"motif": "subject", "match": "target"}).drop("motif_i", strict=False)
     missing = [c for c in ("subject", "target", "qvalue") if c not in matches.columns]
     if missing:
-        raise ValueError(f"matches has no {missing[0]!r} column; give the DataFrame compare_motifs() "
-                         "returns with compare_to")
+        raise ValueError(f"matches has no {missing[0]!r} column; give the DataFrame name_motifs() returns, "
+                         "or that of compare_motifs() with compare_to")
     db: dict[str, Motif] | None = None
     if database is not None:
         if isinstance(database, Motif):
@@ -138,8 +141,8 @@ def _find_matches(pats: list[_Pattern], every: list[_Pattern], matches: pl.DataF
             for m in database:
                 m = _check_motif(m)
                 db.setdefault(m.name, m)
-    # Patterns compared with each other are left out by what they are, the
-    # motifs compared as subjects, and not by their labels, which can be the
+    # Patterns compared with each other are left out by what they are (the
+    # motifs compared as subjects), not by their labels. A label can be the
     # name of the very database motif a pattern matches.
     names = {p.name for p in every}
     labels = {p.label for p in every}
@@ -171,8 +174,9 @@ def _find_matches(pats: list[_Pattern], every: list[_Pattern], matches: pl.DataF
 
 
 def _place(p: _Pattern, shown: list[str], align: bool) -> None:
-    """Where each logo of a row starts in the row's frame of positions: the
-    pattern's own logos at ``placements[0]`` and the matches after it."""
+    """Where each logo of a row starts in the row's frame of positions. The
+    pattern's own logos are at ``placements[0]``, and the matches after
+    it."""
     widths = [p.motifs[t].width for t in shown]
     logos = [m for _, m, *_ in p.matches if m is not None]
     ref = p.motifs.get("PPM") or p.motifs.get("CWM") or p.motifs.get("hCWM")
@@ -235,40 +239,47 @@ def plot_modisco(
 ) -> Figure:
     """Draw a TF-MoDISco report, one row per pattern.
 
-    Each row gives a pattern's name, its number of seqlets and its logos,
-    by default its contribution weight matrix (CWM) and the letter
-    frequencies of its seqlets drawn as information content, followed by its
-    best matches in a motif database with their logos, names and q-values.
+    Each row holds, from left to right:
+
+    - the pattern's name and its number of seqlets;
+    - its logos, by default its contribution weight matrix (CWM) and the
+      letter frequencies of its seqlets drawn as information content;
+    - its best matches in a motif database, with their logos, names and
+      q-values.
+
     Positive and negative patterns are drawn under their own headings.
 
-    ``modisco`` is the path of a TF-MoDISco results file, which is read with
+    ``modisco`` is the path of a TF-MoDISco results file. It is read with
     [`read_modisco()`][universalmotif.read_modisco] using
-    ``trim_threshold``, so that every logo of a pattern spans the same
+    ``trim_threshold``, so every logo of a pattern spans the same
     positions. It can also be the patterns read beforehand, as a list of
-    CWMs or PPMs or as a dict of lists keyed by ``"CWM"``, ``"hCWM"`` and
-    ``"PPM"``, each with one motif per pattern in the same order.
+    CWMs or PPMs. A dict of lists keyed by ``"CWM"``, ``"hCWM"`` and
+    ``"PPM"`` also works, each with one motif per pattern in the same
+    order.
 
-    Patterns are labelled by their group and number, so that
-    ``pos_patterns.pattern_3`` becomes ``pos_3``, unless ``names`` gives
-    labels of its own, as a dict from the names patterns are read with to
-    labels or as a function of the name. The group of a pattern comes from
+    Patterns are labelled by their group and number, so
+    ``pos_patterns.pattern_3`` becomes ``pos_3``. ``names`` can give labels
+    of its own instead, as a dict from the names patterns are read with to
+    labels, or as a function of the name. The group of a pattern comes from
     the start of its name, ``pos`` or ``neg``.
 
-    Matches come from ``matches``, the DataFrame
+    Matches come from ``matches``, a table from
+    [`name_motifs()`][universalmotif.name_motifs] or the DataFrame
     [`compare_motifs()`][universalmotif.compare_motifs] returns with
-    ``compare_to`` set to the patterns. Its ``subject`` column is matched to
-    either the label or the full name of each pattern, so the comparison
-    can be run on renamed motifs, and patterns compared with each other are
-    left out. With ``database``, the motifs compared against, only matches
-    to its motifs are kept and each is drawn as a logo, labelled with its
-    ``altname`` when it has one. A match that was found on the other strand
-    is drawn as its reverse complement, so that it reads the same way as the
-    pattern. With ``align``, the logos of each row are also placed in a
-    shared frame of positions, found by aligning each match to the pattern
-    as drawn, so that the part of a match lining up with the pattern sits at
-    the same place in its cell as the pattern does in the cells to its left.
-    Long matches then widen every logo column, which is why it is off by
-    default.
+    ``compare_to`` set to the patterns. Each match is found by either the
+    label or the full name of its pattern, so the comparison can be run on
+    renamed motifs. Patterns compared with each other are left out.
+
+    ``database`` gives the motifs compared against. With it, only matches
+    to its motifs are kept, and each is drawn as a logo labelled with its
+    ``altname`` when it has one. A match found on the other strand is drawn
+    as its reverse complement, so it reads the same way as the pattern.
+
+    With ``align``, the logos of each row are also placed in a shared frame
+    of positions, found by aligning each match to the pattern as drawn. The
+    part of a match lining up with the pattern then sits at the same place
+    in its cell as the pattern does in the cells to its left. Long matches
+    widen every logo column, which is why ``align`` is off by default.
 
     Needs the ``plot`` extra, and the ``h5py`` extra to read a file.
 
@@ -277,29 +288,34 @@ def plot_modisco(
     modisco
         A TF-MoDISco results file, or the patterns as motifs.
     matches
-        Matches of the patterns to known motifs, from ``compare_motifs()``.
+        Matches of the patterns to known motifs, from
+        [`name_motifs()`][universalmotif.name_motifs] or from
+        ``compare_motifs()`` with ``compare_to``.
     database
         The known motifs, as a list or a dict keyed by name, to draw the
         matches with.
     names
         Labels for the patterns, as a dict or a function of the full name.
     patterns
-        Which patterns to draw: all of them by default, the first ``n`` of
-        each group for an integer ``n``, the first ``n_pos`` positive and
-        ``n_neg`` negative patterns for a pair, or the patterns named in a
-        list of labels or names.
+        Which patterns to draw.
+
+        - ``None`` (the default): all of them.
+        - An integer ``n``: the first ``n`` of each group.
+        - A pair ``(n_pos, n_neg)``: the first ``n_pos`` positive and
+          ``n_neg`` negative patterns.
+        - A list of labels or names: the patterns named.
     columns
         The columns to draw after the label, from ``"seqlets"``, ``"CWM"``,
-        ``"hCWM"`` and ``"PPM"``, by default ``seqlets``, ``CWM`` and
-        ``PPM`` for a file and the seqlets and each type given otherwise.
+        ``"hCWM"`` and ``"PPM"``. For a file they default to ``seqlets``,
+        ``CWM`` and ``PPM``. Otherwise they default to the seqlets and each
+        type given.
     n_matches
         The number of matches to draw for each pattern.
     align
         Place the logos of each row in a shared frame of positions.
     use_type
-        How the PPMs and matches are drawn, ``"ICM"`` for information
-        content or ``"PPM"`` for probabilities, which also heads their
-        column.
+        How the PPMs and matches are drawn, as ``"ICM"`` for information
+        content or ``"PPM"`` for probabilities. It also heads their column.
     trim_threshold
         Passed to ``read_modisco()`` when reading a file.
     text_size
@@ -415,8 +431,8 @@ def plot_modisco(
     match_text = max([_text_width(fig, [ls[0]], small) for ls in lines]
                      + [_text_width(fig, ls[1:], 0.75 * text_size) for ls in lines]
                      + [_text_width(fig, ["no match"], small)], default=0.0)
-    # With align every logo column is as wide as the widest row's frame,
-    # and otherwise as wide as its own widest logo.
+    # With align, every logo column is as wide as the widest row's frame.
+    # Otherwise it is as wide as its own widest logo.
     frame = max(p.span for p in pats) or 1
     units = [frame if align else max(p.motifs[t].width for p in pats) for t in shown]
     match_units = []

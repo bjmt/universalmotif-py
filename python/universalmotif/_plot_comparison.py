@@ -90,8 +90,9 @@ def _comparison_input(motifs, matrix, labels, value, min_overlap, rc, nthreads, 
 
 
 def _distances(vals: np.ndarray, scores: np.ndarray | None) -> np.ndarray:
-    """Distances to cluster on: (1 - score) / 2 for scores, and otherwise
-    one minus the mean -log10 value of both directions over its largest."""
+    """Distances to cluster on. For scores these are (1 - score) / 2, and
+    otherwise one minus the mean -log10 value of both directions over its
+    largest."""
     if scores is not None:
         sym = (scores + scores.T) / 2
         dist = (1 - sym) / 2
@@ -130,8 +131,8 @@ def _cut_height(cut: float, vals: np.ndarray, unit: str) -> float:
 
 
 def _dendrogram_segments(tree: MotifTree, pos: np.ndarray) -> tuple[list, float]:
-    """Line segments of a dendrogram as (position, height) pairs, with the
-    leaves at height 0, and the largest height."""
+    """Line segments of a dendrogram as (position, height) pairs with the
+    leaves at height 0. Also returns the largest height."""
     n = len(tree.labels)
     node_pos = list(pos.astype(float))
     node_h = [0.0] * n
@@ -161,9 +162,9 @@ def _text_inches(fig, texts: Sequence[str], size: float) -> float:
 
 
 def _logo_placements(ms, order, groups, metric, sign, min_overlap, rc, nthreads):
-    """Each motif's left column and whether it is flipped, with the motifs of
-    each group aligned to the most informative of them, and the width of the
-    widest group's frame."""
+    """Each motif's left column and whether it is flipped, and the width of
+    the widest group's frame. The motifs of each group are aligned to the
+    most informative of them."""
     members: dict[Any, list[int]] = {}
     for i in order:
         members.setdefault(groups[i] if groups is not None else 0, []).append(i)
@@ -209,13 +210,13 @@ def plot_comparison(
     """Draw motif similarities as a clustered heatmap.
 
     Motifs are compared all against all with
-    [`compare_motifs()`][universalmotif.compare_motifs], or the comparison
-    is given as ``matrix``, a square array or DataFrame such as
-    ``compare_motifs()`` returns without ``compare_to``. Rows are queries and
-    columns targets, both in the order of a hierarchical clustering drawn as
-    a dendrogram beside the heatmap. Scores are drawn as they are, and P- and
-    q-values as their -log10, with the diagonal left blank since it compares
-    each motif with itself.
+    [`compare_motifs()`][universalmotif.compare_motifs]. The comparison can
+    instead be given as ``matrix``, a square array or DataFrame such as
+    ``compare_motifs()`` returns without ``compare_to``. Rows are queries
+    and columns are targets. Both are in the order of a hierarchical
+    clustering, drawn as a dendrogram beside the heatmap. Scores are drawn
+    as they are, and P- and q-values as their -log10. For these the
+    diagonal is left blank, since it compares each motif with itself.
 
     Parameters
     ----------
@@ -233,52 +234,56 @@ def plot_comparison(
         A motif attribute to label rows and columns with, such as
         ``"name"`` or ``"altname"``, or one label per motif.
     value
-        What is drawn: ``"score"``, the mean column correlation, or
+        What is drawn: ``"score"``, the comparison score of ``method``
+        (such as the mean column correlation, or the cosine for CWMs), or
         ``"pvalue"`` or ``"qvalue"``.
     method, sign
-        How motifs are compared: by default the cosine of
+        How motifs are compared, as ``"PCC"``, ``"COSINE"`` or
+        ``"CJACCARD"``. By default CWMs are compared by the cosine of
         [`compare_motifs()`][universalmotif.compare_motifs] when every motif
-        is a CWM, keeping the sign of their contributions, and column
-        correlations otherwise, or ``"PCC"``, ``"COSINE"`` or
-        ``"CJACCARD"``. ``sign="ignore"`` compares CWMs by their absolute
-        values. CWM similarities are clustered as correlations are, and
-        ``cut`` is then a similarity such as 0.8.
+        is a CWM, keeping the sign of their contributions. Other motifs are
+        compared by column correlation. ``sign="ignore"`` compares CWMs by
+        their absolute values. CWM similarities are clustered as
+        correlations are, and ``cut`` is then a similarity such as 0.8.
     min_overlap, rc, nthreads
-        Passed to ``compare_motifs()``, with ``nthreads`` by default the
+        Passed to ``compare_motifs()``. ``nthreads`` defaults to the
         package setting from [`set_nthreads()`][universalmotif.set_nthreads].
         ``min_overlap`` follows the default of 6 of
-        [`motif_tree()`][universalmotif.motif_tree], so the scores can differ
-        slightly from those of ``compare_motifs()`` with its default of 5.
+        [`motif_tree()`][universalmotif.motif_tree]. The scores can
+        therefore differ slightly from those of ``compare_motifs()``, whose
+        default is 5.
     cluster, linkage
         Order the motifs by clustering them with the agglomeration method
-        ``linkage``, as in
-        [`motif_tree()`][universalmotif.motif_tree], or keep them in input
-        order with ``False``. A tree from ``motif_tree()`` can be given
-        instead. Motifs are clustered on their scores, with distances of
-        ``(1 - score) / 2``, so that the order is that of ``motif_tree()``
-        with the same ``min_overlap``. A matrix of P- or q-values given as
-        ``matrix`` is clustered on the mean -log10 value of both directions,
-        scaled to distances from 0 to 1.
-        ``method`` used to name the agglomeration method, and one given
-        as ``method``, such as ``"average"``, is still taken as
-        ``linkage`` for now.
+        ``linkage``, as in [`motif_tree()`][universalmotif.motif_tree].
+        ``False`` keeps them in input order, and a tree from
+        ``motif_tree()`` can be given instead. Motifs are clustered on
+        their scores, with distances of ``(1 - score) / 2``, so the order
+        is that of ``motif_tree()`` with the same ``min_overlap``. A matrix
+        of P- or q-values given as ``matrix`` is clustered on the mean
+        -log10 value of both directions, scaled to distances from 0 to 1.
+        ``method`` used to name the agglomeration method. One given as
+        ``method``, such as ``"average"``, is still taken as ``linkage``
+        for now.
     dendrogram
         Where to draw the tree: ``"left"``, ``"top"``, ``"both"`` or
         ``"none"``.
     cut, cut_height
-        Show where cutting the tree would split the motifs into groups, as a
-        dashed line across the dendrogram and a box around each group of two
-        or more motifs on the heatmap. ``cut`` is in the units clustered on,
-        a score such as 0.8 (or a P- or q-value for such a matrix given
-        without motifs), and with complete linkage every motif in a group is
-        at least that similar to every other. A tree given as ``cluster`` is
-        taken to be one of scores, as from
-        [`motif_tree()`][universalmotif.motif_tree]; ``cut_height`` instead
-        cuts at a height of the tree itself, as
+        Show where cutting the tree would split the motifs into groups. The
+        cut is drawn as a dashed line across the dendrogram, with a box
+        around each group of two or more motifs on the heatmap.
+
+        ``cut`` is in the units clustered on, which is a score such as 0.8.
+        For a matrix of P- or q-values given without motifs, it is a P- or
+        q-value. With complete linkage, every motif in a group is at least
+        that similar to every other. A tree given as ``cluster`` is taken
+        to be one of scores, as from
+        [`motif_tree()`][universalmotif.motif_tree].
+
+        ``cut_height`` instead cuts at a height of the tree itself, as
         [`MotifTree.cutree()`][universalmotif.MotifTree.cutree] does.
     cmap, vmin, vmax
-        The colour map and its range, which by default spans the values
-        drawn, from 0 for P- and q-values.
+        The colour map and its range. By default the range spans the values
+        drawn, starting from 0 for P- and q-values.
     annotate
         Write each value in its cell, by default for up to 20 motifs.
     logos
@@ -286,18 +291,18 @@ def plot_comparison(
         are given and there are up to 60 of them.
     align_logos, rc_text
         Align the logos to one another, as
-        [`view_motifs()`][universalmotif.view_motifs] does, by aligning
-        each to the most informative motif of its group when the tree is
-        cut, and of all the motifs otherwise, so that logos of unrelated
-        groups are not lined up. CWMs are aligned by the similarity used for
-        the heatmap and other motifs by column correlation, both over at
-        least ``min_overlap`` columns. Logos that align better as reverse
-        complements are flipped, and ``rc_text`` is added to their row
-        labels. With ``align_logos=False`` logos are drawn as they are, from
-        the left.
+        [`view_motifs()`][universalmotif.view_motifs] does. When the tree is
+        cut, each logo is aligned to the most informative motif of its
+        group, so logos of unrelated groups are not lined up. Otherwise
+        each is aligned to the most informative of all the motifs. CWMs are
+        aligned by the similarity used for the heatmap, and other motifs by
+        column correlation, both over at least ``min_overlap`` columns.
+        Logos that align better as reverse complements are flipped, and
+        ``rc_text`` is added to their row labels. With
+        ``align_logos=False`` logos are drawn as they are, from the left.
     text_size
-        The largest font size of labels, which shrink to fit the cells of
-        larger heatmaps and are left out once they would be unreadable.
+        The largest font size of labels. Labels shrink to fit the cells of
+        larger heatmaps, and are left out once they would be unreadable.
     figsize
         The figure size, by default worked out from the number of motifs.
 

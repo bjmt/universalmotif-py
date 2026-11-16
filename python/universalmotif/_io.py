@@ -1,5 +1,7 @@
-"""Reading and writing motif files. Parsing and formatting happen in the Rust crate;
-this module deals with files, line skipping and appending."""
+"""Reading and writing motif files.
+
+Parsing and formatting happen in the Rust crate. This module deals with
+files, line skipping and appending."""
 
 from __future__ import annotations
 
@@ -22,10 +24,11 @@ PathLike = str | os.PathLike[str]
 
 
 def _gunzip(raw: bytes) -> bytes:
-    """Gzipped bytes decompressed. A bgzipped file is many gzip members one
-    after another, which gzip.decompress() copies the rest of the file for
-    each of, taking minutes for a large file, while reading it as a stream
-    takes seconds."""
+    """Gzipped bytes decompressed.
+
+    A bgzipped file is many gzip members one after another. For each one,
+    gzip.decompress() copies the rest of the file, which takes minutes for a
+    large file. Reading it as a stream takes seconds."""
     import io
 
     with gzip.GzipFile(fileobj=io.BytesIO(raw)) as fh:
@@ -61,9 +64,9 @@ def _write_text(file: PathLike, text: str, overwrite: bool, append: bool) -> Non
     path = Path(file)
     if path.exists() and not overwrite and not append:
         raise FileExistsError(f"{path} exists; set overwrite=True or append=True")
-    # A .gz path is written gzipped, at gzip's own default level of 6, which
-    # is several times faster than Python's default of 9 for files barely
-    # larger; appending adds a gzip member, which readers treat as a
+    # A .gz path is written gzipped at gzip's own default level of 6. This
+    # is several times faster than Python's default of 9, for files barely
+    # larger. Appending adds a gzip member, which readers treat as a
     # continuation of the file.
     mode = "at" if append else "wt"
     with (gzip.open(path, mode, compresslevel=6) if path.suffix == ".gz" else open(path, mode)) as f:
@@ -76,11 +79,10 @@ def _write_text(file: PathLike, text: str, overwrite: bool, append: bool) -> Non
 def read_jaspar(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read JASPAR count matrices.
 
-    Rows may be labelled, as in ``A [ 1 2 3 ]``, or bare numbers, which are
-    read as DNA when there are four rows and as amino acids when there are
-    twenty. Motifs are returned as PCMs
-    with ``nsites`` set to the largest column sum. ``skip`` drops lines from
-    the start of the file.
+    Rows may be labelled, as in ``A [ 1 2 3 ]``, or bare numbers. Bare rows
+    are read as DNA when there are four and as amino acids when there are
+    twenty. Motifs are returned as PCMs with ``nsites`` set to the largest
+    column sum. ``skip`` drops lines from the start of the file.
 
     References
     ----------
@@ -106,8 +108,8 @@ def read_homer(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read HOMER motifs.
 
     The log-odds detection threshold is kept in ``extrainfo`` as
-    ``"logodds.threshold"``, and site counts and P-values are read from
-    HOMER's statistics column when present.
+    ``"logodds.threshold"``. Site counts and P-values are read from HOMER's
+    statistics column when present.
 
     References
     ----------
@@ -132,9 +134,9 @@ def read_homer(file: PathLike, skip: int = 0) -> list[Motif]:
 def read_transfac(file: PathLike, skip: int = 0) -> list[Motif]:
     """Read TRANSFAC matrices, returned as PCMs.
 
-    The accession in ``AC`` is used as the name if there is one, with the
-    identifier in ``ID`` or the factor name in ``NA`` as the alternate name;
-    ``HC`` and ``OS`` give the family and organism.
+    The accession in ``AC`` is used as the name if there is one. The
+    identifier in ``ID`` or the factor name in ``NA`` becomes the alternate
+    name. ``HC`` and ``OS`` give the family and organism.
 
     References
     ----------
@@ -156,8 +158,10 @@ def read_transfac(file: PathLike, skip: int = 0) -> list[Motif]:
 
 
 def read_cisbp(file: PathLike, skip: int = 0) -> list[Motif]:
-    """Read CIS-BP motifs, using the ``TF``, ``TF Name``, ``Family`` and
-    ``Species`` fields as the name, alternate name, family and organism.
+    """Read CIS-BP motifs.
+
+    The ``TF``, ``TF Name``, ``Family`` and ``Species`` fields give the
+    name, alternate name, family and organism.
 
     References
     ----------
@@ -179,8 +183,9 @@ def read_cisbp(file: PathLike, skip: int = 0) -> list[Motif]:
 
 
 def read_uniprobe(file: PathLike, skip: int = 0) -> list[Motif]:
-    """Read UniPROBE motifs from minimal files or from full output, whose
-    enrichment scores are kept in ``extrainfo``.
+    """Read UniPROBE motifs from minimal files or from full output.
+
+    The enrichment scores of full output are kept in ``extrainfo``.
 
     References
     ----------
@@ -304,14 +309,14 @@ def read_matrix(
     Parameters
     ----------
     type
-        The matrix type; detected from the values by default.
+        The matrix type, detected from the values by default.
     positions
         Whether positions are ``"columns"`` or ``"rows"``.
     alphabet
-        Alphabet of the motifs; the letters' rows or columns are read in its
+        Alphabet of the motifs. The letters' rows or columns are read in its
         order.
     sep
-        Line separating motifs; ``""`` means blank lines and ``None`` means
+        Line separating motifs. ``""`` means blank lines, and ``None`` means
         motifs are only separated by headers.
     headers
         ``True`` if the first line of each motif is its name, ``False`` for
@@ -351,13 +356,14 @@ def write_meme(
 ) -> None:
     """Write motifs in MEME format.
 
-    Motifs are converted to PPMs, unless ``cwm=True``, in which case every
-    motif must be a CWM and is written as is. ``bkg`` gives the background in
-    the order letters are written, which for DNA is A, C, G, T; by default the
-    motifs' shared background is used, or a uniform one if they differ.
-    ``strand`` overrides the ``strands:`` line. When appending to an existing
-    file only the motifs are written. Equal signs in names become periods and
-    spaces become dashes.
+    Motifs are converted to PPMs. With ``cwm=True``, every motif must
+    instead be a CWM and is written as is.
+
+    ``bkg`` gives the background in the order letters are written, which
+    for DNA is A, C, G, T. By default the motifs' shared background is used,
+    or a uniform one if they differ. ``strand`` overrides the ``strands:``
+    line. When appending to an existing file, only the motifs are written.
+    Equal signs in names become periods and spaces become dashes.
 
     References
     ----------
@@ -434,13 +440,17 @@ def write_homer(
 ) -> None:
     """Write DNA or RNA motifs in HOMER format.
 
-    The detection threshold in each header is on HOMER's own score scale:
-    HOMER scores a site as the sum of ``ln(p / 0.25)`` over the probabilities
-    written in the file, floored at 0.001. With ``threshold_type="logodds"``
-    it is ``threshold`` times the motif's maximum score, with
-    ``"logodds_abs"`` it is ``threshold`` itself, and with ``"pvalue"`` it is
-    a score that random sites from a uniform background reach with at most
-    that probability. Give one value or one per motif.
+    The detection threshold in each header is on HOMER's own score scale.
+    HOMER scores a site as the sum of ``ln(p / 0.25)`` over the
+    probabilities written in the file, floored at 0.001. The threshold
+    depends on ``threshold_type``.
+
+    - ``"logodds"``: ``threshold`` times the motif's maximum score.
+    - ``"logodds_abs"``: ``threshold`` itself.
+    - ``"pvalue"``: a score that random sites from a uniform background
+      reach with at most that probability.
+
+    Give one value or one per motif.
 
     References
     ----------
@@ -477,8 +487,10 @@ def write_transfac(
     name_tag: str = "ID",
     altname_tag: str = "NA",
 ) -> None:
-    """Write DNA or RNA motifs as TRANSFAC count matrices. ``name_tag`` and
-    ``altname_tag`` choose the fields used for the name and alternate name.
+    """Write DNA or RNA motifs as TRANSFAC count matrices.
+
+    ``name_tag`` and ``altname_tag`` choose the fields used for the name and
+    alternate name.
 
     References
     ----------
@@ -547,10 +559,10 @@ def write_cisbp(
 def write_uniprobe(
     motifs: Motif | Iterable[Motif], file: PathLike, overwrite: bool = False, append: bool = False
 ) -> None:
-    """Write DNA motifs in the minimal UniPROBE format: a name line followed
-    by ``A:``, ``C:``, ``G:`` and ``T:`` rows of probabilities.
+    """Write DNA motifs in the minimal UniPROBE format.
 
-    Files written here can be read back with
+    Each motif is a name line followed by ``A:``, ``C:``, ``G:`` and ``T:``
+    rows of probabilities. Files written here can be read back with
     [`read_uniprobe()`][universalmotif.read_uniprobe].
 
     References
@@ -585,22 +597,25 @@ def read_fasta(
     alphabet: str = "DNA",
     trim_names: bool = True,
 ) -> dict[str, str] | PackedSequences:
-    """Read a FASTA file into a dict from names to sequences, where each name
-    is the first word of the header line after ``>``, as most tools and
-    [`Genome`][universalmotif.Genome] use, and two sequences with the same
-    name are an error. With ``trim_names`` off, names are whole header lines,
-    and when they repeat, the last sequence with each name is kept, with a
-    warning. The file is read line by line, so a genome needs little more
-    memory than its sequences, and the first ``skip`` lines are ignored.
-    Gzipped files, bgzip included, are recognized from their first bytes and
-    decompressed as they are read.
+    """Read a FASTA file into a dict from names to sequences.
 
-    With ``packed``, the sequences are packed for scanning as they are read
-    and returned as [`PackedSequences`][universalmotif.PackedSequences] for
-    ``alphabet``, which is ``"DNA"``, ``"RNA"``, ``"AA"`` or the letters of a
-    custom alphabet. Packed sequences hold a genome in a quarter of the
-    memory, and names must then be unique. To scan a
-    file just once, pass its path to [`scan_sequences()`][universalmotif.scan_sequences] instead.
+    Each name is the first word of the header line after ``>``, as most
+    tools and [`Genome`][universalmotif.Genome] use. Two sequences with the
+    same name are an error. With ``trim_names`` off, names are whole header
+    lines. When these repeat, the last sequence with each name is kept, with
+    a warning.
+
+    The file is read line by line, so a genome needs little more memory than
+    its sequences. The first ``skip`` lines are ignored. Gzipped files,
+    bgzip included, are recognized from their first bytes and decompressed
+    as they are read.
+
+    With ``packed``, the sequences are packed for scanning as they are read.
+    They are returned as [`PackedSequences`][universalmotif.PackedSequences]
+    for ``alphabet``, which is ``"DNA"``, ``"RNA"``, ``"AA"`` or the letters
+    of a custom alphabet. Packed sequences hold a genome in a quarter of the
+    memory, and names must then be unique. To scan a file just once, pass
+    its path to [`scan_sequences()`][universalmotif.scan_sequences] instead.
 
     References
     ----------
@@ -642,10 +657,11 @@ def write_fasta(
     overwrite: bool = False,
     append: bool = False,
 ) -> None:
-    """Write sequences to a FASTA file, wrapping lines at ``width``
-    characters, or not at all when it is 0. Unnamed sequences are called
-    ``seq1``, ``seq2`` and so on. A path ending in ``.gz`` is written
-    gzipped, as it is for every writer in the package.
+    """Write sequences to a FASTA file.
+
+    Lines are wrapped at ``width`` characters, or not at all when it is 0.
+    Unnamed sequences are called ``seq1``, ``seq2`` and so on. A path ending
+    in ``.gz`` is written gzipped, as it is for every writer in the package.
 
     References
     ----------
@@ -690,10 +706,15 @@ def write_matrix(
 ) -> None:
     """Write motifs as plain matrices of numbers.
 
-    ``headers`` writes the name on its own line when ``True``, prefixed with a
-    string when given one, or not at all when ``False``. ``sep`` is written
-    after each motif unless it is ``None``, ``type`` converts the motifs first,
-    and ``digits`` sets the number of decimal places.
+    ``headers`` controls how each name is written.
+
+    - ``True`` writes the name on its own line.
+    - A string writes it on its own line, prefixed with that string.
+    - ``False`` leaves names out.
+
+    ``sep`` is written after each motif unless it is ``None``. ``type``
+    converts the motifs first, and ``digits`` sets the number of decimal
+    places.
 
     Examples
     --------

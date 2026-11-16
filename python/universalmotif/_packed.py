@@ -9,21 +9,26 @@ from ._threads import _nthreads
 
 
 class PackedSequences(Mapping[str, str]):
-    """Named sequences packed for scanning, from [`read_fasta()`][universalmotif.read_fasta] with
-    ``packed=True`` or from [`pack_sequences()`][universalmotif.pack_sequences].
+    """Named sequences packed for scanning.
 
-    DNA and RNA take two bits per letter, so a human genome needs about
-    0.8 GB instead of 3.1 GB as text; other alphabets take a byte per
-    letter. The packing borrows the idea of UCSC's
-    [2bit format](https://genome.ucsc.edu/FAQ/FAQformat.html#format7), which also stores four bases to a byte and keeps
-    runs of other letters, such as ``N``, to one side. [`scan_sequences()`][universalmotif.scan_sequences] scans them as they are, which makes them
-    the way to scan one large set of sequences many times.
+    They come from [`read_fasta()`][universalmotif.read_fasta] with
+    ``packed=True`` or from
+    [`pack_sequences()`][universalmotif.pack_sequences]. DNA and RNA take
+    two bits per letter, so a human genome needs about 0.8 GB instead of
+    3.1 GB as text. Other alphabets take a byte per letter. The packing
+    borrows the idea of UCSC's
+    [2bit format](https://genome.ucsc.edu/FAQ/FAQformat.html#format7),
+    which also stores four bases to a byte and keeps runs of other letters,
+    such as ``N``, to one side.
+    [`scan_sequences()`][universalmotif.scan_sequences] scans them as they
+    are, which makes them the way to scan one large set of sequences many
+    times.
 
     They are also a read-only mapping from names to sequences, so they can
     go wherever a dict of sequences can. Each sequence is then decoded when
     it is looked up. DNA, RNA and protein letters come back in upper case,
-    so soft-masking is lost, while the letters of custom alphabets and any
-    other letters, such as ``N``, come back as they were.
+    so soft-masking is lost. The letters of custom alphabets and any other
+    letters, such as ``N``, come back as they were.
 
     Examples
     --------
@@ -57,8 +62,9 @@ class PackedSequences(Mapping[str, str]):
 
     def subseq(self, name: str, start: int, end: int) -> str:
         """Positions ``start`` up to but not including ``end`` of the
-        sequence called ``name``, counted from 0 as in a slice, decoding only
-        those.
+        sequence called ``name``, counted from 0 as in a slice.
+
+        Only those positions are decoded.
 
         Examples
         --------
@@ -113,9 +119,9 @@ def pack_sequences(
     """Pack sequences for scanning as [`PackedSequences`][universalmotif.PackedSequences].
 
     ``alphabet`` is ``"DNA"``, ``"RNA"``, ``"AA"`` or the letters of a custom
-    alphabet, and must match the motifs the sequences will be scanned with.
-    Unnamed sequences are called ``seq1``, ``seq2`` and so on; names must be
-    unique.
+    alphabet. It must match the motifs the sequences will be scanned with.
+    Unnamed sequences are called ``seq1``, ``seq2`` and so on, and names
+    must be unique.
 
     ``nthreads`` defaults to the package setting from
     [`set_nthreads()`][universalmotif.set_nthreads].

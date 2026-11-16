@@ -60,39 +60,47 @@ def gapped_motif_finder(
 ) -> pl.DataFrame:
     """Find motifs made of two parts with a spacer of varying length.
 
-    The finder is experimental: its options, its results and the motifs it
-    finds may change in later releases.
+    The finder is experimental, so its options, its results and the motifs
+    it finds may change in later releases.
 
-    A share of the sequences and of the background, ``holdout``, is first
-    set aside. In the rest, pairs of ``k``-mers at every spacing from
-    ``min_gap`` to ``max_gap`` found in at least ``min_fraction`` of the
-    sequences are counted in the sequences and in the background, by default
-    dinucleotide shuffles of the sequences, and tested for enrichment with
-    Fisher's exact test, for each k-mer size. For each size, each of the
-    ``n_seed_pairs`` most enriched distinct pairs, over the window of spacings
-    that gives it, seeds a motif: its sites, with ``flank`` letters on
-    either side of each part, make a gapped motif, refined by rescanning and
-    trimmed of columns below ``min_ic`` bits at either end. The spacer sizes
-    kept are those whose hits outnumber both the background and what the
-    two parts would give if they were placed independently of each other.
-    Each part then grows into informative columns, a motif that ends up with
-    a single part is tried again as a direct and as an inverted repeat of
-    itself, and motifs left without a gap are dropped.
+    First, a share of the sequences and of the background, ``holdout``, is
+    set aside. The background is by default dinucleotide shuffles of the
+    sequences. In the rest, the finder takes pairs of ``k``-mers at every
+    spacing from ``min_gap`` to ``max_gap`` that are found in at least
+    ``min_fraction`` of the sequences. For each k-mer size, these are
+    counted in the sequences and in the background, and tested for
+    enrichment with Fisher's exact test.
 
-    Each motif is then tested in the sequences held out: the P-value of its
-    spacing, against independent placement of its parts and against the
-    background at each spacing, multiplied by the number of motifs tested,
-    must be at most ``stop_pvalue``, and sequences with hits must be enriched
-    over the background at 0.05. Of those that pass, the one with the
-    strongest spacing is kept, its hits are masked and the search repeated.
-    As the tests use sequences the motifs were not fitted to, the P-values
-    stay honest however widely the search looks, so more seeds and a lower
-    ``min_fraction`` can be used to look for rarer motifs.
+    For each size, each of the ``n_seed_pairs`` most enriched distinct
+    pairs seeds a motif, over the window of spacings that gives it. Its
+    sites, with ``flank`` letters on either side of each part, make a
+    gapped motif. This is refined by rescanning, and columns below
+    ``min_ic`` bits are trimmed at either end. The spacer sizes kept are
+    those whose hits outnumber both the background and what the two parts
+    would give if they were placed independently of each other. Each part
+    then grows into informative columns. A motif that ends up with a
+    single part is tried again as a direct and as an inverted repeat of
+    itself. Motifs left without a gap are dropped.
+
+    Each motif is then tested in the sequences held out, where it must pass
+    two tests.
+
+    - The P-value of its spacing, multiplied by the number of motifs
+      tested, must be at most ``stop_pvalue``. This P-value is against
+      independent placement of its parts and against the background at
+      each spacing.
+    - Sequences with hits must be enriched over the background at 0.05.
+
+    Of the motifs that pass, the one with the strongest spacing is kept.
+    Its hits are masked and the search is repeated. The tests use sequences
+    the motifs were not fitted to, so the P-values stay honest however
+    widely the search looks. More seeds and a lower ``min_fraction`` can
+    therefore be used to look for rarer motifs.
 
     For genomic sequences, a background drawn from the genome and matched
     for composition, as from [`match_bkg()`][universalmotif.match_bkg],
-    gives far better calibrated P-values than the default dinucleotide
-    shuffles, which lose the loose repeats that real genomes are full of.
+    gives far better calibrated P-values than the default. Dinucleotide
+    shuffles lose the loose repeats that real genomes are full of.
 
     Parameters
     ----------
@@ -131,25 +139,25 @@ def gapped_motif_finder(
         from 0 to 1, and in at least 5. Lower values find rarer motifs at
         the cost of more tests to correct for.
     holdout
-        The fraction of the sequences, and of the background, set aside to
+        The fraction of the sequences and of the background set aside to
         test the motifs found in the rest, at least 0 and below 0.9. With 0,
         both P-values come from all the sequences instead, corrected for the
-        pairs and seeds tried, and are somewhat optimistic.
+        pairs and seeds tried. They are then somewhat optimistic.
     mismatch
         Count pairs of 6-mers in each sequence that holds them with at most
-        one mismatch, which finds the spacing of rarer motifs better but
+        one mismatch. This finds the spacing of rarer motifs better but
         takes several times longer. Shorter k-mers always match exactly.
     mask
         Mask low-complexity regions, such as homopolymers and short tandem
         repeats, with DUST in the sequences and the background before the
-        search, as their repeated units otherwise look like parts with a
+        search. Their repeated units otherwise look like parts with a
         favoured spacing.
     shuffle_k
         The size of the k-mers whose counts the shuffled background keeps.
         Only used without ``bkg_sequences``.
     bkg_shuffles
         How many shuffles of the sequences make up the background, without
-        ``bkg_sequences``; several steady it, so that rarer motifs are found
+        ``bkg_sequences``. Several steady it, so that rarer motifs are found
         whatever the seed.
     rc
         Search both strands.
@@ -159,7 +167,6 @@ def gapped_motif_finder(
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
-
     progress
         Show a progress bar on stderr once the call has run for a second,
         and let Ctrl-C stop it; by default the package setting from
@@ -168,19 +175,23 @@ def gapped_motif_finder(
     Returns
     -------
     polars.DataFrame
-        A DataFrame in order of discovery, with the motifs in an object
-        column ``motif`` alongside ``name``, ``consensus``, ``left``,
-        ``right``, ``min_gap``, ``max_gap``, ``k``, ``seed_pair``,
-        ``seqs_pos``, ``seqs_neg``, ``n_pos``, ``n_neg``, ``candidates``,
-        ``seed_pairs``, ``pvalue``, ``log10_pvalue``, ``spacing_pvalue`` and
-        ``log10_spacing_pvalue``. ``left`` and ``right`` are the widths of
-        the two parts, ``k`` and ``seed_pair`` give the k-mer size and the
-        pair each motif grew from, and ``candidates`` and ``seed_pairs``
-        count the pairs tested and built into motifs at that size. The
-        motifs are gapped PPMs named ``gapped_1``, ``gapped_2`` and so on,
-        and the consensus shows the gap
-        as ``[min-max]``. ``seqs_pos`` and ``seqs_neg`` count sequences with
-        a hit; the P-values are those described above.
+        A DataFrame in order of discovery, with one row per motif. The
+        columns are these.
+
+        - ``name``. The motifs are named ``gapped_1``, ``gapped_2`` and so
+          on.
+        - ``consensus``, which shows the gap as ``[min-max]``.
+        - ``left`` and ``right``, the widths of the two parts.
+        - ``min_gap`` and ``max_gap``.
+        - ``k`` and ``seed_pair``, the k-mer size and the pair each motif
+          grew from.
+        - ``seqs_pos`` and ``seqs_neg``, which count sequences with a hit.
+        - ``n_pos`` and ``n_neg``.
+        - ``candidates`` and ``seed_pairs``, which count the pairs tested
+          and built into motifs at that size.
+        - ``pvalue``, ``log10_pvalue``, ``spacing_pvalue`` and
+          ``log10_spacing_pvalue``, the P-values described above.
+        - ``motif``, an object column of the motifs as gapped PPMs.
 
     References
     ----------
@@ -191,9 +202,9 @@ def gapped_motif_finder(
 
     Examples
     --------
-    Direct repeats of ``AGGTCA`` with spacers of 1 to 5 letters, planted in
-    half of 400 random sequences, are found with their spacing, here as
-    their reverse complement:
+    Direct repeats of ``AGGTCA`` with spacers of 1 to 5 letters are planted
+    in half of 400 random sequences. They are found with their spacing,
+    here as their reverse complement:
 
     >>> import universalmotif as um
     >>> dr = um.add_gap(um.create_motif("AGGTCAAGGTCA"), gaploc=6, mingap=1, maxgap=5)

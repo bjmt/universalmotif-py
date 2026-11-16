@@ -53,14 +53,16 @@ def logo_svg(
 ) -> str:
     """A sequence logo of a motif as an SVG image, without matplotlib.
 
-    The letters are those [`view_motifs()`][universalmotif.view_motifs] draws,
-    with heights from ``use_type``: information content by default, or
-    contribution weights for a CWM. The logo is ``height`` pixels high and
-    ``position_width`` pixels wide per position, with no axes, which suits
-    reports and web pages. ``colours`` maps letters to colours, by default
-    those of [`view_motifs()`][universalmotif.view_motifs]. As there,
+    The letters are those [`view_motifs()`][universalmotif.view_motifs]
+    draws, with heights from ``use_type``. By default these are information
+    content, or contribution weights for a CWM. The logo is ``height``
+    pixels high and ``position_width`` pixels wide per position, with no
+    axes, which suits reports and web pages.
+
+    ``colours`` maps letters to colours, by default those of
+    [`view_motifs()`][universalmotif.view_motifs]. As there,
     ``sort_positions`` stacks the letters of each position by height, by
-    default for every type but PCM and PPM, and ``flip_neg`` turns negative
+    default for every type but PCM and PPM. ``flip_neg`` turns negative
     letters upside down. The gaps of a gapped motif are drawn as dotted
     spaces labelled with their sizes.
 
@@ -129,8 +131,8 @@ def _fmt(x: float) -> str:
 
 
 def _repr_html_(motif: Motif) -> str:
-    """The display of a motif in Jupyter: a logo next to its metadata, with
-    the matrix underneath for those who want it."""
+    """The display of a motif in Jupyter, as a logo next to its metadata.
+    The matrix sits underneath for those who want it."""
     rows = [("Name", motif.name)]
     for label, value in (("Alternate name", motif.altname), ("Family", motif.family),
                          ("Organism", motif.organism)):
@@ -176,10 +178,11 @@ def _repr_html_(motif: Motif) -> str:
 def to_logomaker(motif: Motif, use_type: str | None = None, relative_entropy: bool = False):
     """A motif as a pandas DataFrame for logomaker.
 
-    logomaker draws logos from a DataFrame with one row per position, indexed
-    from 0, and one column per letter. The values are the letter heights of
-    ``use_type``, information content by default or contribution weights for
-    a CWM, as [`view_motifs()`][universalmotif.view_motifs] draws them. Pass
+    logomaker draws logos from a DataFrame with one row per position,
+    indexed from 0, and one column per letter. The values are the letter
+    heights of ``use_type``, as
+    [`view_motifs()`][universalmotif.view_motifs] draws them. By default
+    these are information content, or contribution weights for a CWM. Pass
     ``use_type="PPM"`` for probabilities. Needs the ``pandas`` extra.
 
     Examples

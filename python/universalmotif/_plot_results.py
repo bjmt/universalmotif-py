@@ -33,8 +33,9 @@ _SIZE_TITLES = {
 
 
 def _neg_log10(results: pl.DataFrame, col: str) -> np.ndarray:
-    """``-log10`` of a P-value or q-value column, from its log10 column when
-    there is one so that values too small for a double stay finite."""
+    """``-log10`` of a P-value or q-value column. It is taken from the log10
+    column when there is one, so values too small for a double stay
+    finite."""
     if f"log10_{col}" in results.columns:
         return -results[f"log10_{col}"].cast(pl.Float64).to_numpy()
     if col not in results.columns:
@@ -61,13 +62,15 @@ def _place_labels(px: np.ndarray, py: np.ndarray, radius: np.ndarray, sizes: lis
                   which: list[int], frame) -> list[tuple[float, float, bool]]:
     """Greedily place label boxes of the given sizes next to points.
 
-    Everything is in points, as display positions. Each label in ``which``,
-    taken in turn, tries spots on rings of growing distance around its point
-    and takes the one that overlaps the labels placed before it least, then
-    other points, then the edge of ``frame``, preferring closer spots.
-    Returns the lower left corner of each box relative to its point, and
-    whether it sits beyond the nearest ring, where it could be taken for a
-    neighbour's label and so needs a leader line.
+    Everything is in points, as display positions. Each label in ``which``
+    is taken in turn and tries spots on rings of growing distance around
+    its point. It takes the spot that overlaps least the labels placed
+    before it, then other points, then the edge of ``frame``, preferring
+    closer spots.
+
+    Returns the lower left corner of each box relative to its point. Also
+    returns whether it sits beyond the nearest ring. Such a label could be
+    taken for a neighbour's, so it needs a leader line.
     """
     placed: list[tuple[float, float, float, float]] = []
     dots = np.column_stack([px - radius, py - radius, px + radius, py + radius])
@@ -114,16 +117,16 @@ def plot_enrichment(
 ) -> Figure | Axes:
     """Draw motif enrichment from [`enrich_motifs()`][universalmotif.enrich_motifs] as a volcano plot.
 
-    Each motif is a point at its log2 enrichment and ``-log10`` q-value, or
-    P-value with ``y="pvalue"``, sized by the number of target sequences
-    with hits. Motifs at or below ``cutoff`` are coloured, a dashed line
-    marks the cutoff, and the most significant are labelled. Motifs with no
-    target hits have an enrichment of zero, and are drawn as triangles at
-    the left edge.
+    Each motif is a point at its log2 enrichment and ``-log10`` q-value,
+    or P-value with ``y="pvalue"``. Points are sized by the number of
+    target sequences with hits. Motifs at or below ``cutoff`` are coloured,
+    a dashed line marks the cutoff, and the most significant are labelled.
+    Motifs with no target hits have an enrichment of zero, and are drawn as
+    triangles at the left edge.
 
     [`enrich_motifs()`][universalmotif.enrich_motifs] returns every motif
-    by default, so the plot shows those that fall short of ``cutoff`` too,
-    unless the table was filtered with its ``qvalue``.
+    by default. The plot then shows those that fall short of ``cutoff``
+    too, unless the table was filtered with its ``qvalue``.
 
     Parameters
     ----------
@@ -142,16 +145,18 @@ def plot_enrichment(
         A column of ``results`` to size points by, or ``None`` for points of
         one size.
     motifs
-        The motifs given to [`enrich_motifs()`][universalmotif.enrich_motifs]
-        or a mapping from names to motifs, to draw a logo beside each label.
-        Motifs in a list are matched to the table by name, with duplicates
-        named as [`enrich_motifs()`][universalmotif.enrich_motifs] names them.
+        Motifs to draw a logo beside each label, as those given to
+        [`enrich_motifs()`][universalmotif.enrich_motifs] or as a mapping
+        from names to motifs. Motifs in a list are matched to the table by
+        name, with duplicates named as
+        [`enrich_motifs()`][universalmotif.enrich_motifs] names them.
     logo_height
         The height of the logos in points, by default twice the text size.
     colour
         The colour of significant points.
     ax
-        Axes to draw into. They are returned, and otherwise a new figure is.
+        Axes to draw into, which are then returned. Otherwise a new figure
+        is returned.
 
     Examples
     --------
@@ -258,8 +263,9 @@ def plot_enrichment(
         breaks = [b for b in MaxNLocator(nbins=3, integer=True).tick_values(lo, hi) if lo <= b <= hi]
         handles = [Line2D([0], [0], linestyle="", marker="o", color=_NOT_SIGNIFICANT,
                           markeredgecolor="white", markersize=math.sqrt(float(area(b)))) for b in breaks]
-        # Beside the plot in a figure of its own, and inside axes passed in,
-        # where it could otherwise run into neighbouring plots.
+        # The legend goes beside the plot in a figure of its own. In axes
+        # passed in it goes inside, since it could otherwise run into
+        # neighbouring plots.
         where = {"loc": "upper left", "bbox_to_anchor": (1.02, 1.0)} if own_figure else {"loc": "best"}
         ax.legend(handles, [f"{b:g}" for b in breaks], title=_SIZE_TITLES.get(size_by, size_by),
                   frameon=False, fontsize=text_size, title_fontsize=text_size, alignment="left", **where)
@@ -326,8 +332,8 @@ def _label_points(ax: Axes, x, y, sizes, keep, chosen, names, logos, text_size, 
 
 
 def _coocc_matrix(results: pl.DataFrame, value: str) -> tuple[list[str], np.ndarray, np.ndarray]:
-    """The motifs, in order of first appearance, with the shown values and
-    q-values of each pair in symmetric matrices, NaN where untested."""
+    """The motifs in order of first appearance, and the shown values and
+    q-values of each pair as symmetric matrices. Untested pairs are NaN."""
     a = results["motif_a"].cast(pl.String).fill_null("None").to_list()
     b = results["motif_b"].cast(pl.String).fill_null("None").to_list()
     motifs = list(dict.fromkeys(a + b))
@@ -362,10 +368,10 @@ def plot_coocc(
     """Draw motif co-occurrence from [`motif_coocc()`][universalmotif.motif_coocc] as a heatmap.
 
     Every pair of motifs is a cell, filled the same on both sides of the
-    diagonal with the log2 odds ratio, on a scale centred on zero, or with
-    the ``-log10`` q-value or P-value. Pairs with q-values at or below
-    ``cutoff`` are marked with a dot, while untested pairs and the diagonal,
-    unless the table has self pairs, are left grey. Odds ratios of zero or
+    diagonal. The fill is the log2 odds ratio on a scale centred on zero,
+    or the ``-log10`` q-value or P-value. Pairs with q-values at or below
+    ``cutoff`` are marked with a dot. Untested pairs are left grey, as is
+    the diagonal unless the table has self pairs. Odds ratios of zero or
     infinity are drawn at the ends of the scale.
 
     Parameters
@@ -377,15 +383,18 @@ def plot_coocc(
     cutoff
         The q-value at or below which pairs are marked.
     order
-        ``"cluster"`` to order motifs by average-linkage clustering of their
-        rows of shown values, ``"input"`` to keep them in the order they
-        first appear in ``results``, or a list of motif names, which can
-        leave some motifs out.
+        How to order the motifs.
+
+        - ``"cluster"``: by average-linkage clustering of their rows of
+          shown values.
+        - ``"input"``: in the order they first appear in ``results``.
+        - A list of motif names, which can leave some motifs out.
     cmap
-        A matplotlib colour map, by default a diverging one for odds ratios
-        and a sequential one otherwise.
+        A matplotlib colour map. The default is a diverging one for odds
+        ratios and a sequential one otherwise.
     ax
-        Axes to draw into. They are returned, and otherwise a new figure is.
+        Axes to draw into, which are then returned. Otherwise a new figure
+        is returned.
 
     Examples
     --------
@@ -416,9 +425,10 @@ def plot_coocc(
         idx = list(range(len(motifs)))
         if order == "cluster" and len(motifs) > 2:
             # Untested pairs count as zero, which is no association for log
-            # odds ratios and a P-value of 1 otherwise, infinite log odds as
-            # the largest finite one, and a missing diagonal as the strongest
-            # association, so that two motifs found together end up close.
+            # odds ratios and a P-value of 1 otherwise. Infinite log odds
+            # count as the largest finite one. A missing diagonal counts as
+            # the strongest association, so two motifs found together end
+            # up close.
             finite = np.isfinite(vals)
             big = np.abs(vals[finite]).max() if finite.any() else 1.0
             rows = np.clip(np.nan_to_num(vals, nan=0.0), -big, big)

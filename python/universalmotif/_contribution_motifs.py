@@ -43,8 +43,8 @@ _MIN_GAPPED_TARGET = 30
 # Hit thresholds for motifs with no hit within a seqlet: scan_contributions()'s
 # defaults.
 _DEFAULT_THRESHOLDS = (0.7, 0.5)
-# The least similarity, the cosine with the CWM, of a hit, and of the median
-# site of a motif in the seqlets for the motif to be kept.
+# The least similarity to the CWM, as a cosine, for a hit. A motif's median
+# site in the seqlets must also reach it for the motif to be kept.
 _MIN_SIMILARITY = 0.5
 # The fewest letters between the parts of a composite motif.
 _MIN_SPACER = 2
@@ -57,12 +57,13 @@ class ContributionMotifs:
     """The result of
     [`contribution_motifs()`][universalmotif.contribution_motifs].
 
-    ``motifs`` has one row per motif kept, in the order they were chosen,
-    and ``seqlets`` the seqlets they were found in and chosen to reach.
-    ``ppms`` and ``cwms`` give the motifs as lists, ``thresholds`` their hit
-    thresholds, and ``hits`` holds the hits of the CWMs in the scores.
-    ``patterns`` gathers motifs with similar CWMs, such as spellings of
-    one factor's site, under the one that reaches the most seqlets.
+    - ``motifs`` has one row per motif kept, in the order they were chosen.
+    - ``seqlets`` holds the seqlets they were found in and chosen to reach.
+    - ``ppms`` and ``cwms`` give the motifs as lists.
+    - ``thresholds`` gives their hit thresholds.
+    - ``hits`` holds the hits of the CWMs in the scores.
+    - ``patterns`` gathers motifs with similar CWMs, such as spellings of
+      one factor's site, under the one that reaches the most seqlets.
     """
 
     motifs: pl.DataFrame
@@ -90,12 +91,18 @@ class ContributionMotifs:
 
     @property
     def patterns(self) -> pl.DataFrame:
-        """One row per pattern, in order of the seqlets it reaches: its
-        ``pattern`` name, ``sign``, ``representative`` (the member reaching
-        the most seqlets) and that motif's ``consensus``, ``seqlets``, the
-        seqlets any member's sequence matches reach, ``share``, those as a
-        share of the seqlets of its sign, the names of its ``members``, the representative first, and the
-        representative's PPM in ``motif`` and CWM in ``cwm``."""
+        """One row per pattern, in order of the seqlets it reaches.
+
+        The columns are these.
+
+        - ``pattern``, its name, and ``sign``.
+        - ``representative``, the member reaching the most seqlets, and
+          that motif's ``consensus``.
+        - ``seqlets``, the seqlets that any member's sequence matches reach.
+        - ``share``, those seqlets as a share of the seqlets of its sign.
+        - ``members``, the names of its members, the representative first.
+        - ``motif`` and ``cwm``, the representative's PPM and CWM.
+        """
         t = self.motifs.with_row_index("_row").sort("seqlets", "_row", descending=[True, False])
         rep = t.group_by("pattern", maintain_order=True).first()
         members = t.group_by("pattern", maintain_order=True).agg(members=pl.col("name"))
@@ -120,13 +127,19 @@ class ContributionMotifs:
                top: int = 3, qvalue: float = 0.05, title: str = "Motifs from contribution scores",
                nthreads: int | None = None) -> str:
         """A report of the patterns as one self-contained HTML page, like
-        TF-MoDISco's: for each pattern, the logos of its leading motif's CWM
-        and of its PPM as information content, the seqlets it reaches, its
-        hits, and with a ``database``
-        such as JASPAR the ``top`` database motifs it resembles most by
-        [`name_motifs()`][universalmotif.name_motifs], then each of its
-        members. The page is returned, and written to ``path`` when one is
-        given.
+        TF-MoDISco's.
+
+        Each pattern's row shows the following.
+
+        - The logos of its leading motif's CWM, and of its PPM as
+          information content.
+        - The seqlets it reaches, and its hits.
+        - With a ``database`` such as JASPAR, the ``top`` database motifs
+          it resembles most by
+          [`name_motifs()`][universalmotif.name_motifs].
+        - Each of its members.
+
+        The page is returned, and written to ``path`` when one is given.
         """
         from ._api import motif_rc
         from ._compare import name_motifs
@@ -359,9 +372,10 @@ def _cwms(hits: pl.DataFrame, observed: Any) -> dict:
 
 def _thresholds(hits: pl.DataFrame, observed: Any, cwms: dict, quantile: float) -> dict:
     """Hit thresholds for scan_contributions() from each motif's hits in the
-    seqlets, scored as it scores a window: the ``quantile`` of their
-    similarity, the cosine of their scores with the CWM, and of their
-    importance, the sum of their absolute scores as a share of the CWM's."""
+    seqlets, scored as it scores a window. They are the ``quantile`` of the
+    hits' similarity, the cosine of their scores with the CWM, and of their
+    importance. Importance is the sum of their absolute scores as a share
+    of the CWM's."""
     hits = (hits.unique(["motif", "sequence_i", "start", "strand"], maintain_order=True)
             .with_columns(w=pl.col("end") - pl.col("start"))
             .filter(pl.col("w") == pl.col("w").mode().min().over("motif"))
@@ -428,105 +442,107 @@ def contribution_motifs(
     """Find the motifs a sequence model relies on, from its contribution
     scores.
 
-    The steps are those of the functions named, with options suited to
-    attributions:
+    Each step uses one of the functions named below, with options suited
+    to attributions.
 
-    1. Seqlets are called in the scores with
-       [`call_seqlets()`][universalmotif.call_seqlets], unless ``seqlets``
-       are given, such as those of
-       [`read_seqlets()`][universalmotif.read_seqlets].
+    1. [`call_seqlets()`][universalmotif.call_seqlets] calls seqlets in the
+       scores. Seqlets can instead be given as ``seqlets``, such as those
+       of [`read_seqlets()`][universalmotif.read_seqlets].
     2. [`motif_finder()`][universalmotif.motif_finder] searches the seqlets'
-       letters, widened to at least 20, against twice as many windows of
-       the same widths from the sequences away from any seqlet. With
-       ``hypothetical`` scores, it also searches the seqlets rewritten in
-       the letters the model prefers by
-       [`idealize_sequences()`][universalmotif.idealize_sequences], which
+       letters, widened to at least 20. The background is twice as many
+       windows of the same widths, taken from the sequences away from any
+       seqlet. With ``hypothetical`` scores, it also searches the seqlets
+       rewritten in the letters the model prefers by
+       [`idealize_sequences()`][universalmotif.idealize_sequences]. This
        finds degenerate sites, such as spaced palindromes, whose letters
        vary too much for a plain search.
     3. With ``stability``, each search is rerun that many times on half of
-       the seqlets, and motifs found again in fewer than ``min_stability``
-       of the reruns are left out.
+       the seqlets. Motifs found again in fewer than ``min_stability`` of
+       the reruns are left out.
     4. With ``refine``, [`refine_motifs()`][universalmotif.refine_motifs]
        rebuilds every motif from its hits in the seqlets of the real
        sequences.
-    5. [`select_motifs()`][universalmotif.select_motifs] keeps the motifs
-       that each reach at least ``min_gain`` of the seqlets not reached by
-       those before them, leaving out, with ``max_similarity``, those whose
-       CWMs repeat one already kept, the CWMs being the mean contributions
-       at their hits in the seqlets.
+    5. [`select_motifs()`][universalmotif.select_motifs] keeps each motif
+       that reaches at least ``min_gain`` of the seqlets not reached by
+       those before it. With ``max_similarity``, it also leaves out motifs
+       whose CWMs repeat one already kept. A motif's CWM is the mean
+       contribution at its hits in the seqlets.
     6. With ``rounds`` of 2 or more, the searches are run again on the
-       seqlets that no motif kept reaches, and everything found so far is
-       refined and selected again. Rare motifs, a smaller share of all the
-       seqlets than of those left over, are found more reliably this way.
+       seqlets that no kept motif reaches. Everything found so far is then
+       refined and selected again. Rare motifs make up a larger share of
+       the leftover seqlets than of all of them, so this finds them more
+       reliably.
     7. With ``gapped``,
        [`gapped_motif_finder()`][universalmotif.gapped_motif_finder]
-       searches the seqlets widened to 30 letters for composite motifs,
-       made of two parts at least 2 letters apart. Each one's gap range is
-       cut to the spacings around its commonest that hold at least half as
-       many hits, and it is kept when it adds ``min_gain`` of the seqlets
-       to those reached. Since one of its parts is often a motif kept
-       already, its CWM is only compared with those of other composites.
-    8. With ``hits``, the motifs' CWMs are matched against all the scores
-       by [`scan_contributions()`][universalmotif.scan_contributions], with
-       thresholds for each motif set from its hits within the seqlets as
+       searches the seqlets, widened to 30 letters, for composite motifs
+       made of two parts at least 2 letters apart. Each composite's gap
+       range is cut to the spacings around its commonest that hold at least
+       half as many hits. It is kept when it adds ``min_gain`` of the
+       seqlets to those reached. One of its parts is often a motif kept
+       already, so its CWM is only compared with those of other composites.
+    8. With ``hits``,
+       [`scan_contributions()`][universalmotif.scan_contributions] matches
+       the motifs' CWMs against all the scores. Each motif's thresholds
+       come from its hits within the seqlets, as
        [`modisco_thresholds()`][universalmotif.modisco_thresholds] sets
-       them from a pattern's seqlets: the ``hit_quantile`` of their
-       similarity and of their importance, with a similarity of at least
-       0.5. Motifs with no hit within a seqlet, such as composites, whose
-       parts are often seqlets of their own, take the defaults of
-       ``scan_contributions()``, and motifs whose median site in the
-       seqlets has a similarity under 0.5, whose sites share no shape of
-       contribution, are left out.
+       them from a pattern's seqlets. They are the ``hit_quantile`` of the
+       hits' similarity and of their importance, with a similarity of at
+       least 0.5. Motifs with no hit within a seqlet take the defaults of
+       ``scan_contributions()`` instead. Composites are typical of these,
+       as their parts are often seqlets of their own. Motifs whose median
+       site in the seqlets has a similarity under 0.5 are left out, since
+       their sites share no shape of contribution.
 
-    Motifs are finally gathered into patterns, as TF-MoDISco gathers
-    seqlets: in order of the seqlets they reach, each motif joins the first
-    pattern whose leading motif's CWM it is at least ``pattern_similarity``
-    like, so that a factor's site found in several spellings becomes one
-    pattern with those spellings as its members. Composites lead patterns
-    of their own. Every motif is kept and scanned for whatever its pattern;
-    the patterns only arrange them.
+    Finally, motifs are gathered into patterns, as TF-MoDISco gathers
+    seqlets. In order of the seqlets they reach, each motif joins the first
+    pattern whose leading motif's CWM is at least ``pattern_similarity``
+    like its own. A factor's site found in several spellings thus becomes
+    one pattern, with those spellings as its members. Composites lead
+    patterns of their own. Every motif is kept and scanned for, whatever
+    its pattern, as the patterns only arrange them.
 
     Each sign of ``sign`` is searched on its own. The defaults aim at
-    finding the patterns a model has learned, much as TF-MoDISco does, and
-    keep rarer motifs at the cost of reaching fewer seqlets with each; for
-    a short list of motifs that reach as many seqlets as possible, use
+    finding the patterns a model has learned, much as TF-MoDISco does.
+    They keep rarer motifs at the cost of reaching fewer seqlets with each.
+    For a short list of motifs that reach as many seqlets as possible, use
     ``min_gain=0.01`` and ``max_similarity=None``. Rarer motifs, such as
     those found only in idealized seqlets, are often missing from the
-    half-sized reruns, so ``stability`` trades them for motifs that other
-    samples of regions would give too.
+    half-sized reruns. Setting ``stability`` therefore trades them for
+    motifs that other samples of regions would give too.
 
-    On the contribution scores of a chromBPNet model of chromatin
-    accessibility in K562 cells, over 21,000 regions, the defaults with
-    hypothetical scores recovered more of the model's published TF-MoDISco
-    patterns closely (a CWM cosine of 0.8 or more) than TF-MoDISco did on
-    the same regions, 28 against 25, in 15 seconds against its 40 minutes.
-    These included the NFI palindrome, held by about 1% of the seqlets, and
-    the TAL1–GATA composite, CTG then WGATAA 7 or 8 letters on. Without
-    hypothetical scores, NFI was found in only some of the runs. The hits
-    were about as many as those of the published CWMs at the thresholds
-    of ``modisco_thresholds()``, and fewer of them fell outside the
-    published seqlets. Over all 187,000 of the model's regions, the call
-    took two minutes on two threads, with a peak of 2.6 GB, half of it the
-    scores and sequences themselves.
+    One test used the contribution scores of a chromBPNet model of
+    chromatin accessibility in K562 cells, over 21,000 regions. With
+    hypothetical scores, the defaults closely recovered 28 of the model's
+    published TF-MoDISco patterns, against 25 for TF-MoDISco on the same
+    regions. Closely here means a CWM cosine of 0.8 or more. The call took
+    15 seconds, against 40 minutes for TF-MoDISco. The patterns found
+    included the NFI palindrome, held by about 1% of the seqlets. They also
+    included the TAL1–GATA composite, which is CTG then WGATAA 7 or 8
+    letters on. Without hypothetical scores, NFI was found in only some of
+    the runs. The hits were about as many as those of the published CWMs
+    at the thresholds of ``modisco_thresholds()``, and fewer of them fell
+    outside the published seqlets. Over all 187,000 of the model's regions,
+    the call took two minutes on two threads. Its memory peaked at 2.6 GB,
+    half of it the scores and sequences themselves.
 
     Scores from a model's profile head are spikier than those of its counts
-    head, a few strong positions with weak ones between, and the default
-    seqlets, every stretch of 4 or more of whose positions must stand out,
-    miss many of their sites. Seqlets called with
+    head, with a few strong positions and weak ones between. In the default
+    seqlets, every stretch of 4 or more positions must stand out, so they
+    miss many of these sites. Seqlets called with
     ``call_seqlets(scores, sequences, min_len=2, threshold=0.05)`` and given
-    as ``seqlets`` suit them better: on the profile head of the K562 model,
-    over 30,000 regions, they recovered 23 of its 73 published patterns at
-    a cosine of 0.8 against 12 with the defaults. TF-MoDISco's profile-head
-    patterns are wide, with much of their weight in the flanks, and many
-    are matched by our motifs only in their cores.
+    as ``seqlets`` suit them better. On the profile head of the K562 model,
+    over 30,000 regions, these recovered 23 of its 73 published patterns at
+    a cosine of 0.8, against 12 with the defaults. TF-MoDISco's
+    profile-head patterns are wide, with much of their weight in the
+    flanks. Our motifs match many of them only in their cores.
 
     The motifs found in different samples of regions differ mostly in the
-    rarer ones: in three random 70% samples of the 30,000 regions, the
-    same 25 published patterns were recovered every time and up to four
-    others only some of the time, while TF-MoDISco recovered the same 25
-    each time and no others. Keeping fewer near-identical motifs, with a
-    lower ``max_similarity``, made the motifs themselves match more
-    often across samples but lost some of those patterns.
+    rarer ones. In three random 70% samples of the 30,000 regions, the same
+    25 published patterns were recovered every time. Up to four others
+    were recovered only some of the time. TF-MoDISco recovered the same 25
+    each time and no others. A lower ``max_similarity`` keeps fewer
+    near-identical motifs. This made the motifs themselves match more often
+    across samples, but lost some of those patterns.
 
     Parameters
     ----------
@@ -537,18 +553,19 @@ def contribution_motifs(
         or an array of shape (sequences, 4, length) or (sequences,
         length).
     sequences
-        The sequences the scores are for, as text or one-hot encoded; not
-        needed with ContributionScores, or with projected scores, zero for
-        all but the letter present.
+        The sequences the scores are for, as text or one-hot encoded. They
+        are not needed with ContributionScores, or with projected scores,
+        which are zero for all but the letter present.
     hypothetical
-        Hypothetical scores, the score of every letter at every position,
-        for the search on idealized seqlets: an array of shape (sequences,
-        4, length) or a ContributionScores of hypothetical scores.
+        Hypothetical scores, giving the score of every letter at every
+        position, for the search on idealized seqlets. They can be an array
+        of shape (sequences, 4, length) or a ContributionScores of
+        hypothetical scores.
     seqlets
-        Seqlets to use instead of calling them, as a table with
-        ``sequence_i`` (or ``sequence``, naming the sequences), ``start`` and
-        ``end`` columns, and a ``sign`` column of ``+`` or ``-`` to search
-        both signs.
+        Seqlets to use instead of calling them, as a table with ``start``
+        and ``end`` columns and a ``sequence_i`` column, or a ``sequence``
+        column naming the sequences. To search both signs, add a ``sign``
+        column of ``+`` or ``-``.
     decoys
         Decoy scores for calling seqlets, such as the model's contributions
         for shuffled sequences; see ``call_seqlets()``.
@@ -592,18 +609,25 @@ def contribution_motifs(
     -------
     ContributionMotifs
         Its ``motifs`` table has one row per motif kept, in the order chosen
-        and with composites last, with the columns ``name``, ``sign``,
-        ``source`` (``seqlets``, ``idealized`` or ``gapped``), ``consensus``,
-        ``width``, ``seqlets`` (those its hits reach), ``gain`` and
-        ``cumulative`` (the shares of the seqlets of its sign it adds and
-        that the motifs up to it reach), ``stability`` with reruns,
-        ``min_similarity`` and ``min_importance``, its hit thresholds, and
-        the motif as a PPM in ``motif`` and as a CWM in ``cwm``, that of a
-        composite at its commonest spacing, and ``pattern``, the pattern it
-        belongs to, which ``patterns`` lists. Names of motifs from later
-        rounds start with ``r``, and those of composites with ``g``. Its
-        ``seqlets`` table holds the seqlets searched, and ``hits`` the hits
-        of the CWMs, as ``scan_contributions()`` gives them.
+        and with composites last. The columns are these.
+
+        - ``name``. Names of motifs from later rounds start with ``r``, and
+          those of composites with ``g``.
+        - ``pattern``, the pattern it belongs to, which ``patterns`` lists.
+        - ``sign``.
+        - ``source``, one of ``seqlets``, ``idealized`` or ``gapped``.
+        - ``consensus`` and ``width``.
+        - ``seqlets``, the seqlets its hits reach.
+        - ``gain`` and ``cumulative``, the shares of the seqlets of its sign
+          that it adds and that the motifs up to it reach.
+        - ``stability``, with reruns.
+        - ``min_similarity`` and ``min_importance``, its hit thresholds.
+        - ``motif``, the motif as a PPM.
+        - ``cwm``, the motif as a CWM, at its commonest spacing for a
+          composite.
+
+        Its ``seqlets`` table holds the seqlets searched, and ``hits`` the
+        hits of the CWMs as ``scan_contributions()`` gives them.
 
     Examples
     --------
@@ -678,9 +702,9 @@ def contribution_motifs(
             kept += _gapped_pass(seqs, sub, sites, si, lengths, observed, reached, label, sg, max_gap, min_gain,
                                  max_similarity, refine, rng, nthreads)
         if kept:
-            # Thresholds come from the hits within the seqlets. Motifs wider than their seqlets, such as
-            # composites, whose parts may be seqlets of their own, take the defaults instead, as hits only
-            # overlapping a seqlet are mostly positions the model gave little weight.
+            # Thresholds come from the hits within the seqlets. Motifs wider than their seqlets take the
+            # defaults instead, since hits only overlapping a seqlet are mostly positions the model gave
+            # little weight. Composites are typical of these, as their parts may be seqlets of their own.
             th = _thresholds(_site_hits([r["motif"] for r in kept], seqs, sites, nthreads, within=True), observed,
                              {r["name"]: r["cwm"] for r in kept}, hit_quantile)
             # A motif whose sites in the seqlets mostly differ in shape from its CWM is not one pattern.
@@ -740,8 +764,8 @@ def _search(part, sub, sources, lengths, label, prefix, min_width, max_width, nm
 def _windows(seqs: list[str], sites: pl.DataFrame, motifs: list[Motif]) -> tuple[list[str], pl.DataFrame]:
     """The stretches of the sequences around the sites, merged where they
     meet, and the sites placed in them, row for row. Every hit that can
-    reach a site lies within its stretch, so refining and selecting motifs
-    on these gives what the whole sequences would, for a fraction of the
+    reach a site lies within its stretch. Refining and selecting motifs on
+    these thus gives what the whole sequences would, for a fraction of the
     scanning."""
     widest = max((m.width + (sum(m.maxgap) if m.isgapped else 0) for m in motifs), default=0)
     # Refinement can widen a motif by a few positions on each side.
@@ -830,10 +854,10 @@ def _scan(table: pl.DataFrame, observed: np.ndarray, seqs: list[str], names: lis
 
 
 def _group(kept: list[dict], label: str, similarity: float | None, nthreads: int) -> None:
-    """Give each kept motif a pattern: in order of the seqlets they reach,
-    each motif joins the first pattern whose representative's CWM it is at
-    least ``similarity`` like, by cosine, or starts a pattern of its own.
-    Composites always start their own, as one of their parts is often
+    """Give each kept motif a pattern. In order of the seqlets they reach,
+    each motif joins the first pattern whose representative's CWM is at
+    least ``similarity`` like its own by cosine, or starts a pattern of its
+    own. Composites always start their own, as one of their parts is often
     another pattern."""
     from ._compare import compare_motifs
 
@@ -856,8 +880,9 @@ def _group(kept: list[dict], label: str, similarity: float | None, nthreads: int
 
 def _narrow(m: Motif, hits: pl.DataFrame) -> Motif | None:
     """A gapped motif with its gap range cut to the spacings around its
-    commonest one that hold at least half as many hits, or None unless its
-    parts are then at least _MIN_SPACER apart, as composite sites are."""
+    commonest one that hold at least half as many hits. None is returned
+    unless its parts are then at least _MIN_SPACER apart, as composite
+    sites are."""
     if len(m.gaploc) != 1:
         return None
     sub = hits.filter(pl.col("motif") == m.name).unique(["sequence_i", "start", "strand"])
@@ -878,10 +903,10 @@ def _gapped_pass(seqs, sub, sites, si, lengths, observed, reached, label, sg, ma
                  refine, rng, nthreads) -> list[dict]:
     """Composite motifs, of two parts at least _MIN_SPACER apart, from
     gapped_motif_finder() on the seqlets widened to fit them. Each must add
-    at least ``min_gain`` of the seqlets to those reached already, and with
-    ``max_similarity`` its CWM must differ from those of the composites kept
-    before it, though not from those of ungapped motifs, which often match
-    one of its parts."""
+    at least ``min_gain`` of the seqlets to those reached already. With
+    ``max_similarity``, its CWM must also differ from those of the
+    composites kept before it. It is not compared with ungapped motifs,
+    which often match one of its parts."""
     from ._compare import compare_motifs
 
     s, e = _widen(sub["start"].to_numpy(), sub["end"].to_numpy(), lengths[si], _MIN_GAPPED_TARGET)

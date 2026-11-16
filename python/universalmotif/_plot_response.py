@@ -133,14 +133,15 @@ def plot_spacing(
     This is the plot for predictions on the sequences made by
     [`site_spacings()`][universalmotif.site_spacings], which writes two
     sites into the same background sequences at a range of spacings. The
-    mean prediction at each spacing is drawn as a line with points, inside
-    a band that shows how certain or how variable it is. With ``baseline``,
-    the model's predictions for the background sequences before any sites
-    were written, each sequence's prediction is taken relative to its own
-    baseline, so that the line is the mean change the pair of sites brings
-    about, with a line at zero for no change. This is the usual way to show
-    such experiments, since it removes the part of each prediction that
-    comes from the background.
+    mean prediction at each spacing is drawn as a line with points. A band
+    around it shows how certain or how variable it is.
+
+    ``baseline`` gives the model's predictions for the background
+    sequences before any sites were written. Each sequence's prediction is
+    then taken relative to its own baseline, so the line is the mean change
+    the pair of sites brings about. A line at zero marks no change. This is
+    the usual way to show such experiments, since it removes the part of
+    each prediction that comes from the background.
 
     A model with several outputs, such as one per cell type or assay, gets
     one line per output in a fixed order of colours, with a legend.
@@ -151,22 +152,23 @@ def plot_spacing(
     ----------
     predictions
         The model's predictions, as a dict from each spacing to the
-        predictions for its sequences, the form
-        [`site_spacings()`][universalmotif.site_spacings] returns with the
+        predictions for its sequences. This is the form
+        [`site_spacings()`][universalmotif.site_spacings] returns, with the
         sequences replaced by predictions. Each holds one value per
         sequence, or an array of shape (sequences, outputs). An array of
         shape (spacings, sequences) or (spacings, sequences, outputs) can be
         given instead, along with ``spacings``. NumPy arrays, lists and
         tensors all work.
     baseline
-        Predictions for the background sequences without sites, in the same
-        order and of the same shape as those for each spacing, or a single
-        number to subtract from every prediction.
+        Predictions for the background sequences without sites, in the
+        same order and of the same shape as those for each spacing. A
+        single number to subtract from every prediction also works.
     spacings, axis
-        The spacing of each row of ``predictions`` when it is an array, and
-        the axis along which spacings run: 0 for (spacings, sequences) and 1
-        for predictions made with sequences first, of shape (sequences,
-        spacings) or (sequences, spacings, outputs).
+        ``spacings`` gives the spacing of each row of ``predictions`` when
+        it is an array. ``axis`` is the axis along which spacings run. It
+        is 0 for (spacings, sequences), and 1 for predictions made with
+        sequences first, of shape (sequences, spacings) or (sequences,
+        spacings, outputs).
     output
         The index or name of the output to draw, or a list of them, for
         models with several outputs. All outputs are drawn by default.
@@ -174,19 +176,22 @@ def plot_spacing(
         Names of the outputs, for the legend and for picking them with
         ``output``.
     band
-        What the band around the mean shows: ``"ci"`` for its 95%
-        confidence interval, ``"se"`` for one standard error either side,
-        ``"sd"`` for one standard deviation of the predictions either side,
-        which shows how much the response varies between backgrounds, or
-        ``None`` for no band.
+        What the band around the mean shows.
+
+        - ``"ci"``: its 95% confidence interval.
+        - ``"se"``: one standard error either side.
+        - ``"sd"``: one standard deviation of the predictions either side,
+          which shows how much the response varies between backgrounds.
+        - ``None``: no band.
     helix, helix_period
-        Mark the period of the DNA double helix, ``helix_period`` base pairs
-        and 10.5 by default, with faint vertical lines, to judge whether the
-        response follows it. The lines pass through the spacing given, as
-        one at which the two sites lie on the same face of the helix, or
-        with ``True`` through the spacing of the strongest mean response.
-        DNA wrapped around nucleosomes, for one, turns a little faster,
-        about every 10.2 to 10.4 base pairs.
+        Mark the period of the DNA double helix with faint vertical lines,
+        to judge whether the response follows it. The period is
+        ``helix_period`` base pairs, 10.5 by default. The lines pass
+        through the spacing given, taken as one at which the two sites lie
+        on the same face of the helix. With ``True`` they pass through the
+        spacing of the strongest mean response. DNA wrapped around
+        nucleosomes, for one, turns a little faster, about every 10.2 to
+        10.4 base pairs.
     colour
         A colour for all lines, or one per output drawn.
     text_size
@@ -194,7 +199,8 @@ def plot_spacing(
     figsize
         The size of a new figure, in inches.
     ax
-        Axes to draw into. They are returned, and otherwise a new figure is.
+        Axes to draw into, which are then returned. Otherwise a new figure
+        is returned.
 
     Returns
     -------
@@ -203,7 +209,7 @@ def plot_spacing(
 
     Examples
     --------
-    A stand-in for a model scores the GC content of a sequence and rewards
+    A stand-in for a model scores the GC content of a sequence. It rewards
     a GATA site and an E-box, more so when their centres are a whole number
     of helical turns apart:
 
@@ -351,8 +357,9 @@ def plot_spacing(
 
 
 def _density(values: np.ndarray, grid: np.ndarray) -> np.ndarray:
-    """A Gaussian kernel density with Scott's bandwidth, from a histogram of
-    fine bins so that large samples cost no more than small ones."""
+    """A Gaussian kernel density with Scott's bandwidth. It is computed from
+    a histogram of fine bins, so large samples cost no more than small
+    ones."""
     n = values.size
     bw = values.std(ddof=1) * n ** (-1 / 5)
     lo, hi = grid[0], grid[-1]
@@ -409,21 +416,21 @@ def plot_marginalization(
 
     This is the plot for predictions on the sequences made by
     [`insert_sites()`][universalmotif.insert_sites], which writes the same
-    sites into every one of a set of background sequences, compared with
-    the predictions for the same sequences before. The distribution of the
-    predictions before is drawn in grey next to that after, in colour, each
-    as a violin or a box marking the quartiles, with a white dot at the
-    mean, and a faint line across the plot at the mean before. Above each
-    distribution after insertion is the mean change in prediction, taken
-    sequence by sequence, and the share of sequences whose prediction went
-    up.
+    sites into every one of a set of background sequences. They are
+    compared with the predictions for the same sequences before.
+
+    The distribution of the predictions before is drawn in grey, next to
+    that after in colour. Each is drawn as a violin or a box marking the
+    quartiles, with a white dot at the mean. A faint line across the plot
+    marks the mean before. Above each distribution after insertion are the
+    mean change in prediction, taken sequence by sequence, and the share of
+    sequences whose prediction went up.
 
     Several insertions can be compared against the same background, for
-    example different motifs or variants of one motif, by giving ``after``
-    as a dict from labels to predictions, which draws one distribution for
-    each next to the shared one before. For a single insertion and a few
-    sequences, thin lines join each sequence's predictions before and
-    after.
+    example different motifs or variants of one motif. Give ``after`` as a
+    dict from labels to predictions to draw one distribution for each, next
+    to the shared one before. For a single insertion and a few sequences,
+    thin lines join each sequence's predictions before and after.
 
     Needs the ``plot`` extra.
 
@@ -444,16 +451,16 @@ def plot_marginalization(
         the output drawn labels the y axis.
     kind
         ``"violin"`` for violins with the quartiles drawn inside them, or
-        ``"box"`` for boxes, which are easier to read for skewed or very
+        ``"box"`` for boxes. Boxes are easier to read for skewed or very
         narrow distributions. Whiskers reach the furthest values within 1.5
         times the interquartile range.
     points
         Draw every sequence as a point. By default only for up to 300
         sequences.
     lines
-        Join each sequence's predictions before and after with a line. By
-        default only for a single insertion and up to 50 sequences; lines
-        need a single insertion.
+        Join each sequence's predictions before and after with a line.
+        Lines need a single insertion, and by default are drawn only for up
+        to 50 sequences.
     colour
         The colour of the distributions after insertion.
     text_size
@@ -461,7 +468,8 @@ def plot_marginalization(
     figsize
         The size of a new figure, in inches.
     ax
-        Axes to draw into. They are returned, and otherwise a new figure is.
+        Axes to draw into, which are then returned. Otherwise a new figure
+        is returned.
 
     Returns
     -------
@@ -470,7 +478,7 @@ def plot_marginalization(
 
     Examples
     --------
-    A stand-in for a model scores the GC content of a sequence and rewards
+    A stand-in for a model scores the GC content of a sequence. It rewards
     a GATA site and an E-box, more so together:
 
     >>> import matplotlib
@@ -574,8 +582,8 @@ def plot_marginalization(
 
 
 def _signed(values: Sequence[float]) -> list[str]:
-    """Changes with their signs, all to the same number of decimals, enough
-    to give the largest three significant figures."""
+    """Changes with their signs, all to the same number of decimals. There
+    are enough decimals to give the largest three significant figures."""
     top = max(abs(v) for v in values)
     places = min(max(0, 2 - math.floor(math.log10(top))), 8) if top > 0 else 0
     out = []

@@ -1,5 +1,7 @@
-"""Column conversions, scoring helpers, column metrics, gap and alphabet
-operations, motif filtering, sequence masking and small helpers."""
+"""Small motif and sequence utilities.
+
+These include column conversions, scoring helpers, column metrics, gap and
+alphabet operations, motif filtering and sequence masking."""
 
 from __future__ import annotations
 
@@ -64,9 +66,10 @@ def ppm_to_pwm(
     nsites: float = 100.0,
     smooth: bool = True,
 ) -> npt.NDArray[np.float64]:
-    """Convert a column of probabilities to log2 odds against ``bkg``, which
-    is uniform by default. With ``smooth``, the pseudocount is first applied
-    by converting to ``nsites`` counts and back.
+    """Convert a column of probabilities to log2 odds against ``bkg``.
+
+    The background is uniform by default. With ``smooth``, the pseudocount
+    is first applied by converting to ``nsites`` counts and back.
 
     Examples
     --------
@@ -95,9 +98,11 @@ def pwm_to_ppm(position: Sequence[float], bkg: Sequence[float] | None = None) ->
 def ppm_to_icm(
     position: Sequence[float], bkg: Sequence[float] | None = None, relative_entropy: bool = False
 ) -> npt.NDArray[np.float64]:
-    """Convert a column of probabilities to information content, as relative
-    entropy against ``bkg`` if asked. With relative entropy, letters less
-    common than in the background get 0 rather than a negative height.
+    """Convert a column of probabilities to information content.
+
+    With ``relative_entropy``, the heights are relative entropy against
+    ``bkg``. Letters less common than in the background then get 0 rather
+    than a negative height.
 
     Examples
     --------
@@ -137,7 +142,7 @@ def motif_range(motif: Motif, allow_nonfinite: bool = False) -> tuple[float, flo
 
     Scores use the motif's PWM with each entry truncated to three decimals,
     as scanning does. Unless ``allow_nonfinite``, a PWM with ``-inf`` entries
-    gets a pseudocount first; otherwise the lowest score is ``-inf``.
+    gets a pseudocount first. Otherwise the lowest score is ``-inf``.
 
     Examples
     --------
@@ -159,7 +164,7 @@ def motif_score(
     """Scores at fractions of the motif's score range.
 
     With ``threshold_type="total"``, 0 is the lowest possible score and 1 the
-    highest; with ``"fromzero"``, 0 is a score of zero. A single threshold
+    highest. With ``"fromzero"``, 0 is a score of zero. A single threshold
     gives a single score.
 
     Examples
@@ -181,20 +186,21 @@ def motif_score(
 def score_match(
     motif: Motif, match: str | Sequence[str], allow_nonfinite: bool = False
 ) -> float | npt.NDArray[np.float64]:
-    """The score of each word, which must be as long as the motif, with each
-    PWM entry truncated to three decimals and then added up, so that a word
-    scores exactly what [`scan_sequences()`][universalmotif.scan_sequences]
-    reports for it. As in
-    [`motif_pvalue()`][universalmotif.motif_pvalue], a motif whose PWM would
-    have infinite values, such as a count matrix without a pseudocount, gets
-    its pseudocount reapplied first, or 1 if it has none, unless
-    ``allow_nonfinite``.
+    """The score of each word, which must be as long as the motif.
 
-    For a gapped motif, a word may hold a spacer in each gap, whose letters
-    are not scored, as in scanning: either marked with dots, as in the
-    matches of ``scan_sequences()``, or, for a motif with one gap, as the
-    letters beyond the motif's width. Spacers must have a size within their
-    gap's range.
+    Each PWM entry is truncated to three decimals before they are added up.
+    A word thus scores exactly what
+    [`scan_sequences()`][universalmotif.scan_sequences] reports for it. Some
+    motifs have a PWM with infinite values, such as a count matrix without a
+    pseudocount. Unless ``allow_nonfinite``, these get their pseudocount
+    reapplied first, or 1 if they have none, as in
+    [`motif_pvalue()`][universalmotif.motif_pvalue].
+
+    For a gapped motif, a word may hold a spacer in each gap. As in
+    scanning, the spacer's letters are not scored. Spacers are either marked
+    with dots, as in the matches of ``scan_sequences()``, or, for a motif
+    with one gap, are the letters beyond the motif's width. Spacers must
+    have a size within their gap's range.
 
     Examples
     --------
@@ -242,9 +248,10 @@ def _without_spacers(m: Motif, word: str) -> str:
 
 
 def get_scores(motif: Motif, allow_nonfinite: bool = False) -> npt.NDArray[np.float64]:
-    """Every possible score of the motif, highest first. There are as many as
-    the alphabet size to the power of the width, so this is for small
-    motifs.
+    """Every possible score of the motif, highest first.
+
+    There are as many as the alphabet size to the power of the width, so
+    this is for small motifs.
 
     Examples
     --------
@@ -258,9 +265,10 @@ def get_scores(motif: Motif, allow_nonfinite: bool = False) -> npt.NDArray[np.fl
 
 
 def get_matches(motif: Motif, score: float, allow_nonfinite: bool = False) -> list[str]:
-    """Every word scoring at least ``score``. A score of ``inf``, which
-    [`motif_pvalue()`][universalmotif.motif_pvalue] gives for an
-    unreachable P-value, has no matches.
+    """Every word scoring at least ``score``.
+
+    [`motif_pvalue()`][universalmotif.motif_pvalue] gives a score of
+    ``inf`` for an unreachable P-value, and that score has no matches.
 
     Examples
     --------
@@ -276,8 +284,9 @@ def get_matches(motif: Motif, score: float, allow_nonfinite: bool = False) -> li
 def prob_match(
     motif: Motif, match: str | Sequence[str], allow_zero: bool = True
 ) -> float | npt.NDArray[np.float64]:
-    """The probability of each word under the motif's background. Each word
-    must have as many letters as the motif has positions. Unless
+    """The probability of each word under the motif's background.
+
+    Each word must have as many letters as the motif has positions. Unless
     ``allow_zero``, a background with zeros gets a small pseudocount first.
 
     Examples
@@ -329,11 +338,13 @@ def compare_columns(
     nsites1: float = 100.0,
     nsites2: float = 100.0,
 ) -> float:
-    """Compare two columns with one of the comparison metrics: ``"PCC"``,
-    ``"EUCL"``, ``"SW"``, ``"KL"``, ``"WEUCL"``, ``"ALLR"``, ``"BHAT"``,
-    ``"HELL"``, ``"WPCC"``, ``"SEUCL"``, ``"MAN"`` or ``"ALLR_LL"``. The
-    backgrounds are uniform by default and are used by the weighted metrics
-    and ALLR, which also uses the site counts.
+    """Compare two columns with one of the comparison metrics.
+
+    ``method`` is one of ``"PCC"``, ``"EUCL"``, ``"SW"``, ``"KL"``,
+    ``"WEUCL"``, ``"ALLR"``, ``"BHAT"``, ``"HELL"``, ``"WPCC"``,
+    ``"SEUCL"``, ``"MAN"`` or ``"ALLR_LL"``. The backgrounds are uniform by
+    default. They are used by the weighted metrics and by ALLR, which also
+    uses the site counts.
 
     Examples
     --------
@@ -354,10 +365,14 @@ def compare_columns(
 
 
 def average_ic(motifs: Motif | Iterable[Motif], average: str = "a.mean") -> float | npt.NDArray[np.float64]:
-    """The average information content of the motifs' positions, taken as
-    the arithmetic mean with ``"a.mean"``, the geometric mean with
-    ``"g.mean"``, the median with ``"median"`` or the Fisher z-transform
-    with ``"fzt"``.
+    """The average information content of the motifs' positions.
+
+    ``average`` picks how it is taken.
+
+    - ``"a.mean"``: the arithmetic mean
+    - ``"g.mean"``: the geometric mean
+    - ``"median"``: the median
+    - ``"fzt"``: the Fisher z-transform
 
     Examples
     --------
@@ -382,9 +397,11 @@ def _ints(x: int | Sequence[int], what: str) -> list[int]:
 
 def add_gap(motifs, gaploc: int | Sequence[int] | None = None, mingap: int | Sequence[int] = 1,
             maxgap: int | Sequence[int] = 5):
-    """Add gaps to motifs. Gap ``i`` comes after the first ``gaploc[i]``
-    positions, in the middle of the motif by default, and spans
-    ``mingap[i]`` to ``maxgap[i]`` positions; shorter lists are recycled.
+    """Add gaps to motifs.
+
+    Gap ``i`` comes after the first ``gaploc[i]`` positions, in the middle
+    of the motif by default. It spans ``mingap[i]`` to ``maxgap[i]``
+    positions. Shorter lists are recycled.
 
     Examples
     --------
@@ -400,10 +417,11 @@ def add_gap(motifs, gaploc: int | Sequence[int] | None = None, mingap: int | Seq
 
 
 def ungap(motifs, delete: bool = False):
-    """Turn motifs' gaps off. Unless ``delete``, the gap positions and sizes
-    are kept, and passing them back to [`add_gap()`][universalmotif.add_gap],
-    as in ``add_gap(m, gaploc=m.gaploc, mingap=m.mingap, maxgap=m.maxgap)``,
-    turns the gaps on again.
+    """Turn motifs' gaps off.
+
+    Unless ``delete``, the gap positions and sizes are kept. Passing them
+    back to [`add_gap()`][universalmotif.add_gap] turns the gaps on again,
+    as in ``add_gap(m, gaploc=m.gaploc, mingap=m.mingap, maxgap=m.maxgap)``.
 
     Examples
     --------
@@ -456,8 +474,8 @@ def filter_motifs(
 
     Text filters keep motifs whose value is one of those given. ``width``,
     ``icscore`` and ``nsites`` are minimums, and ``pval``, ``qval`` and
-    ``eval`` maximums; motifs without the value are dropped. ``extrainfo``
-    keeps motifs with every one of its entries.
+    ``eval`` are maximums. Motifs without the value are dropped.
+    ``extrainfo`` keeps motifs with every one of its entries.
 
     Examples
     --------
@@ -501,10 +519,12 @@ def _reshape(sequences, values: list[str]):
 
 def mask_seqs(sequences, pattern: str, rc: bool = False, letter: str = "-", alphabet: str = "DNA"):
     """Replace every occurrence of ``pattern`` in the sequences with
-    ``letter``. Overlapping occurrences are all masked and letters match in
-    either case. With ``rc``, occurrences of the reverse complement of DNA
-    and RNA patterns are masked as well. The sequences come back in the form
-    they were given, whether a string, a list or a dict.
+    ``letter``.
+
+    Overlapping occurrences are all masked, and letters match in either
+    case. With ``rc``, occurrences of the reverse complement of DNA and RNA
+    patterns are masked as well. The sequences come back in the form they
+    were given, whether a string, a list or a dict.
 
     Examples
     --------
@@ -525,15 +545,17 @@ def mask_seqs(sequences, pattern: str, rc: bool = False, letter: str = "-", alph
 def mask_ranges(sequences: Mapping[str, str], ranges, letter: str = "-") -> dict[str, str]:
     """Replace the positions in ``ranges`` with ``letter``.
 
-    ``sequences`` maps names to sequences and ``ranges`` names positions on
-    them, counted from 0 with the end left out as in a slice, either as
-    ``(chrom, start, end)`` tuples or
-    as a DataFrame with a ``start`` column, an ``end``, ``stop`` or
-    ``width`` column, and the sequence names in a column called ``chrom``,
-    ``seqnames``, ``sequence``, ``chr`` or ``chromosome``, so that the hits
-    from [`scan_sequences()`][universalmotif.scan_sequences] can be masked
-    directly. Ranges may overlap; ranges on unknown sequences or past their
-    ends are errors.
+    ``sequences`` maps names to sequences, and ``ranges`` names positions on
+    them. Positions count from 0 with the end left out, as in a slice.
+    ``ranges`` can be ``(chrom, start, end)`` tuples or a DataFrame. A
+    DataFrame needs a ``start`` column and an ``end``, ``stop`` or ``width``
+    column. It also needs the sequence names in a column called ``chrom``,
+    ``seqnames``, ``sequence``, ``chr`` or ``chromosome``. The hits from
+    [`scan_sequences()`][universalmotif.scan_sequences] can thus be masked
+    directly.
+
+    Ranges may overlap. Ranges on unknown sequences or past their ends are
+    errors.
 
     Examples
     --------
@@ -567,23 +589,26 @@ def mask_complexity(
     return_ranges: bool = False,
     nthreads: int | None = None,
 ):
-    """Mask the low-complexity regions of DNA or RNA sequences, such as
-    homopolymers, microsatellites and other short repeats, which otherwise
-    give many overlapping hits to motifs rich in the same letters.
+    """Mask the low-complexity regions of DNA or RNA sequences.
+
+    Such regions include homopolymers, microsatellites and other short
+    repeats. Unmasked, they give many overlapping hits to motifs rich in the
+    same letters.
 
     Regions are found with the symmetric DUST algorithm (Morgulis et al.
-    2006) as sdust implements it, and match those of NCBI's dustmasker with
+    2006) as sdust implements it. They match those of NCBI's dustmasker with
     the same ``window`` and ``threshold``, 64 and 20 by default. A higher
-    threshold masks less. Letters other than A, C, G, T and U, in either
-    case, split a sequence into parts scored on their own, so that an N gap
-    or an earlier mask does not join the sequence either side of it.
-    dustmasker instead scores across them, and caps the window at 64. With
-    ``lowercase``, lowercase letters are masked as well, as soft-masked
-    genomes mark their repeats.
+    threshold masks less.
+
+    Letters other than A, C, G, T and U, in either case, split a sequence
+    into parts scored on their own. An N gap or an earlier mask thus does
+    not join the sequence either side of it. dustmasker instead scores
+    across them, and caps the window at 64. With ``lowercase``, lowercase
+    letters are masked as well, as soft-masked genomes mark their repeats.
 
     When masking sequences before an enrichment test, mask the targets and
-    the background in the same way, and if the background is made by
-    shuffling the targets, mask after shuffling.
+    the background in the same way. If the background is made by shuffling
+    the targets, mask after shuffling.
 
     Parameters
     ----------
@@ -597,13 +622,13 @@ def mask_complexity(
     letter
         The masking letter.
     return_ranges
-        Return the regions instead of the masked sequences, as a DataFrame
-        with ``sequence``, ``start`` and ``end`` columns counted from 0 with
-        the end left out, which
-        [`mask_ranges()`][universalmotif.mask_ranges] takes. Sequences
-        given as a string or a list are named ``seq1``, ``seq2`` and so on.
+        Return the regions instead of the masked sequences. They come as a
+        DataFrame with ``sequence``, ``start`` and ``end`` columns, counted
+        from 0 with the end left out, which
+        [`mask_ranges()`][universalmotif.mask_ranges] takes. Sequences given
+        as a string or a list are named ``seq1``, ``seq2`` and so on.
     nthreads
-        Threads used to mask, by default the package setting from
+        Threads used to mask. By default this is the package setting from
         [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
@@ -656,9 +681,10 @@ def mask_complexity(
 
 
 def shuffle_string(string: str, k: int = 2, method: str = "euler", seed: int | None = None) -> str:
-    """Shuffle one string while keeping its k-mer counts, dinucleotides by
-    default, as [`shuffle_sequences()`][universalmotif.shuffle_sequences]
-    does.
+    """Shuffle one string while keeping its k-mer counts.
+
+    Dinucleotide counts are kept by default, as
+    [`shuffle_sequences()`][universalmotif.shuffle_sequences] does.
 
     Examples
     --------
@@ -675,10 +701,11 @@ def shuffle_string(string: str, k: int = 2, method: str = "euler", seed: int | N
 
 def slide_fun(string: str, fun: Callable[[str], Any], window: int = 1, overlap: int = 0,
               return_incomp: bool = True) -> list[Any]:
-    """Apply ``fun`` to each sliding window of ``string``, as made by
-    [`window_string()`][universalmotif.window_string]. A window longer than the
-    string is shortened to it when ``return_incomp`` is set and is an error
-    otherwise.
+    """Apply ``fun`` to each sliding window of ``string``.
+
+    Windows are made by [`window_string()`][universalmotif.window_string].
+    A window longer than the string is shortened to it when
+    ``return_incomp`` is set, and is an error otherwise.
 
     Examples
     --------
@@ -720,12 +747,19 @@ def meme_alph(
 ) -> str | None:
     """Write a MEME custom alphabet definition.
 
-    ``core`` holds the alphabet's letters and ``complements`` their
-    complements, if it has any. ``ambiguity`` maps ambiguous letters to the
-    core letters they stand for, ``like`` is ``"DNA"``, ``"RNA"`` or
-    ``"PROTEIN"`` for alphabets that extend one, and ``letter_names`` and
-    ``colours`` describe each letter, with colours as hexadecimal RGB. The
-    definition is returned as text, or written to ``file`` if one is given.
+    The arguments describe the alphabet.
+
+    - ``core`` holds the alphabet's letters.
+    - ``complements`` holds their complements, if it has any.
+    - ``ambiguity`` maps ambiguous letters to the core letters they stand
+      for.
+    - ``like`` is ``"DNA"``, ``"RNA"`` or ``"PROTEIN"`` for alphabets that
+      extend one.
+    - ``letter_names`` and ``colours`` describe each letter, with colours as
+      hexadecimal RGB.
+
+    The definition is returned as text, or written to ``file`` if one is
+    given.
 
     References
     ----------
@@ -757,7 +791,7 @@ def meme_alph(
 
 def log_string_pval(pval: str) -> float:
     """The natural logarithm of a P-value written as text, such as
-    ``"1e-400"``, which may be far smaller than the smallest float.
+    ``"1e-400"``. The value may be far smaller than the smallest float.
 
     Examples
     --------

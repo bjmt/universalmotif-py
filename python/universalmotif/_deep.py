@@ -28,20 +28,21 @@ def to_filters(
     """Motifs as convolution filters, an array of shape (motifs, letters,
     width).
 
-    This is the layout of the weights of a one-dimensional convolution, such
-    as PyTorch's ``Conv1d`` with the letters as input channels, so that
-    ``torch.from_numpy(um.to_filters(motifs))`` can be set as a layer's
-    weights, or used to scan one-hot sequences from
-    [`one_hot()`][universalmotif.one_hot]. Filters hold the motifs as
-    ``use_type``: by default their own contributions when every motif is a
-    CWM, such as the patterns of
+    This is the layout of the weights of a one-dimensional convolution,
+    such as PyTorch's ``Conv1d`` with the letters as input channels. The
+    result of ``torch.from_numpy(um.to_filters(motifs))`` can thus be set
+    as a layer's weights, or used to scan one-hot sequences from
+    [`one_hot()`][universalmotif.one_hot].
+
+    Filters hold the motifs as ``use_type``. By default this is their own
+    contributions when every motif is a CWM, such as the patterns of
     [`read_modisco()`][universalmotif.read_modisco], and log2 odds
-    otherwise. Motifs narrower than the widest
-    are padded with zeros, on the right with ``align="left"`` or on both
-    sides with ``"centre"``. With ``rc``, each motif's reverse complement
-    follows it, for DNA and RNA motifs. All motifs must share an alphabet.
-    A filter has a fixed width, so the gaps of gapped motifs are left out,
-    with a warning, and their columns run together.
+    otherwise. Motifs narrower than the widest are padded with zeros, on
+    the right with ``align="left"`` or on both sides with ``"centre"``.
+    With ``rc``, each motif's reverse complement follows it, for DNA and
+    RNA motifs. All motifs must share an alphabet. A filter has a fixed
+    width, so the gaps of gapped motifs are left out, with a warning, and
+    their columns run together.
 
     References
     ----------
@@ -104,13 +105,13 @@ def from_filters(
     """Motifs from convolution filters or matrices from other tools.
 
     ``filters`` is an array of shape (motifs, letters, width), such as the
-    weights of a convolution layer, or a mapping from names to (letters,
-    width) matrices, as some deep-learning libraries keep motifs. Tensors
-    are turned into numpy arrays first, so PyTorch tensors can be passed as they
-    are, once on the CPU. ``type`` says what the values are, and ``alphabet``
-    gives the letters in row order. With ``trim``, all-zero columns at
-    either end, such as the padding of [`to_filters()`][universalmotif.to_filters],
-    are removed.
+    weights of a convolution layer. It can also be a mapping from names to
+    (letters, width) matrices, as some deep-learning libraries keep motifs.
+    Tensors are turned into numpy arrays first, so PyTorch tensors can be
+    passed as they are, once on the CPU. ``type`` says what the values are,
+    and ``alphabet`` gives the letters in row order. With ``trim``,
+    all-zero columns at either end are removed, such as the padding of
+    [`to_filters()`][universalmotif.to_filters].
 
     Examples
     --------
@@ -214,8 +215,8 @@ def one_hot(
 def from_one_hot(x: Any, alphabet: str = "ACGT", unknown: str = "N") -> list[str]:
     """Sequences from one-hot arrays of shape (sequences, letters, length), as
     made by [`one_hot()`][universalmotif.one_hot]. Each position takes the
-    letter of its largest value, so soft encodings work too, and positions
-    with no positive value become ``unknown``.
+    letter of its largest value, so soft encodings work too. Positions with
+    no positive value become ``unknown``.
 
     Examples
     --------
@@ -250,16 +251,19 @@ def read_modisco(
     """Read the patterns of a TF-MoDISco results file, as written by
     modisco-lite's ``modisco motifs``.
 
-    ``type`` picks which matrix of each pattern to read: ``"CWM"`` for its
-    contribution scores, ``"hCWM"`` for its hypothetical contribution scores,
-    also as a CWM, or ``"PPM"`` for the letter frequencies of its seqlets.
+    ``type`` picks which matrix of each pattern to read.
+
+    - ``"CWM"`` reads its contribution scores.
+    - ``"hCWM"`` reads its hypothetical contribution scores, also as a CWM.
+    - ``"PPM"`` reads the letter frequencies of its seqlets.
+
     Motifs are named after the pattern, such as ``pos_patterns.pattern_0``,
     with the number of seqlets as ``nsites``. Patterns span a fixed window
-    with weak flanks, so by default they are trimmed as modisco's own reports
-    do: the columns kept run from the first to the last whose absolute
-    contribution reaches ``trim_threshold`` times the largest, and the other
-    matrix types are trimmed to the same columns. With ``subpatterns``, the
-    subpatterns of each pattern are read as well.
+    with weak flanks, so by default they are trimmed as modisco's own
+    reports do. The columns kept run from the first to the last whose
+    absolute contribution reaches ``trim_threshold`` times the largest. The
+    other matrix types are trimmed to the same columns. With
+    ``subpatterns``, the subpatterns of each pattern are read as well.
 
     Needs the ``h5py`` extra.
 
@@ -339,13 +343,18 @@ def modisco_thresholds(
     from the seqlets of each pattern of a TF-MoDISco results file.
 
     Each pattern's seqlets are scored as ``scan_contributions()`` scores a
-    window, on their projected contribution scores and over the columns of
-    the CWM that [`read_modisco()`][universalmotif.read_modisco] reads with
-    the same ``trim_threshold``: their similarity, the cosine with the CWM,
-    and their importance, the sum of their absolute scores as a fraction of
-    the CWM's. The thresholds are the ``quantile`` of each, so that with the
-    default of 0.05 about 95% of a pattern's seqlets would pass either one.
-    Patterns differ a great deal in how alike their seqlets are, and these
+    window. The scores used are their projected contribution scores, over
+    the columns of the CWM that
+    [`read_modisco()`][universalmotif.read_modisco] reads with the same
+    ``trim_threshold``. Two measures are taken.
+
+    - Their similarity, the cosine with the CWM.
+    - Their importance, the sum of their absolute scores as a fraction of
+      the CWM's.
+
+    The thresholds are the ``quantile`` of each, so that with the default
+    of 0.05 about 95% of a pattern's seqlets would pass either one.
+    Patterns differ a great deal in how alike their seqlets are. These
     thresholds follow each pattern, where a single cutoff would be too
     strict for some and too loose for others.
 
@@ -356,7 +365,7 @@ def modisco_thresholds(
     polars.DataFrame
         One row per pattern, named as ``read_modisco()`` names it, with the
         columns ``motif``, ``min_similarity``, ``min_importance`` and
-        ``seqlets``, their number.
+        ``seqlets``, the number of seqlets.
 
     References
     ----------
@@ -444,57 +453,64 @@ def read_seqlets(
     pattern was built from, as a table of hits.
 
     The table has one row per seqlet and the columns of a
-    [`scan_sequences()`][universalmotif.scan_sequences] result, so that it
-    can be drawn with [`plot_hits()`][universalmotif.plot_hits] or tested
-    for a peak in position with [`motif_peaks()`][universalmotif.motif_peaks].
-    ``motif`` names the
-    pattern as [`read_modisco()`][universalmotif.read_modisco] does and
-    ``motif_i`` is its place in that list, ``sequence_i`` is the input
-    sequence the seqlet was found in, counted from 0, and ``start`` and
-    ``end`` are positions counted from 0 with the end left out. ``strand``
-    is ``-`` for seqlets that match their pattern on the reverse strand,
-    ``score`` is the total contribution of the seqlet's letters, and
-    ``match`` holds its letters read along its strand, as in scan results,
-    so that the seqlets of a pattern all read the same way. Rows come in
-    the order of the patterns, then of the sequences, then of the starts,
-    and ``patterns`` reads only the patterns with these names.
+    [`scan_sequences()`][universalmotif.scan_sequences] result. It can thus
+    be drawn with [`plot_hits()`][universalmotif.plot_hits] or tested for a
+    peak in position with [`motif_peaks()`][universalmotif.motif_peaks].
+
+    - ``motif`` names the pattern as
+      [`read_modisco()`][universalmotif.read_modisco] does, and
+      ``motif_i`` is its place in that list.
+    - ``sequence_i`` is the input sequence the seqlet was found in,
+      counted from 0.
+    - ``start`` and ``end`` are positions counted from 0 with the end left
+      out.
+    - ``strand`` is ``-`` for seqlets that match their pattern on the
+      reverse strand.
+    - ``score`` is the total contribution of the seqlet's letters.
+    - ``match`` holds its letters read along its strand, as in scan
+      results, so that the seqlets of a pattern all read the same way.
+
+    Rows come in the order of the patterns, then of the sequences, then of
+    the starts. ``patterns`` reads only the patterns with these names.
 
     Positions are as modisco gives them, counted from the start of the
-    window it looked at in each input, and sequences are named ``seq1``,
-    ``seq2`` and so on. Given the ``regions`` the inputs came from, as a BED
-    file or a range table in the same order as the inputs, positions are
-    moved to the genome instead, a ``chrom`` column is added and sequences
-    are named ``chrom:start-end`` after their regions. modisco is often run
-    on the central part of each input, such as 500 of 1,000 letters, and
-    ``window`` gives its width so that the seqlets are placed within it;
-    by default it spans the whole region. Regions on the ``-`` strand are
-    taken to have been reverse complemented before going into the model.
+    window it looked at in each input. Sequences are named ``seq1``,
+    ``seq2`` and so on. Given the ``regions`` the inputs came from, the
+    positions are moved to the genome instead. The regions are a BED file
+    or a range table in the same order as the inputs. A ``chrom`` column is
+    then added, and sequences are named ``chrom:start-end`` after their
+    regions. modisco is often run on the central part of each input, such
+    as 500 of 1,000 letters. ``window`` gives its width so that the
+    seqlets are placed within it, and by default it spans the whole region.
+    Regions on the ``-`` strand are taken to have been reverse complemented
+    before going into the model.
 
     ``scores`` adds a ``scores`` column with the contribution scores of
-    each seqlet as an array of shape (4, width), letters in the order ACGT,
-    either the hypothetical scores of every letter (``"hypothetical"``) or
-    those times the sequence (``"projected"``). They are turned to run
-    along the genome, or along the input sequence without regions, so that
-    a row's scores can go straight to
+    each seqlet, as an array of shape (4, width) with the letters in the
+    order ACGT. These are the hypothetical scores of every letter with
+    ``"hypothetical"``, or those times the sequence with ``"projected"``.
+    They are turned to run along the genome, or along the input sequence
+    without regions. A row's scores can then go straight to
     [`view_attributions()`][universalmotif.view_attributions] with the
-    sequence at the seqlet's position. When every seqlet has the same width
-    the column holds fixed-size arrays, and ``df["scores"].to_numpy()``
-    gives them all as one array of shape (seqlets, 4, width); otherwise it
-    holds nested lists, and ``np.asarray(row["scores"])`` gives the array
-    of one row either way.
+    sequence at the seqlet's position. When every seqlet has the same
+    width, the column holds fixed-size arrays, and
+    ``df["scores"].to_numpy()`` gives them all as one array of shape
+    (seqlets, 4, width). Otherwise it holds nested lists. Either way,
+    ``np.asarray(row["scores"])`` gives the array of one row.
 
-    Seqlets span the whole window of their pattern, weak flanks included,
-    so that the seqlets of motifs that sit close together overlap, and
+    Seqlets span the whole window of their pattern, weak flanks included.
+    The seqlets of motifs that sit close together therefore overlap, and
     their centres can only come so near the ends of the inputs. With
     ``trim``, each seqlet is cut to the columns of its pattern that
     [`read_modisco()`][universalmotif.read_modisco] keeps with the same
-    ``trim_threshold``, such as 0.3, and its position, ``score``, ``match``
-    and ``scores`` follow, so that the seqlets match the trimmed CWMs. This
+    ``trim_threshold``, such as 0.3. Its position, ``score``, ``match`` and
+    ``scores`` follow, so that the seqlets match the trimmed CWMs. This
     suits counting the spacings between motifs, or testing their positions,
-    where the flanks would otherwise get in the way. In either case, the
-    universe for such tests is the window modisco looked at, not the whole
-    input, and the number of inputs comes from the regions, since the file
-    does not record inputs without seqlets.
+    where the flanks would otherwise get in the way.
+
+    In either case, the universe for such tests is the window modisco
+    looked at, not the whole input. The number of inputs comes from the
+    regions, since the file does not record inputs without seqlets.
 
     Needs the ``h5py`` extra.
 
@@ -714,13 +730,16 @@ class ContributionScores:
     """Contribution scores of a set of sequences, from
     [`read_contributions()`][universalmotif.read_contributions].
 
-    ``scores`` is an array of shape (sequences, letters, length) holding a
-    score for every letter at every position, ``sequences`` the sequences
-    themselves, ``names`` their names, and ``ranges`` a DataFrame of the
-    genomic range of each sequence, with positions counted from 0 and the
-    end left out, when the file gives them. Indexing gives the scores and
-    sequence of one sequence, and [`view()`][universalmotif.ContributionScores.view]
-    draws them.
+    - ``scores`` is an array of shape (sequences, letters, length) holding
+      a score for every letter at every position.
+    - ``sequences`` holds the sequences themselves, and ``names`` their
+      names.
+    - ``ranges`` is a DataFrame of the genomic range of each sequence, with
+      positions counted from 0 and the end left out, when the file gives
+      them.
+
+    Indexing gives the scores and sequence of one sequence, and
+    [`view()`][universalmotif.ContributionScores.view] draws them.
 
     Examples
     --------
@@ -750,8 +769,8 @@ class ContributionScores:
 
     def view(self, i: int, kind: str = "observed", **kwargs: Any):
         """Draw the scores of sequence ``i`` with
-        [`view_attributions()`][universalmotif.view_attributions], with
-        positions on the genome when the ranges are known, so that
+        [`view_attributions()`][universalmotif.view_attributions].
+        Positions are on the genome when the ranges are known, so
         ``region`` is given in genome positions too. Other arguments are
         passed on."""
         from ._plot import view_attributions
@@ -841,30 +860,31 @@ def read_contributions(
 ) -> ContributionScores:
     """Read the contribution scores a sequence model gives its inputs.
 
-    Three layouts are read:
+    Three layouts are read.
 
     - The HDF5 files ENCODE publishes for its chromBPNet and BPNet models,
       such as ``seq_contrib.counts.fold_mean.<accession>.h5`` in their
-      sequence contribution archives, which hold the one-hot sequences,
+      sequence contribution archives. These hold the one-hot sequences,
       their hypothetical scores and their coordinates. They are compressed
       with Blosc, which needs ``hdf5plugin`` installed as well as ``h5py``.
     - The HDF5 files chromBPNet writes, ``<prefix>.counts_scores.h5`` and
       ``<prefix>.profile_scores.h5``, which hold the one-hot sequences and
-      their scores. ``scores`` picks the hypothetical scores of every letter
-      at every position (``"hypothetical"``), or those times the one-hot
-      sequences (``"projected"``). The genomic range of each sequence comes
-      from ``<prefix>.interpreted_regions.bed`` next to the file, or from
-      ``regions``, a narrowPeak file or a table with ``chrom``, ``start``
-      and ``summit`` columns.
-    - numpy ``.npy`` or ``.npz`` files of scores, as TF-MoDISco takes, with
-      the one-hot sequences given as ``sequences``, a file or an array, or
-      the sequences themselves as strings.
+      their scores. The genomic range of each sequence
+      comes from ``<prefix>.interpreted_regions.bed`` next to the file. It
+      can also come from ``regions``, a narrowPeak file or a table with
+      ``chrom``, ``start`` and ``summit`` columns.
+    - numpy ``.npy`` or ``.npz`` files of scores, as TF-MoDISco takes. The
+      one-hot sequences are given as ``sequences``, either a file or an
+      array, or the sequences themselves can be given as strings.
 
-    Arrays may have shape (sequences, letters, length) or (sequences,
-    length, letters), with the letters in the order of ``alphabet``.
-    Scores are read as 32-bit floats, and ``indices`` reads just some of the
+    For every layout, ``scores`` picks the hypothetical scores of every
+    letter at every position with ``"hypothetical"``, or those times the
+    one-hot sequences with ``"projected"``. Arrays may have shape
+    (sequences, letters, length) or (sequences, length, letters), with the
+    letters in the order of ``alphabet``.
+    Scores are read as 32-bit floats. ``indices`` reads just some of the
     sequences of a large HDF5 or ``.npy`` file, which is read a part at a
-    time; a ``.npz`` file is compressed, so it is read whole.
+    time. A ``.npz`` file is compressed, so it is read whole.
 
     Needs the ``h5py`` extra for HDF5 files.
 
@@ -1015,20 +1035,21 @@ def idealize_sequences(
     where it prefers another by more than ``threshold``.
 
     ``hypothetical`` holds a model's hypothetical contribution scores, the
-    score of every letter at every position, as an array of shape
-    (sequences, letters, length) or (sequences, length, letters), or as a
+    score of every letter at every position. It can be an array of shape
+    (sequences, letters, length) or (sequences, length, letters), or a
     [`ContributionScores`][universalmotif.ContributionScores] holding them.
-    At each position the letter scoring highest, or lowest with
-    ``sign="negative"``, replaces the letter present when it scores more
-    than ``threshold`` above it (or below it). Letters outside ``alphabet``,
+    At each position, the letter scoring highest replaces the letter
+    present when it scores more than ``threshold`` above it. With
+    ``sign="negative"``, the letter scoring lowest replaces it when it
+    scores more than ``threshold`` below it. Letters outside ``alphabet``,
     such as N, are left as they are.
 
     Degenerate sites, whose letters vary too much for any one word to be
-    common, become their ideal form, so that discovery on idealized seqlets
-    can find motifs it misses on the real ones, such as spaced palindromes.
-    The motifs found describe what the model wants rather than what the
-    genome holds, so rebuilding them from the real sequences, with
-    [`refine_motifs()`][universalmotif.refine_motifs], fits them to the
+    common, become their ideal form. Discovery on idealized seqlets can
+    thus find motifs it misses on the real ones, such as spaced
+    palindromes. The motifs found describe what the model wants rather
+    than what the genome holds. Rebuilding them from the real sequences
+    with [`refine_motifs()`][universalmotif.refine_motifs] fits them to the
     sites they stand for.
 
     Returns the sequences in the form given: a string, a list of strings or
@@ -1095,11 +1116,13 @@ def mutagenesis(
     position, in alphabet order. ``region`` is a (start, end) pair counted
     from 0 with the end left out, and is the whole sequence by default.
     Positions holding a letter outside the alphabet, such as N, get every
-    letter. A model's predictions for the batch, in the same order, are
-    turned into the effect of each substitution by
-    [`mutagenesis_effects()`][universalmotif.mutagenesis_effects]. The batch
-    has three variants per position of a DNA sequence, so for long
-    sequences, ``region`` keeps it to the part of interest.
+    letter.
+
+    [`mutagenesis_effects()`][universalmotif.mutagenesis_effects] turns a
+    model's predictions for the batch, in the same order, into the effect
+    of each substitution. The batch has three variants per position of a
+    DNA sequence, so for long sequences ``region`` keeps it to the part of
+    interest.
 
     Examples
     --------
@@ -1132,14 +1155,16 @@ def mutagenesis_effects(
     [`mutagenesis()`][universalmotif.mutagenesis].
 
     ``predictions`` holds one prediction per entry of the batch, in order,
-    with the sequence's own first; ``sequence``, ``alphabet`` and ``region``
-    must be those the batch was made with. The effect of a substitution is
-    its prediction minus the sequence's, and the letters of the sequence
-    get 0. Returns an array of shape (letters, positions of ``region``), or
-    with several outputs per prediction, given as an array of shape
-    (variants, outputs), one of shape (outputs, letters, positions). With
-    ``centre``, the mean effect at each position is subtracted, as is common
-    before drawing the effects as attributions with
+    with the sequence's own first. ``sequence``, ``alphabet`` and
+    ``region`` must be those the batch was made with. The effect of a
+    substitution is its prediction minus the sequence's, and the letters of
+    the sequence get 0.
+
+    Returns an array of shape (letters, positions of ``region``). With
+    several outputs per prediction, given as an array of shape (variants,
+    outputs), it has shape (outputs, letters, positions) instead. With
+    ``centre``, the mean effect at each position is subtracted. This is
+    common before drawing the effects as attributions with
     [`view_attributions()`][universalmotif.view_attributions].
 
     Examples
@@ -1212,45 +1237,46 @@ def insert_sites(
     """Write the same sites into every sequence, for measuring a model's
     response to them.
 
-    ``sites`` is a site given as a string, a motif, whose most probable
-    letter at each position is used, or a list of these to insert together.
-    ``positions`` gives the start of each site, counted from 0 along the
-    sequences as given; by default a single site is centred in each
-    sequence, rounding down.
+    ``sites`` is a site given as a string, or a motif, whose most probable
+    letter at each position is used. It can also be a list of these to
+    insert together. ``positions`` gives the start of each site, counted
+    from 0 along the sequences as given. By default a single site is
+    centred in each sequence, rounding down.
 
     With the default ``mode="substitute"``, sites overwrite the letters
-    where they land, later ones over earlier ones, and must fit within every
-    sequence. With ``mode="insert"``, they go in between the letters
-    instead, before the letter at their position, so that the letters after
-    them move along and the sequences grow by the sites' widths; a position
-    may then run up to the length of the sequence, for a site at the end.
-    Models usually take inputs of one width, and with ``keep_length`` the
+    where they land, later ones over earlier ones, and must fit within
+    every sequence. With ``mode="insert"``, they go in between the letters
+    instead, before the letter at their position. The letters after them
+    move along, and the sequences grow by the sites' widths. A position may
+    then run up to the length of the sequence, for a site at the end.
+    Models usually take inputs of one width. With ``keep_length``, the
     sequences are cut back to their length by removing letters from both
     ends equally, which must leave every site whole.
 
-    Unlike [`implant_motifs()`][universalmotif.implant_motifs], which draws a
-    new site from a motif for every placement, the same letters go into
-    every sequence, as when comparing a model's predictions for background
-    sequences, such as from
-    [`shuffle_sequences()`][universalmotif.shuffle_sequences], with and
-    without a motif. Returns the new sequences in the same form as the
-    input: a string, a list or a dict, or a one-hot array.
+    Unlike [`implant_motifs()`][universalmotif.implant_motifs], which draws
+    a new site from a motif for every placement, this puts the same letters
+    into every sequence. That suits comparing a model's predictions for
+    background sequences with and without a motif, such as sequences from
+    [`shuffle_sequences()`][universalmotif.shuffle_sequences]. Returns the
+    new sequences in the same form as the input: a string, a list or a
+    dict, or a one-hot array.
 
-    A dot in a site leaves the letter beneath it as it is, so that
+    A dot in a site leaves the letter beneath it as it is. For example,
     ``"GATA..CACGTG"`` writes two parts with two of the sequence's own
-    letters between them, and a gapped motif gives its letters with dots in
-    the smallest size of each gap; add the gap with another size with
-    [`add_gap()`][universalmotif.add_gap] for other spacings. With
+    letters between them. A gapped motif gives its letters with dots in the
+    smallest size of each gap. For other spacings, add the gap with another
+    size with [`add_gap()`][universalmotif.add_gap]. With
     ``mode="insert"``, the parts are inserted around the letters under the
     dots.
 
     One-hot sequences, as from [`one_hot()`][universalmotif.one_hot], are
     given as an array of shape (sequences, letters, length) or (sequences,
-    length, letters), or a single sequence without the first axis, with the
-    letters in the order of ``alphabet``. The sites are written into a copy,
-    which keeps the layout and dtype, and a PyTorch tensor comes back as a
-    tensor. A letter of a site outside ``alphabet``, such as N, leaves its
-    column empty, as it would be after encoding the sequence.
+    length, letters), with the letters in the order of ``alphabet``. A
+    single sequence can be given without the first axis. The sites are
+    written into a copy, which keeps the layout and dtype, and a PyTorch
+    tensor comes back as a tensor. A letter of a site outside
+    ``alphabet``, such as N, leaves its column empty, as it would be after
+    encoding the sequence.
 
     Examples
     --------
@@ -1379,12 +1405,12 @@ def delete_region(
     for measuring what a model loses without them.
 
     Positions are counted from 0 with the end left out, and the region must
-    lie within every sequence. The letters after the region move up to close
-    the gap, so the sequences become shorter by its width. Models usually
-    take inputs of one width, and with ``keep_length`` the sequences are
-    padded back to their length with N at both ends equally, which keeps
-    what is left centred; there is no sequence beyond the ends to bring in
-    instead. Sequences are given and returned as for
+    lie within every sequence. The letters after the region move up to
+    close the gap, so the sequences become shorter by its width. Models
+    usually take inputs of one width. With ``keep_length``, the sequences
+    are padded back to their length with N at both ends equally, which
+    keeps what is left centred. There is no sequence beyond the ends to
+    bring in instead. Sequences are given and returned as for
     [`insert_sites()`][universalmotif.insert_sites], including as one-hot
     arrays, where N is an empty column. To take a region apart without
     changing the length or the letters around it, see
@@ -1441,16 +1467,18 @@ def site_spacings(
     """Two sites at a range of spacings, for measuring how a model responds
     to the distance between them.
 
-    For each spacing, ``first`` is written into every sequence at ``start``
-    and ``second`` begins that many letters after ``first`` ends. Sites are
-    given as for [`insert_sites()`][universalmotif.insert_sites]. By default
-    ``start`` places the pair in the middle of each sequence at the widest
-    spacing, so that ``first`` stays put as ``second`` moves. Returns a dict
-    from each spacing to the new sequences, in the same form as the input,
-    which may be one-hot as for ``insert_sites()``. Each spacing's sequences
-    are as large as the input, so for many spacings of many one-hot
-    sequences it is best to predict one spacing at a time rather than to
-    stack them.
+    For each spacing, ``first`` is written into every sequence at
+    ``start``, and ``second`` begins that many letters after ``first``
+    ends. Sites are given as for
+    [`insert_sites()`][universalmotif.insert_sites]. By default, ``start``
+    places the pair in the middle of each sequence at the widest spacing,
+    so that ``first`` stays put as ``second`` moves.
+
+    Returns a dict from each spacing to the new sequences, in the same form
+    as the input, which may be one-hot as for ``insert_sites()``. Each
+    spacing's sequences are as large as the input. For many spacings of
+    many one-hot sequences, it is best to predict one spacing at a time
+    rather than to stack them.
 
     Examples
     --------
@@ -1570,38 +1598,41 @@ def shuffled_references(
     """Shuffles of one-hot sequences, as references for attribution.
 
     DeepLIFT, DeepSHAP and similar methods measure each input's
-    contributions against references, and shuffles of the input that keep
-    its dinucleotides are the usual choice, since they hold the same letters
-    and local make-up but have lost the arrangement of letters that the
-    model might respond to. This makes ``n`` shuffles of each sequence,
-    keeping every k-mer count exactly with the default ``method="euler"``,
-    as [`shuffle_sequences()`][universalmotif.shuffle_sequences] does. Each
+    contributions against references. Shuffles of the input that keep its
+    dinucleotides are the usual choice. They hold the same letters and
+    local make-up, but have lost the arrangement of letters that the model
+    might respond to.
+
+    This makes ``n`` shuffles of each sequence. With the default
+    ``method="euler"``, every k-mer count is kept exactly, as
+    [`shuffle_sequences()`][universalmotif.shuffle_sequences] does. Each
     shuffle is drawn uniformly from all the sequences with the same k-mer
-    counts and the same first ``k - 1`` letters and last letter, so that no
-    position keeps its letter more often than chance would have it.
-    Positions holding no letter, such as N, stay where they are, and each
+    counts and the same first ``k - 1`` letters and last letter. No
+    position thus keeps its letter more often than chance would have it.
+    Positions holding no letter, such as N, stay where they are. Each
     stretch of letters between them is shuffled on its own, which keeps the
     k-mers touching them too.
 
     ``x`` is a one-hot array of shape (sequences, 4, length) or (sequences,
-    length, 4), or one sequence of shape (4, length) or (length, 4), with
-    the letters in the order ACGT, such as from
-    [`one_hot()`][universalmotif.one_hot]; a PyTorch tensor is accepted too.
-    Shuffle ``j`` of sequence ``i`` depends only on ``seed``, ``offset + i``
-    and ``j``, so that shuffling a large set in batches with ``offset`` set
-    to each batch's first index gives the same references as shuffling it at
-    once, and asking for more shuffles adds to those made before.
-    ``nthreads`` defaults to the package setting from
+    length, 4), with the letters in the order ACGT, such as from
+    [`one_hot()`][universalmotif.one_hot]. It can also be one sequence of
+    shape (4, length) or (length, 4), and a PyTorch tensor is accepted too.
+
+    Shuffle ``j`` of sequence ``i`` depends only on ``seed``,
+    ``offset + i`` and ``j``. Shuffling a large set in batches, with
+    ``offset`` set to each batch's first index, thus gives the same
+    references as shuffling it at once. Asking for more shuffles adds to
+    those made before. ``nthreads`` defaults to the package setting from
     [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
     -------
     numpy.ndarray | torch.Tensor
-        The shuffles, of shape (sequences, n, 4, length), or (sequences, n,
-        length, 4) for sequences given letters last, or without the first
-        dimension for a single sequence, with the dtype of ``x`` and as a
-        tensor (on the CPU) when ``x`` is one. They take ``n`` times the
-        memory of ``x``.
+        The shuffles, of shape (sequences, n, 4, length). For sequences
+        given letters last, the shape is (sequences, n, length, 4), and for
+        a single sequence the first dimension is dropped. They have the
+        dtype of ``x``, and are a tensor on the CPU when ``x`` is one. They
+        take ``n`` times the memory of ``x``.
 
     References
     ----------
@@ -1686,22 +1717,25 @@ def one_hot_batches(
     with signal targets and augmentation for training.
 
     ``genome`` and ``ranges`` are as for
-    [`extract_ranges()`][universalmotif.extract_ranges]: a
-    [`Genome`][universalmotif.Genome] read from disk,
-    [`PackedSequences`][universalmotif.PackedSequences] or a mapping from
-    chromosome names to sequences, and a DataFrame or tuples of ranges
-    counted from 0 with the end left out. Ranges on the ``-`` strand are
-    reverse complemented. Models take sequences of one length, so the ranges
-    must all have the same width, or with ``width`` each is replaced by a
-    window of that width around its middle, the lower one for even widths.
-    Every range is checked before any is read, and must fit within its
-    chromosome, along with any shift and target window.
+    [`extract_ranges()`][universalmotif.extract_ranges].
+
+    - ``genome`` is a [`Genome`][universalmotif.Genome] read from disk,
+      [`PackedSequences`][universalmotif.PackedSequences] or a mapping from
+      chromosome names to sequences.
+    - ``ranges`` is a DataFrame or tuples of ranges counted from 0 with the
+      end left out. Ranges on the ``-`` strand are reverse complemented.
+
+    Models take sequences of one length, so the ranges must all have the
+    same width. Otherwise, with ``width``, each is replaced by a window of
+    that width around its middle, the lower one for even widths. Every
+    range is checked before any is read. It must fit within its chromosome,
+    along with any shift and target window.
 
     Returns an iterable of arrays of shape (sequences, letters, width), up
-    to ``batch_size`` sequences each and in the order of the ranges, with a
-    length so that progress can be shown. Only one batch is held in memory
-    at a time, so large sets of regions can be fed to a model, for example
-    as ``model(torch.from_numpy(x))`` for each batch ``x``.
+    to ``batch_size`` sequences each and in the order of the ranges. It has
+    a length, so that progress can be shown. Only one batch is held in
+    memory at a time, so large sets of regions can be fed to a model. For
+    example, call ``model(torch.from_numpy(x))`` for each batch ``x``.
 
     Parameters
     ----------
@@ -1709,19 +1743,19 @@ def one_hot_batches(
         Signal to train on, such as the coverage of an assay, as a bigWig
         path, a list of them or a mapping from names to them. Each batch is
         then a pair ``(x, y)``, with ``y`` of shape (sequences, tracks,
-        output_width) and type ``target_dtype``, holding each track's values
-        over the ``output_width`` positions, by default the input width,
-        around the middle of each input window, with 0 where a track has no
-        value. Targets are reversed along with their sequences. Needs the
-        ``bigwig`` extra.
+        output_width) and type ``target_dtype``. It holds each track's
+        values over the ``output_width`` positions around the middle of
+        each input window, with 0 where a track has no value. By default
+        ``output_width`` is the input width. Targets are reversed along
+        with their sequences. Needs the ``bigwig`` extra.
     max_shift, reverse_complement, seed
-        Augmentation for training, drawn afresh each time the batches are
-        iterated over, so that every pass over the data, or epoch, sees the
-        regions a little differently, yet reproducibly from ``seed``: each
-        window moves by up to ``max_shift`` positions either way, so that a
-        model does not learn where sites sit in its input, and with
-        ``reverse_complement`` half of them, chosen at random, are reverse
-        complemented, as their targets are. Reverse complements need the
+        Augmentation for training. It is drawn afresh each time the batches
+        are iterated over, so that every pass over the data, or epoch, sees
+        the regions a little differently, yet reproducibly from ``seed``.
+        Each window moves by up to ``max_shift`` positions either way, so
+        that a model does not learn where sites sit in its input. With
+        ``reverse_complement``, half of them, chosen at random, are reverse
+        complemented, as are their targets. Reverse complements need the
         alphabet ``"ACGT"`` or ``"ACGU"``.
     strand_pairs
         Pairs of tracks of ``bigwigs`` for the two strands, given by

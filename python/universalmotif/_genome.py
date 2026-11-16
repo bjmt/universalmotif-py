@@ -22,23 +22,28 @@ _COMPLEMENT = str.maketrans(
 class Genome(Mapping[str, str]):
     """A genome in a FASTA, bgzip or 2bit file, read a piece at a time.
 
-    Plain FASTA files are read through their ``.fai`` index, and bgzipped
-    ones through their ``.fai`` and ``.gzi`` indexes, all as written by
-    ``samtools faidx``; indexes that are missing are built in memory when
-    the genome is opened, which takes a pass over the file. 2bit files carry
-    their own index. Only the ranges asked for are read, so a genome of any
-    size takes almost no memory until its sequences are used.
+    Plain FASTA files are read through their ``.fai`` index. Bgzipped ones
+    use their ``.fai`` and ``.gzi`` indexes, both as written by
+    ``samtools faidx``. Missing indexes are built in memory when the genome
+    is opened, which takes a pass over the file. 2bit files carry their own
+    index. Only the ranges asked for are read, so a genome of any size takes
+    almost no memory until its sequences are used.
 
-    A genome is a read-only mapping from chromosome names to sequences, so
-    it can go wherever a dict of sequences can, each chromosome being read
+    A genome is a read-only mapping from chromosome names to sequences. It
+    can go wherever a dict of sequences can, and each chromosome is read
     whole when it is looked up. [`subseq()`][universalmotif.Genome.subseq]
     and [`extract()`][universalmotif.Genome.extract] read just parts of
     them. Letters come back as they are in the file, so soft-masking is kept.
-    [`scan_sequences()`][universalmotif.scan_sequences] scans a genome a
-    few chromosomes at a time, about 64 Mb of them or one if it is longer,
-    and [`match_bkg()`][universalmotif.match_bkg] reads only the windows it
-    draws. A genome can be pickled, as when it is
-    sent to worker processes, and is opened again from its path there.
+
+    Other functions also read a genome in pieces.
+
+    - [`scan_sequences()`][universalmotif.scan_sequences] scans a few
+      chromosomes at a time, about 64 Mb of them or one if it is longer.
+    - [`match_bkg()`][universalmotif.match_bkg] reads only the windows it
+      draws.
+
+    A genome can be pickled, as when it is sent to worker processes, and is
+    opened again from its path there.
 
     Examples
     --------
@@ -85,8 +90,8 @@ class Genome(Mapping[str, str]):
 
     def subseq(self, name: str, start: int, end: int) -> str:
         """Positions ``start`` up to but not including ``end`` of the
-        chromosome called ``name``, counted from 0 as in a slice, reading only
-        those."""
+        chromosome called ``name``, counted from 0 as in a slice. Only those
+        positions are read."""
         i = self._index(name)
         if start < 0:
             raise IndexError("start must be at least 0")
@@ -125,15 +130,19 @@ def extract_ranges(
 
     ``genome`` is a [`Genome`][universalmotif.Genome] read from disk,
     [`PackedSequences`][universalmotif.PackedSequences] or any mapping from
-    chromosome names to sequences. ``ranges`` is a DataFrame with ``chrom``
-    (or ``seqnames``, ``chr`` and the like), ``start`` and ``end`` or
-    ``width`` columns, or (chrom, start, end[, strand]) tuples, with
-    positions counted from 0 and the end left out, as in BED files and
-    Python slices. Ranges on the ``-`` strand are reverse complemented.
+    chromosome names to sequences.
+
+    ``ranges`` is either a DataFrame or a list of (chrom, start, end[,
+    strand]) tuples. A DataFrame needs ``chrom`` (or ``seqnames``, ``chr``
+    and the like), ``start``, and ``end`` or ``width`` columns. Positions
+    count from 0 and leave the end out, as in BED files and Python slices.
+    Ranges on the ``-`` strand are reverse complemented.
+
     Each sequence is named ``chrom:start-end`` in the same positions, with
-    ``(-)`` added on the minus strand, and repeated ranges get ``.1``,
-    ``.2`` and so on. A genome on disk reads the ranges with ``nthreads``
-    threads, by default the package setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    ``(-)`` added on the minus strand. Repeated ranges get ``.1``, ``.2``
+    and so on. A genome on disk reads the ranges with ``nthreads`` threads,
+    by default the package setting from
+    [`set_nthreads()`][universalmotif.set_nthreads].
 
     Examples
     --------
@@ -161,7 +170,7 @@ def _check_ranges(genome: Mapping[str, str], df: pl.DataFrame) -> None:
     from ._packed import PackedSequences
 
     lengths = genome.lengths if isinstance(genome, (Genome, PackedSequences)) else None
-    # Each chromosome is looked up once; the first range that is missing its
+    # Each chromosome is looked up once. The first range that is missing its
     # chromosome or does not fit in it is reported.
     known = {}
     for c in df["chrom"].unique(maintain_order=True).to_list():
@@ -209,17 +218,18 @@ def signal_stats(
 
     ``bigwig`` is the path of one bigWig file, giving a column called
     ``signal``, or a mapping from column names to paths. ``ranges`` is a
-    range table or (chrom, start, end[, strand]) tuples, with 0-based,
+    range table or (chrom, start, end[, strand]) tuples with 0-based,
     half-open positions, as for
     [`extract_ranges()`][universalmotif.extract_ranges]. ``stat`` is
-    ``"mean"``, ``"max"`` or ``"min"``. Bases the file has no value for
-    count as ``uncovered``, zero by default as is usual for coverage; with
-    ``uncovered=None`` they are left out, and a range with no values at all
-    gets NaN.
+    ``"mean"``, ``"max"`` or ``"min"``.
+
+    Bases the file has no value for count as ``uncovered``, which is zero by
+    default as is usual for coverage. With ``uncovered=None`` they are left
+    out, and a range with no values at all gets NaN.
 
     The values are useful as covariates for
-    [`match_bkg()`][universalmotif.match_bkg], which can also compute them
-    itself for the windows it draws from a genome.
+    [`match_bkg()`][universalmotif.match_bkg]. That function can also
+    compute them itself for the windows it draws from a genome.
 
     Needs the ``bigwig`` extra.
 
@@ -283,13 +293,14 @@ def signal_values(
     """The value of a bigWig file at each position of one genomic range.
 
     Positions run from ``start`` up to but not including ``end``, counted
-    from 0. Bases the file has no value for get ``uncovered``, zero by
-    default, or NaN with ``uncovered=None``, and so do all of them on a
-    chromosome the file has no values for. Where
-    [`signal_stats()`][universalmotif.signal_stats] summarizes signal over
-    many ranges, this gives every position of one, such as the per-base
-    contribution scores some models write as bigWig tracks, which can be
-    drawn along the genome's sequence with
+    from 0. Bases the file has no value for get ``uncovered``, which is zero
+    by default, or NaN with ``uncovered=None``. The same goes for every base
+    on a chromosome the file has no values for.
+
+    Where [`signal_stats()`][universalmotif.signal_stats] summarizes signal
+    over many ranges, this gives every position of one. An example is the
+    per-base contribution scores some models write as bigWig tracks. These
+    can be drawn along the genome's sequence with
     [`view_attributions()`][universalmotif.view_attributions].
 
     Needs the ``bigwig`` extra.
@@ -319,8 +330,8 @@ def signal_values(
     sizes = reader.chroms()
     if start < 0 or start >= end:
         raise ValueError(f"the range {chrom}:{start}-{end} is empty or starts before 0")
-    # A chromosome the file has no values for, as for tracks that only
-    # cover peaks, is uncovered, as in signal_stats().
+    # A chromosome the file has no values for is uncovered, as in
+    # signal_stats(). Tracks that only cover peaks can leave some out.
     if chrom not in sizes:
         return np.full(end - start, np.nan if uncovered is None else uncovered, dtype=float)
     if end > sizes[chrom]:

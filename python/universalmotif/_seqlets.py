@@ -51,35 +51,36 @@ def call_seqlets(
     model's contribution scores.
 
     A stretch of positions is a seqlet when its total contribution is
-    unlikely under a null built from all the scores given, and so is the
-    total of every stretch inside it of at least ``min_len`` positions, so
-    that a seqlet holds no run of unremarkable positions. Seqlets from
-    ``min_len`` to ``max_len`` positions long are called from the longest
-    down, in order of P-value, without overlapping one another, and are then
-    widened by ``flank`` positions on either side. Positive and negative
-    seqlets, which raise and lower the prediction, are called each from its
-    own null.
+    unlikely under a null built from all the scores given. The total of
+    every stretch inside it of at least ``min_len`` positions must be
+    unlikely too, so that a seqlet holds no run of unremarkable positions.
+    Seqlets from ``min_len`` to ``max_len`` positions long are called from
+    the longest down, in order of P-value, without overlapping one another.
+    They are then widened by ``flank`` positions on either side. Positive
+    and negative seqlets, which raise and lower the prediction, are each
+    called from their own null.
 
     The null for each length comes from the distribution of the scores
     themselves, so a set share of stretches passes even in noise. With
-    ``fdr``, the same calls are made on decoy scores, and seqlets are kept
-    down to the total at which the decoys' seqlets, counted as if the decoys
-    had as many positions as the scores, make up at most ``fdr`` of those
-    passing. The best decoys are the model's own contributions for
-    sequences with nothing to find, such as shuffled versions of the
-    sequences from
-    [`shuffled_references()`][universalmotif.shuffled_references], which
-    show how the model treats sequence without sites. Without them, each
-    sequence's scores shuffled stand in, which keep the scores' values but
-    not the model's view of empty sequence, and let through more seqlets
-    of weak contribution.
+    ``fdr``, the same calls are also made on decoy scores. Seqlets are then
+    kept down to the total at which the decoys' seqlets make up at most
+    ``fdr`` of those passing, counting the decoys as if they had as many
+    positions as the scores.
+
+    The best decoys are the model's own contributions for sequences with
+    nothing to find, such as shuffled versions of the sequences from
+    [`shuffled_references()`][universalmotif.shuffled_references]. These
+    show how the model treats sequence without sites. Without decoys, each
+    sequence's scores are shuffled to stand in for them. Shuffled scores
+    keep the scores' values but not the model's view of empty sequence, so
+    they let through more seqlets of weak contribution.
 
     The seqlets can go straight to
-    [`motif_finder()`][universalmotif.motif_finder], as the sequences of
-    their windows, and to
+    [`motif_finder()`][universalmotif.motif_finder] as the sequences of
+    their windows. They can also go to
     [`select_motifs()`][universalmotif.select_motifs] and
-    [`refine_motifs()`][universalmotif.refine_motifs] as the sites motifs
-    should reach.
+    [`refine_motifs()`][universalmotif.refine_motifs] as the sites that
+    motifs should reach.
 
     Parameters
     ----------
@@ -91,9 +92,9 @@ def call_seqlets(
         or mapping of per-sequence arrays. Seqlets are called in the
         observed scores, those of the letters present.
     sequences
-        The sequences the scores are for, as text or one-hot encoded, to
-        pick the letters present from scores of every letter, and to give
-        each seqlet's letters.
+        The sequences the scores are for, as text or one-hot encoded. They
+        pick the letters present from scores of every letter, and give each
+        seqlet's letters.
     decoys, decoy_sequences
         Decoy scores, and their sequences when needed, in the same forms
         as ``contributions`` and ``sequences``.
@@ -124,19 +125,26 @@ def call_seqlets(
     Returns
     -------
     polars.DataFrame
-        One row per seqlet, in order of sequence and position, with the
-        columns ``sequence``, its name (``seq1``, ``seq2`` and so on unless
-        the scores or sequences are named), ``sequence_i``, ``start`` and
-        ``end``, flanks included, counted from 0 with the end left out,
-        ``core_start`` and ``core_end`` without the flanks, ``sign``, ``+``
-        or ``-``, ``score``, the total contribution without the flanks,
-        ``pvalue``, and ``match``, the seqlet's letters, when they are known.
+        One row per seqlet, in order of sequence and position. The columns
+        are these.
+
+        - ``sequence``, its name. Unless the scores or sequences are named,
+          the names are ``seq1``, ``seq2`` and so on.
+        - ``sequence_i``.
+        - ``start`` and ``end``, flanks included, counted from 0 with the
+          end left out.
+        - ``core_start`` and ``core_end``, without the flanks.
+        - ``sign``, ``+`` or ``-``.
+        - ``score``, the total contribution without the flanks.
+        - ``pvalue``.
+        - ``match``, the seqlet's letters, when they are known.
 
     Examples
     --------
-    Noisy scores with a block of high contribution at positions 40 to 47 of
-    every other sequence give a seqlet on each block, taking in a couple of
-    the positions around it, and a few in the noise:
+    Noisy scores have a block of high contribution at positions 40 to 47 of
+    every other sequence. Each block gives a seqlet that takes in a couple
+    of the positions around it, and a few more seqlets turn up in the
+    noise:
 
     >>> import numpy as np
     >>> import polars as pl
