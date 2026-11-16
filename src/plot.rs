@@ -45,8 +45,12 @@ fn _display_matrix(
 /// aligned to `motifs[anchor]`, and the width of the shared frame. CWMs are
 /// aligned by their similarity, with `metric` and `ignore_sign` as in
 /// comparisons, and other motifs by column correlation.
+/// Each motif's empty columns on the left and whether it is reverse
+/// complemented, the frame's width, and the gap sizes each motif is placed with.
+type LayoutParts = (Vec<(usize, bool)>, usize, Vec<Vec<usize>>);
+
 #[pyfunction]
-#[pyo3(signature = (motifs, anchor, min_overlap, rc, nthreads, metric=None, ignore_sign=false))]
+#[pyo3(signature = (motifs, anchor, min_overlap, rc, nthreads, metric=None, ignore_sign=false, use_gaps=true))]
 #[allow(clippy::too_many_arguments)]
 fn _anchor_layout(
     py: Python<'_>,
@@ -57,7 +61,8 @@ fn _anchor_layout(
     nthreads: usize,
     metric: Option<&str>,
     ignore_sign: bool,
-) -> PyResult<(Vec<(usize, bool)>, usize)> {
+    use_gaps: bool,
+) -> PyResult<LayoutParts> {
     let motifs: Vec<Motif> = motifs.iter().map(|m| m.inner.clone()).collect();
     let cwms = motifs.iter().all(|m| m.motif_type == MotifType::Cwm);
     let layout = match metric {
@@ -67,6 +72,7 @@ fn _anchor_layout(
                 ignore_sign,
                 min_overlap,
                 rc,
+                use_gaps,
                 nthreads,
             };
             py.detach(|| cwm_anchor_layout(&motifs, anchor, &opts))
@@ -75,6 +81,7 @@ fn _anchor_layout(
             let opts = CompareOptions {
                 min_overlap,
                 rc,
+                use_gaps,
                 nthreads,
                 ..Default::default()
             };
@@ -85,6 +92,7 @@ fn _anchor_layout(
     Ok((
         layout.placements.iter().map(|p| (p.left, p.rc)).collect(),
         layout.width,
+        layout.gaps,
     ))
 }
 

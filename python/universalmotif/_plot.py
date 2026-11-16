@@ -293,8 +293,10 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
                     align=True):
     """Display matrices of motifs aligned to a common frame, in display
     order: returns (names, matrices, offsets, widths, gaps, alphabet), the
-    gaps of each motif given as (columns before it, mingap, maxgap) within
-    the frame."""
+    gaps of each motif given as (columns before it, mingap, maxgap, blank
+    columns) within the frame. A gapped motif aligned to others is placed at
+    the gap sizes it fits best, its gaps filled with that many blank
+    columns; on its own, or not aligned, its gaps take no columns."""
     if use_type not in _YLABELS:
         raise ValueError("use_type must be one of PCM, PPM, PWM, ICM and CWM")
     if sort_by not in ("none", "ic", "similarity"):
@@ -319,12 +321,18 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
         mats = [np.array(_core._display_matrix(m, use_type, relative_entropy), dtype=float).T for m in ms]
     names = _make_unique([m.name for m in ms])
     widths = [m.shape[1] for m in mats]
-    gaps = [list(zip(m.gaploc, m.mingap, m.maxgap)) if m.isgapped else [] for m in ms]
+    gaps = [[(g, lo, hi, 0) for g, lo, hi in zip(m.gaploc, m.mingap, m.maxgap)] if m.isgapped else []
+            for m in ms]
     if len(ms) == 1:
         return names, mats, [0], widths, gaps, alphabet
 
     if align:
-        placements, width = _core._anchor_layout(ms, 0, min_overlap, rc, nthreads)
+        placements, width, sizes = _core._anchor_layout(ms, 0, min_overlap, rc, nthreads)
+        for i, s in enumerate(sizes):
+            if s:
+                # The gaps filled with blank columns, as the layout placed them.
+                mats[i], gaps[i] = _fill_gaps(mats[i], gaps[i], s)
+                widths[i] = mats[i].shape[1]
     else:
         # Drawn as they are, from the left of a frame as wide as the widest.
         placements, width = [(0, False)] * len(ms), max(widths)
@@ -333,8 +341,8 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
         if flip:
             m = _rc_matrix(m)
             names[i] = names[i] + rc_text
-            gaps[i] = [(m.shape[1] - g, lo, hi) for g, lo, hi in reversed(gaps[i])]
-        gaps[i] = [(left + g, lo, hi) for g, lo, hi in gaps[i]]
+            gaps[i] = [(m.shape[1] - g - span, lo, hi, span) for g, lo, hi, span in reversed(gaps[i])]
+        gaps[i] = [(left + g, lo, hi, span) for g, lo, hi, span in gaps[i]]
         out = np.zeros((m.shape[0], width))
         out[:, left : left + m.shape[1]] = m
         padded.append(out)
@@ -358,6 +366,18 @@ def _prepare_motifs(motifs, use_type, rc, min_overlap, relative_entropy, sort_by
         perm = list(_core._hclust(dist, "complete", [str(i) for i in range(n)])["order"])
     return ([names[i] for i in perm], [padded[i] for i in perm], [offsets[i] for i in perm],
             [widths[i] for i in perm], [gaps[i] for i in perm], alphabet)
+
+
+def _fill_gaps(m: np.ndarray, gaps: list, sizes: list) -> tuple[np.ndarray, list]:
+    """A display matrix with each gap filled by its size in blank columns,
+    and the gaps' new places."""
+    parts, out, prev, shift = [], [], 0, 0
+    for (g, lo, hi, _), s in zip(gaps, sizes):
+        parts += [m[:, prev:g], np.zeros((m.shape[0], s))]
+        out.append((g + shift, lo, hi, s))
+        prev, shift = g, shift + s
+    parts.append(m[:, prev:])
+    return np.concatenate(parts, axis=1), out
 
 
 def _round_step(x: float) -> float:
@@ -418,17 +438,19 @@ def _style_axes(ax, ylabel, ticks, ylim, n, show_positions, labels=None, text_si
     ax.set_ylabel(ylabel, fontsize=text_size)
 
 
-def _draw_gaps(ax: Axes, gaps: list[tuple[int, int, int]], text_size: float) -> None:
-    """Mark each gap of a motif with a dashed line between the columns on
-    either side of it, reaching past the letters to a label above the panel
-    with the gap sizes."""
-    for after, lo, hi in gaps:
-        x = after + 0.5
-        ax.plot([x, x], [-0.06, 1.04], transform=ax.get_xaxis_transform(), color="#606060",
-                linewidth=0.9, linestyle=(0, (3, 2)), clip_on=False, zorder=3)
+def _draw_gaps(ax: Axes, gaps: list[tuple[int, int, int, int]], text_size: float) -> None:
+    """Mark each gap of a motif with dashed lines on either side of it,
+    reaching past the letters to a label above the panel with the gap sizes.
+    A gap that takes no columns has a single line between the columns on
+    either side."""
+    for after, lo, hi, span in gaps:
+        edges = [after + 0.5] if span == 0 else [after + 0.5, after + span + 0.5]
+        for x in edges:
+            ax.plot([x, x], [-0.06, 1.04], transform=ax.get_xaxis_transform(), color="#606060",
+                    linewidth=0.9, linestyle=(0, (3, 2)), clip_on=False, zorder=3)
         label = str(lo) if lo == hi else f"{lo}\u2013{hi}"
-        ax.text(x, 1.05, label, transform=ax.get_xaxis_transform(), ha="center", va="bottom",
-                fontsize=text_size * 0.75, color="#404040")
+        ax.text(after + span / 2 + 0.5, 1.05, label, transform=ax.get_xaxis_transform(), ha="center",
+                va="bottom", fontsize=text_size * 0.75, color="#404040")
 
 
 def view_motifs(
@@ -470,9 +492,13 @@ def view_motifs(
     better as reverse complements are flipped and get ``rc_text`` added to
     their names, and all of them are padded into a common frame and drawn
     one above the other. With ``align=False`` they are drawn as they are,
-    from the left of the frame. Each gap of a gapped motif is marked with a
-    dashed line between the columns on either side, labelled with the gap
-    sizes, and does not take up any columns.
+    from the left of the frame. Each gap of a gapped motif is marked with
+    dashed lines, labelled with the gap's range of sizes. On its own, a
+    gapped motif's gaps take no columns, and a line between the columns on
+    either side marks each. Aligned with other motifs, it is placed at the
+    gap sizes that fit the others best, as
+    [`compare_motifs()`][universalmotif.compare_motifs] finds them, with its
+    gaps left blank between two lines.
 
     Parameters
     ----------

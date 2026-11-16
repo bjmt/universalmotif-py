@@ -557,15 +557,20 @@ def test_view_motifs_marks_gaps():
     gap_lines = [ln for ln in ax.lines if ln.get_linestyle() != "-"]
     assert len(gap_lines) == 1 and set(gap_lines[0].get_xdata()) == {6.5}
     plt.close(fig)
-    # A motif flipped to align is marked where its reverse complement has
-    # the gap, inside the common frame, and a fixed gap shows one size.
+    # Aligned to others, a gapped motif is placed at the gap size that fits,
+    # flipped here, with its gap left blank: TCGG, three blank columns and
+    # AAACGT line up with the anchor's spacer.
     g = um.add_gap(um.create_motif("ACGTTTCCGA", nsites=50), gaploc=6, mingap=3, maxgap=3)
-    anchor = um.create_motif("ATCGGAAACGTAG", nsites=50)
-    names, _, offsets, _, gaps, _ = _prepare_motifs([anchor, g], "ICM", True, 6, False, "none", " [RC]", 1)
-    assert names[1].endswith("[RC]") and offsets[1] == 1
-    assert gaps == [[], [(5, 3, 3)]]
+    anchor = um.create_motif("ATCGGCCCAAACGTAG", nsites=50)
+    names, mats, offsets, widths, gaps, _ = _prepare_motifs([anchor, g], "ICM", True, 6, False, "none",
+                                                            " [RC]", 1)
+    assert names[1].endswith("[RC]") and offsets[1] == 1 and widths[1] == 13
+    assert gaps == [[], [(5, 3, 3, 3)]]
+    assert not mats[1][:, 5:8].any()
     fig = um.view_motifs([anchor, g])
     assert [t.get_text() for t in fig.axes[1].texts] == ["3"] and not fig.axes[0].texts
+    edges = sorted(x for ln in fig.axes[1].lines if ln.get_linestyle() != "-" for x in set(ln.get_xdata()))
+    assert edges == [5.5, 8.5]
     plt.close(fig)
 
 

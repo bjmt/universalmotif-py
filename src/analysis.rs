@@ -26,7 +26,7 @@ use std::sync::Arc;
 use arrow_array::ArrayRef;
 use arrow_array::builder::StringViewBuilder;
 
-use crate::arrow::{f64_vec, f64s, i64_vec, i64s, names_at, strs, table, u32_vec, u32s};
+use crate::arrow::{f64_vec, f64s, i64_vec, i64s, names_at, strs, table, u32_lists, u32_vec, u32s};
 use crate::packed::PyPacked;
 use crate::{PyMotif, err, parse_bkg};
 
@@ -420,6 +420,7 @@ fn compare_options(
     complete: bool,
     method: &str,
     overhang: &str,
+    use_gaps: bool,
 ) -> PyResult<CompareOptions> {
     let method = match method {
         "PCC" => ColumnMetric::Pcc,
@@ -447,13 +448,14 @@ fn compare_options(
         method,
         overhang,
         complete,
+        use_gaps,
         nthreads,
     })
 }
 
 #[pyfunction]
 #[pyo3(signature = (motifs, min_overlap, rc, null, bkg, need_pvalues, nthreads, complete=false,
-                    method="PCC", overhang="ignore"))]
+                    method="PCC", overhang="ignore", use_gaps=true))]
 #[allow(clippy::too_many_arguments)]
 fn _compare_matrix<'py>(
     py: Python<'py>,
@@ -467,6 +469,7 @@ fn _compare_matrix<'py>(
     complete: bool,
     method: &str,
     overhang: &str,
+    use_gaps: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let motifs = unwrap(&motifs);
     let opts = compare_options(
@@ -478,6 +481,7 @@ fn _compare_matrix<'py>(
         complete,
         method,
         overhang,
+        use_gaps,
     )?;
     let m = py
         .detach(|| compare::compare_matrix(&motifs, &opts, need_pvalues))
@@ -491,7 +495,7 @@ fn _compare_matrix<'py>(
 
 #[pyfunction]
 #[pyo3(signature = (motifs, queries, min_overlap, rc, null, bkg, nthreads, names, complete=false,
-                    method="PCC", overhang="ignore"))]
+                    method="PCC", overhang="ignore", use_gaps=true))]
 #[allow(clippy::too_many_arguments)]
 fn _compare_table(
     py: Python<'_>,
@@ -506,6 +510,7 @@ fn _compare_table(
     complete: bool,
     method: &str,
     overhang: &str,
+    use_gaps: bool,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
     let opts = compare_options(
@@ -517,6 +522,7 @@ fn _compare_table(
         complete,
         method,
         overhang,
+        use_gaps,
     )?;
     let rows = py
         .detach(|| compare::compare_motifs(&motifs, &queries, &opts))
@@ -525,7 +531,7 @@ fn _compare_table(
 }
 
 fn comparison_table(rows: &[compare::Comparison], names: &[String]) -> PyResult<PyTable> {
-    table(vec![
+    let mut columns = vec![
         (
             "subject",
             strs(rows.iter().map(|c| names[c.query].as_str())),
@@ -550,7 +556,22 @@ fn comparison_table(rows: &[compare::Comparison], names: &[String]) -> PyResult<
         ),
         ("pvalue", f64s(rows.iter().map(|c| c.pvalue))),
         ("qvalue", f64s(rows.iter().map(|c| c.qvalue))),
-    ])
+    ];
+    // The gap sizes, only when gapped motifs were compared with their gaps.
+    if rows
+        .iter()
+        .any(|c| !c.query_gaps.is_empty() || !c.target_gaps.is_empty())
+    {
+        columns.push((
+            "subject_gaps",
+            u32_lists(rows.iter().map(|c| c.query_gaps.clone())),
+        ));
+        columns.push((
+            "target_gaps",
+            u32_lists(rows.iter().map(|c| c.target_gaps.clone())),
+        ));
+    }
+    table(columns)
 }
 
 fn cwm_options(
@@ -559,17 +580,20 @@ fn cwm_options(
     min_overlap: usize,
     rc: bool,
     nthreads: usize,
+    use_gaps: bool,
 ) -> PyResult<CwmCompareOptions> {
     Ok(CwmCompareOptions {
         metric: metric.parse::<CwmMetric>().map_err(err)?,
         ignore_sign,
         min_overlap,
         rc,
+        use_gaps,
         nthreads,
     })
 }
 
 #[pyfunction]
+#[pyo3(signature = (motifs, queries, metric, ignore_sign, min_overlap, rc, nthreads, names, use_gaps=true))]
 #[allow(clippy::too_many_arguments)]
 fn _compare_cwms(
     py: Python<'_>,
@@ -581,9 +605,10 @@ fn _compare_cwms(
     rc: bool,
     nthreads: usize,
     names: Vec<String>,
+    use_gaps: bool,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
-    let opts = cwm_options(metric, ignore_sign, min_overlap, rc, nthreads)?;
+    let opts = cwm_options(metric, ignore_sign, min_overlap, rc, nthreads, use_gaps)?;
     let rows = py
         .detach(|| similarity::compare_cwms(&motifs, &queries, &opts))
         .map_err(err)?;
@@ -591,6 +616,8 @@ fn _compare_cwms(
 }
 
 #[pyfunction]
+#[pyo3(signature = (motifs, metric, ignore_sign, min_overlap, rc, nthreads, use_gaps=true))]
+#[allow(clippy::too_many_arguments)]
 fn _cwm_matrix(
     py: Python<'_>,
     motifs: Vec<PyRef<'_, PyMotif>>,
@@ -599,15 +626,17 @@ fn _cwm_matrix(
     min_overlap: usize,
     rc: bool,
     nthreads: usize,
+    use_gaps: bool,
 ) -> PyResult<Vec<Vec<f64>>> {
     let motifs = unwrap(&motifs);
-    let opts = cwm_options(metric, ignore_sign, min_overlap, rc, nthreads)?;
+    let opts = cwm_options(metric, ignore_sign, min_overlap, rc, nthreads, use_gaps)?;
     py.detach(|| similarity::cwm_similarity_matrix(&motifs, &opts))
         .map_err(err)
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, min_overlap, rc, name, weighted, nthreads))]
+#[pyo3(signature = (motifs, min_overlap, rc, name, weighted, nthreads, use_gaps=true))]
+#[allow(clippy::too_many_arguments)]
 fn _merge_motifs(
     py: Python<'_>,
     motifs: Vec<PyRef<'_, PyMotif>>,
@@ -616,23 +645,25 @@ fn _merge_motifs(
     name: Option<String>,
     weighted: bool,
     nthreads: usize,
-) -> PyResult<(PyMotif, Vec<usize>)> {
+    use_gaps: bool,
+) -> PyResult<(PyMotif, Vec<usize>, Vec<String>)> {
     let motifs = unwrap(&motifs);
     let opts = MergeOptions {
         min_overlap,
         rc,
         name,
         weighted,
+        use_gaps,
         nthreads,
     };
     py.detach(|| merge::merge_motifs_detailed(&motifs, &opts))
-        .map(|m| (PyMotif::from(m.motif), m.used))
+        .map(|m| (PyMotif::from(m.motif), m.used, m.warnings))
         .map_err(err)
 }
 
 #[pyfunction]
 #[pyo3(signature = (motifs, qvalue, null, min_overlap, rc, bkg, weighted, linkage, nthreads,
-                    cwm_metric="COSINE", ignore_sign=false, min_score=None))]
+                    cwm_metric="COSINE", ignore_sign=false, min_score=None, use_gaps=true))]
 #[allow(clippy::too_many_arguments)]
 fn _merge_similar(
     py: Python<'_>,
@@ -648,6 +679,7 @@ fn _merge_similar(
     cwm_metric: &str,
     ignore_sign: bool,
     min_score: Option<f64>,
+    use_gaps: bool,
 ) -> PyResult<(Vec<usize>, Vec<PyMotif>, Vec<String>)> {
     let motifs = unwrap(&motifs);
     let opts = MergeSimilarOptions {
@@ -661,6 +693,7 @@ fn _merge_similar(
         bkg: bkg4(bkg)?,
         weighted,
         linkage: linkage.parse::<MergeLinkage>().map_err(err)?,
+        use_gaps,
         nthreads,
     };
     let res = py

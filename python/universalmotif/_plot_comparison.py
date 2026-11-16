@@ -175,7 +175,7 @@ def _logo_placements(ms, order, groups, metric, sign, min_overlap, rc, nthreads)
         sub = [ms[i] for i in idx]
         ic = [_anchor_ic(m) for m in sub]
         anchor = max(range(len(sub)), key=lambda k: ic[k])
-        found, width = _core._anchor_layout(sub, anchor, min_overlap, rc, nthreads, cwm_metric, sign == "ignore")
+        found, width, _ = _core._anchor_layout(sub, anchor, min_overlap, rc, nthreads, cwm_metric, sign == "ignore")
         placed.update(zip(idx, found))
         frame = max(frame, width)
     return [placed[i] for i in range(len(ms))], frame

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+Changes in behaviour:
+
+- Gapped motifs are compared, merged and aligned with their gaps in
+  `compare_motifs()`, `merge_motifs()`, `merge_similar()`, `motif_tree()`
+  and `view_motifs()`: each combination of gap sizes is tried with the
+  gaps filled by blank columns, the best kept and its P-value corrected
+  for the combinations tried. Comparisons gain `subject_gaps` and
+  `target_gaps` columns, merged motifs with the same number of gaps keep
+  gaps spanning all of theirs, and aligned logos leave the gaps blank.
+  `use_gaps=False` ignores the gaps as before.
+
 New:
 
 - `view_motifs()` marks the gaps of gapped motifs with a dashed line

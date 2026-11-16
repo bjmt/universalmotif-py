@@ -46,6 +46,7 @@ def compare_motifs(
     method: str | None = None,
     overhang: str = "ignore",
     sign: str = "match",
+    use_gaps: bool = True,
 ):
     """Compare motifs.
 
@@ -99,9 +100,17 @@ def compare_motifs(
     Either way, ``score`` is the mean column correlation or distance over
     the overlap, as it is whenever overhangs are ignored.
 
-    The gaps of gapped motifs are not used: their columns are compared as if
-    they followed one another, so a gapped motif scores as its ungapped
-    columns would.
+    A gapped motif, such as one from
+    [`gapped_motif_finder()`][universalmotif.gapped_motif_finder], is
+    compared as each of the motifs it stands for, one for every combination
+    of its gap sizes, with each gap filled by columns of the background
+    (zeros for CWMs). The best of these comparisons is kept, its P-value
+    multiplied by the number tried and its score taken over the columns
+    that face no gap, and ``subject_gaps`` and ``target_gaps`` give the gap
+    sizes it used. A direct repeat with a spacer of 1 to 5 letters thus
+    matches a motif of the same repeat with a fixed spacer of 4 over its
+    whole length. With ``use_gaps=False``, the gaps are ignored and the
+    columns compared as if they followed one another.
 
     To search a database with a query motif, such as to name a motif from
     [`motif_finder()`][universalmotif.motif_finder] or a TF-MoDISco pattern,
@@ -194,6 +203,8 @@ def compare_motifs(
         ``"ignore"`` to compare their absolute values, so that a negative
         pattern matches a positive one with the same letters. ``"ignore"``
         applies to ``"COSINE"`` and ``"CJACCARD"`` only.
+    use_gaps
+        Compare gapped motifs with their gaps, as described above.
 
     Returns
     -------
@@ -208,7 +219,11 @@ def compare_motifs(
         ``subject_i``, ``target``, ``target_i``, ``offset``, ``strand``,
         ``overlap``, ``score``, ``subject_consensus``,
         ``target_consensus``, ``pvalue`` and ``qvalue``, where ``subject``
-        is the query.
+        is the query, and when gapped motifs are compared with their gaps,
+        ``subject_gaps`` and ``target_gaps``, the size of each gap in the
+        comparison kept (empty for motifs without gaps). Offsets, overlaps
+        and consensus sequences are then those of the motifs with their
+        gaps filled to these sizes.
 
     Notes
     -----
@@ -290,19 +305,19 @@ def compare_motifs(
 
     def cwm_rows(queries):
         return pl.DataFrame(_core._compare_cwms(ms, queries, method, sign == "ignore", min_overlap, rc,
-                                                nthreads, names))
+                                                nthreads, names, use_gaps))
 
     if compare_to is None:
         if qvalue != 0.1:
             warnings.warn("qvalue is ignored without compare_to", stacklevel=2)
         if cwm:
             if matrix_out == "score":
-                return np.array(_core._cwm_matrix(ms, method, sign == "ignore", min_overlap, rc, nthreads),
-                                dtype=float)
+                return np.array(_core._cwm_matrix(ms, method, sign == "ignore", min_overlap, rc, nthreads,
+                                                  use_gaps), dtype=float)
             rows = cwm_rows(list(range(len(ms))))
             return rows[matrix_out].to_numpy().reshape(len(ms), len(ms))
         d = _core._compare_matrix(ms, min_overlap, rc, null, b, matrix_out != "score", nthreads,
-                                  complete, method, overhang)
+                                  complete, method, overhang, use_gaps)
         return np.array(d[matrix_out], dtype=float)
 
     targets = [compare_to] if isinstance(compare_to, (int, np.integer, str)) else list(compare_to)
@@ -325,7 +340,7 @@ def compare_motifs(
     else:
         df = pl.DataFrame(
             _core._compare_table(ms, queries, min_overlap, rc, null, b, nthreads, names, complete,
-                                 method, overhang)
+                                 method, overhang, use_gaps)
         )
     df = df.filter((pl.col("qvalue") <= qvalue) & (pl.col("overlap") > 0))
     return df.sort(["qvalue", "pvalue", "target_i"], maintain_order=True)
@@ -361,6 +376,7 @@ def merge_motifs(
     new_name: str | None = None,
     weighted: bool = False,
     nthreads: int | None = None,
+    use_gaps: bool = True,
 ) -> Motif:
     """Merge motifs into one.
 
@@ -376,7 +392,13 @@ def merge_motifs(
     keeping their sign, and their aligned contributions are averaged, with
     positions covered by no motif left at 0.
 
-    Gaps are not used: gapped motifs are aligned with their columns running
+    Gapped motifs are aligned with their gaps, as
+    [`compare_motifs()`][universalmotif.compare_motifs] compares them. When
+    every motif merged has the same number of gaps, they are merged part by
+    part and the merged motif keeps gaps spanning the sizes of all of them;
+    otherwise each gapped motif goes in at its best-fitting gap sizes, its
+    gaps filled with blank columns, and a warning says so. With
+    ``use_gaps=False``, gapped motifs are aligned with their columns running
     together, and the merged motif has no gaps.
 
     The default name joins the merged motifs' names.
@@ -395,7 +417,9 @@ def merge_motifs(
     """
     nthreads = _nthreads(nthreads)
     ms = _motif_list(motifs)
-    merged, used = _core._merge_motifs(ms, min_overlap, rc, new_name, weighted, nthreads)
+    merged, used, notes = _core._merge_motifs(ms, min_overlap, rc, new_name, weighted, nthreads, use_gaps)
+    for note in notes:
+        warnings.warn(note, stacklevel=2)
     if len(used) < len(ms):
         left = [ms[i].name for i in sorted(set(range(len(ms))) - set(used))]
         warnings.warn(
@@ -421,6 +445,7 @@ def merge_similar(
     method: str | None = None,
     sign: str = "match",
     min_score: float | None = None,
+    use_gaps: bool = True,
 ):
     """Cluster similar motifs and merge each cluster.
 
@@ -487,6 +512,10 @@ def merge_similar(
         For CWMs, link two motifs when their similarity reaches this; by
         default 0.8 for the cosine and 0.45 for continuous Jaccard. It
         cannot be given unless every motif is a CWM.
+    use_gaps
+        Compare and merge gapped motifs with their gaps, as
+        [`compare_motifs()`][universalmotif.compare_motifs] and
+        [`merge_motifs()`][universalmotif.merge_motifs] do.
 
     Returns
     -------
@@ -516,12 +545,13 @@ def merge_similar(
     [0, 0, 1]
     """
     ms, clusters, merged = _merge_similar_run(motifs, qvalue, null, min_overlap, rc, bkg, weighted,
-                                              linkage, nthreads, method, sign, min_score, stacklevel=2)
+                                              linkage, nthreads, method, sign, min_score, stacklevel=2,
+                                              use_gaps=use_gaps)
     return _clusters_table(ms, clusters) if return_clusters else merged
 
 
 def _merge_similar_run(motifs, qvalue, null, min_overlap, rc, bkg, weighted, linkage, nthreads, method,
-                       sign, min_score, stacklevel=2):
+                       sign, min_score, stacklevel=2, use_gaps=True):
     """The motifs, the cluster of each and the merged motifs, which
     merge_similar() returns one or the other of."""
     if linkage not in ("single", "complete"):
@@ -537,7 +567,7 @@ def _merge_similar_run(motifs, qvalue, null, min_overlap, rc, bkg, weighted, lin
         raise ValueError("min_score applies to CWMs, which every motif must be")
     clusters, merged, notes = _core._merge_similar(
         ms, qvalue, null, min_overlap, rc, None if cwm else _bkg4(bkg), weighted, linkage, nthreads,
-        metric, sign == "ignore", min_score,
+        metric, sign == "ignore", min_score, use_gaps,
     )
     for note in notes:
         warnings.warn(note, stacklevel=stacklevel + 1)

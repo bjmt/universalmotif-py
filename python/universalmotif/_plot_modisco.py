@@ -179,7 +179,7 @@ def _place(p: _Pattern, shown: list[str], align: bool) -> None:
     lefts = [0] * (1 + len(logos))
     if align and logos and ref is not None:
         try:
-            placed, _ = _core._anchor_layout([ref, *logos], 0, _MIN_OVERLAP, False, 1)
+            placed, _, _ = _core._anchor_layout([ref, *logos], 0, _MIN_OVERLAP, False, 1)
             lefts = [left for left, _ in placed]
         except ValueError:
             pass

@@ -50,6 +50,17 @@ pub(crate) fn strs<'a>(v: impl IntoIterator<Item = &'a str>) -> ArrayRef {
     Arc::new(StringViewArray::from_iter_values(v))
 }
 
+/// Lists of small counts, such as the gap sizes of comparisons.
+pub(crate) fn u32_lists(v: impl IntoIterator<Item = Vec<usize>>) -> ArrayRef {
+    Arc::new(arrow_array::ListArray::from_iter_primitive::<
+        arrow_array::types::UInt32Type,
+        _,
+        _,
+    >(v.into_iter().map(|l| {
+        Some(l.into_iter().map(|x| Some(x as u32)).collect::<Vec<_>>())
+    })))
+}
+
 /// An owned vector as an Arrow column, without copying.
 pub(crate) fn i64_vec(v: Vec<i64>) -> ArrayRef {
     Arc::new(Int64Array::from(v))
