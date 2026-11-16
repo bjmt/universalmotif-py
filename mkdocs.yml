@@ -54,6 +54,9 @@ plugins:
         - guides/deep-learning.ipynb
       include_source: true
       allow_errors: false
+      # The cache is keyed on the notebooks alone, so it would keep outputs
+      # from before a change to the package; CI builds without it anyway.
+      cache: false
   - mkdocstrings:
       handlers:
         python:
