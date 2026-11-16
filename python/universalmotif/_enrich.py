@@ -7,7 +7,7 @@ from collections.abc import Iterable, Mapping, Sequence
 import numpy as np
 import polars as pl
 
-from . import _core
+from . import _core, _progress
 from ._analysis import (
     _default_rc,
     _first_codes,
@@ -57,6 +57,7 @@ def enrich_motifs(
     seed: int | None = None,
     pseudocount: int = 1,
     nthreads: int | None = None,
+    progress: bool | None = None,
 ) -> pl.DataFrame:
     """Test motifs for enrichment in target sequences.
 
@@ -105,6 +106,11 @@ def enrich_motifs(
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
+    progress
+        Show a progress bar on stderr once the call has run for a second,
+        and let Ctrl-C stop it; by default the package setting from
+        [`set_progress()`][universalmotif.set_progress].
+
     Returns
     -------
     polars.DataFrame
@@ -147,6 +153,9 @@ def enrich_motifs(
     >>> um.enrich_motifs(motifs, targets, controls, qvalue=0.1, nthreads=1)["motif"].to_list()
     ['G-box', 'W-box']
     """
+    if _progress.wanted(progress):
+        args = {**locals(), "progress": False}
+        return _progress.run(lambda: enrich_motifs(**args))
     nthreads = _nthreads(nthreads)
     if test not in ("seqs", "sites"):
         raise ValueError("test must be 'seqs' or 'sites'")

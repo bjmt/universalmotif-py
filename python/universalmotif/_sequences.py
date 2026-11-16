@@ -12,7 +12,7 @@ from typing import IO
 import numpy as np
 import polars as pl
 
-from . import _core
+from . import _core, _progress
 from ._analysis import _sequence_pairs
 from ._api import _bkg_table, _check_motif
 from ._core import Motif
@@ -397,6 +397,7 @@ def shuffle_sequences(
     window_overlap: float = 0.01,
     nthreads: int | None = None,
     alphabet: str = "ACGT",
+    progress: bool | None = None,
 ):
     """Shuffle sequences while preserving their k-mer composition.
 
@@ -448,6 +449,11 @@ def shuffle_sequences(
         The letters of one-hot sequences, in the order of their rows or
         columns. Not used for sequences given as text.
 
+    progress
+        Show a progress bar on stderr once the call has run for a second,
+        and let Ctrl-C stop it; by default the package setting from
+        [`set_progress()`][universalmotif.set_progress].
+
     Returns
     -------
     str | list[str] | dict[str, str] | numpy.ndarray
@@ -476,6 +482,9 @@ def shuffle_sequences(
     >>> um.from_one_hot(um.shuffle_sequences(um.one_hot([seq]), seed=1))
     ['ACCGTACGGTAACGTT']
     """
+    if _progress.wanted(progress):
+        args = {**locals(), "progress": False}
+        return _progress.run(lambda: shuffle_sequences(**args))
     nthreads = _nthreads(nthreads)
     if method not in _SHUFFLE_METHODS:
         raise ValueError("method must be 'euler', 'markov' or 'linear'")
@@ -832,6 +841,7 @@ def motif_finder(
     seed: int | None = None,
     pseudocount: int = 1,
     nthreads: int | None = None,
+    progress: bool | None = None,
 ) -> pl.DataFrame:
     """Discover motifs enriched in DNA or RNA sequences.
 
@@ -903,6 +913,11 @@ def motif_finder(
         at a time; by default the package setting from
         [`set_nthreads()`][universalmotif.set_nthreads].
 
+    progress
+        Show a progress bar on stderr once the call has run for a second,
+        and let Ctrl-C stop it; by default the package setting from
+        [`set_progress()`][universalmotif.set_progress].
+
     Returns
     -------
     polars.DataFrame
@@ -940,6 +955,9 @@ def motif_finder(
     >>> res.select("consensus", "seqs_pos", "seqs_neg").rows()
     [('TGGTCAA', 20, 0)]
     """
+    if _progress.wanted(progress):
+        args = {**locals(), "progress": False}
+        return _progress.run(lambda: motif_finder(**args))
     nthreads = _nthreads(nthreads)
     if min_width < 3 or max_width > 30 or min_width > max_width:
         raise ValueError("widths must satisfy 3 <= min_width <= max_width <= 30")

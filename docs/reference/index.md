@@ -40,3 +40,14 @@ gives the same results again; without one they draw a fresh seed each time.
 ::: universalmotif.set_nthreads
 
 ::: universalmotif.get_nthreads
+
+Functions that can run for a long time, such as scanning a genome or
+searching for motifs, take a `progress` argument. With it, a bar appears on
+stderr once the call has run for a second, and Ctrl-C stops the call. Left
+out, it takes the package setting, which is off unless changed with
+[`set_progress()`][universalmotif.set_progress] or set with the
+`UNIVERSALMOTIF_PROGRESS` environment variable.
+
+::: universalmotif.set_progress
+
+::: universalmotif.get_progress

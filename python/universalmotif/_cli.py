@@ -295,6 +295,12 @@ def _threads_arg(p: argparse.ArgumentParser) -> None:
                         "UNIVERSALMOTIF_NTHREADS if set)")
 
 
+def _progress_arg(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--progress", action=argparse.BooleanOptionalAction, default=None,
+                   help="show a progress bar on stderr for work that takes more than a second "
+                        "(default: on when stderr is a terminal, or UNIVERSALMOTIF_PROGRESS if set)")
+
+
 def _seed_arg(p: argparse.ArgumentParser) -> None:
     p.add_argument("--seed", type=int, help="random seed, for reproducible results")
 
@@ -1186,6 +1192,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--genomic", action="store_true",
                    help="with -s, read each sequence's place in the genome from names like "
                         "chrom:start-end and report hits in genomic coordinates")
+    _progress_arg(p)
     _threads_arg(p)
 
     p = command("compare", cmd_compare, "compare motifs with each other or with a database",
@@ -1235,6 +1242,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--shuffle-k", type=int, default=2,
                    help="k-mer size kept when shuffling targets for a background (default: 2)")
     _seed_arg(p)
+    _progress_arg(p)
     _threads_arg(p)
 
     p = command("find", cmd_find, "discover motifs de novo",
@@ -1259,6 +1267,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--shuffle-k", type=int, default=2,
                    help="k-mer size kept when shuffling targets for a background (default: 2)")
     _seed_arg(p)
+    _progress_arg(p)
     _threads_arg(p)
 
     p = command("find-gapped", cmd_find_gapped, "discover gapped motifs de novo (experimental)",
@@ -1296,6 +1305,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--shuffle-k", type=int, default=2,
                    help="k-mer size kept when shuffling targets for a background (default: 2)")
     _seed_arg(p)
+    _progress_arg(p)
     _threads_arg(p)
 
     p = command("shuffle", cmd_shuffle, "shuffle sequences, keeping k-mer counts")
@@ -1305,6 +1315,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--method", choices=("euler", "linear", "markov"), default="euler",
                    help="shuffling method (default: euler)")
     _seed_arg(p)
+    _progress_arg(p)
     _threads_arg(p)
 
     p = command("extract", cmd_extract, "extract the sequences of genomic ranges",
@@ -1466,6 +1477,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     shown = warnings.showwarning
     warnings.showwarning = _show_warning
+    setting = None
+    if hasattr(args, "progress"):
+        from . import _progress
+
+        # The package's setting, put back afterwards, as main() also runs
+        # within Python.
+        setting = (_progress, _progress._setting)
+        choice = args.progress
+        if choice is None:
+            choice = _progress.get_progress() or sys.stderr.isatty()
+        _progress.set_progress(choice)
     try:
         args.fn(args)
     except BrokenPipeError:
@@ -1485,6 +1507,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     finally:
         warnings.showwarning = shown
+        if setting is not None:
+            setting[0]._setting = setting[1]
     return 0
 
 

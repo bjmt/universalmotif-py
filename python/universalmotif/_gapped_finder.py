@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 import polars as pl
 
-from . import _core
+from . import _core, _progress
 from ._analysis import _sequence_pairs
 from ._sequences import _seed
 from ._threads import _nthreads
@@ -55,6 +55,7 @@ def gapped_motif_finder(
     rc: bool = True,
     seed: int | None = None,
     nthreads: int | None = None,
+    progress: bool | None = None,
 ) -> pl.DataFrame:
     """Find motifs made of two parts with a spacer of varying length.
 
@@ -154,6 +155,11 @@ def gapped_motif_finder(
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
+    progress
+        Show a progress bar on stderr once the call has run for a second,
+        and let Ctrl-C stop it; by default the package setting from
+        [`set_progress()`][universalmotif.set_progress].
+
     Returns
     -------
     polars.DataFrame
@@ -191,6 +197,9 @@ def gapped_motif_finder(
     >>> found.select("consensus", "seqs_pos", "seqs_neg").row(0)
     ('AGGTCA[1-5]AGGTCA', 200, 1)
     """
+    if _progress.wanted(progress):
+        args = {**locals(), "progress": False}
+        return _progress.run(lambda: gapped_motif_finder(**args))
     _, pos = _sequence_pairs(sequences)
     neg = None if bkg_sequences is None else list(_sequence_pairs(bkg_sequences)[1])
     ks = [int(k)] if isinstance(k, (int, np.integer)) else [int(x) for x in k]

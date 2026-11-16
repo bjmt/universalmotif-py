@@ -145,6 +145,7 @@ from ._sequences import (
     shuffle_sequences,
     window_string,
 )
+from ._progress import get_progress, set_progress
 from ._threads import get_nthreads, set_nthreads
 
 try:
@@ -193,6 +194,7 @@ __all__ = [
     "get_kmers",
     "get_matches",
     "get_nthreads",
+    "get_progress",
     "get_scores",
     "hit_contributions",
     "icm_to_ppm",
@@ -272,6 +274,7 @@ __all__ = [
     "score_match",
     "sequence_complexity",
     "set_nthreads",
+    "set_progress",
     "shuffle_motifs",
     "shuffle_region",
     "shuffle_sequences",

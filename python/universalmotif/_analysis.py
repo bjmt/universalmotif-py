@@ -10,7 +10,7 @@ from collections.abc import Iterable, Mapping, Sequence
 import numpy as np
 import polars as pl
 
-from . import _core
+from . import _core, _progress
 from ._api import _check_motif
 from ._core import Motif
 from ._packed import PackedSequences
@@ -219,19 +219,24 @@ def _genome_hits(ms, genome, chroms, pvalue, rc, overlaps, nthreads, use_gaps, c
         batch.clear()
         names.clear()
 
-    for i, name in enumerate(chroms):
-        seq = genome[name]
-        if i == 0:
-            _warn_alphabet_mismatch(ms, _sample_letters([seq]), stacklevel=4)
-        batch.append(seq)
-        names.append(name)
-        size += len(seq)
-        del seq
-        if size >= _GENOME_BATCH:
+    lengths = genome.lengths
+    with _progress.outer("scanning", sum(lengths[c] for c in chroms)) as counts:
+        for i, name in enumerate(chroms):
+            seq = genome[name]
+            if i == 0:
+                _warn_alphabet_mismatch(ms, _sample_letters([seq]), stacklevel=4)
+            batch.append(seq)
+            names.append(name)
+            size += len(seq)
+            del seq
+            if size >= _GENOME_BATCH:
+                counts.part = size
+                flush()
+                counts.done += size
+                first, size = i + 1, 0
+        if batch:
+            counts.part = size
             flush()
-            first, size = i + 1, 0
-    if batch:
-        flush()
     if not parts:
         return pl.DataFrame(schema=_HIT_SCHEMA)
     if len(parts) == 1:
@@ -298,6 +303,7 @@ def scan_sequences(
     ranges=None,
     no_overlaps_by_strand: bool | None = None,
     no_overlaps_by_motif: bool | None = None,
+    progress: bool | None = None,
 ) -> pl.DataFrame:
     """Scan sequences for motif hits.
 
@@ -403,6 +409,11 @@ def scan_sequences(
         Old names of ``no_overlaps_across_strands`` and
         ``no_overlaps_across_motifs``, which still work for now.
 
+    progress
+        Show a progress bar on stderr once the call has run for a second,
+        and let Ctrl-C stop it; by default the package setting from
+        [`set_progress()`][universalmotif.set_progress].
+
     Returns
     -------
     polars.DataFrame
@@ -446,6 +457,9 @@ def scan_sequences(
     >>> first.select("sequence", "start", "strand").row(0)
     ('target_015', 187, '+')
     """
+    if _progress.wanted(progress):
+        args = {**locals(), "progress": False}
+        return _progress.run(lambda: scan_sequences(**args))
     if no_overlaps_by_strand is not None:
         no_overlaps_across_strands = renamed("scan_sequences", "no_overlaps_by_strand", no_overlaps_by_strand,
                                              "no_overlaps_across_strands")

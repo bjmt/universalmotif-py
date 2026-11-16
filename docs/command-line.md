@@ -72,6 +72,10 @@ A few conventions hold across the commands.
 - **Threads** are set with `-p` and default to 1, or to the
   `UNIVERSALMOTIF_NTHREADS` environment variable if it is set, and `--seed`
   makes the commands that draw random numbers reproducible.
+- **Progress** of `scan`, `enrich`, `find`, `find-gapped` and `shuffle` is
+  shown as a bar on standard error once they have run for a second, when
+  standard error is a terminal; `--no-progress` turns it off and
+  `--progress` turns it on when writing to a log. Ctrl-C stops the command.
 
 Warnings, such as for motifs that cannot reach a P-value cutoff, are
 printed to standard error, and errors end the command with a short message

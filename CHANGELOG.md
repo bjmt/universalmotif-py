@@ -6,6 +6,13 @@ New:
 
 - `view_motifs()` marks the gaps of gapped motifs with a dashed line
   labelled with the gap sizes.
+- `scan_sequences()`, `match_motifs()`, `enrich_motifs()`,
+  `motif_finder()`, `gapped_motif_finder()` and `shuffle_sequences()` take
+  `progress`, which shows a bar on stderr once a call has run for a second
+  and lets Ctrl-C stop it; `set_progress()`, `get_progress()` and
+  `UNIVERSALMOTIF_PROGRESS` set the default. The `scan`, `enrich`, `find`,
+  `find-gapped` and `shuffle` commands show it on a terminal, with
+  `--progress` and `--no-progress` to choose.
 
 ## 0.5.0 (2026-11-15)
 

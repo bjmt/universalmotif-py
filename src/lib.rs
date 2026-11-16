@@ -20,6 +20,7 @@ mod genomic;
 mod io;
 mod packed;
 mod plot;
+mod progress;
 mod sequences;
 mod utils;
 
@@ -701,6 +702,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_consensus_to_ppm_aa, m)?)?;
     m.add_function(wrap_pyfunction!(_summarize, m)?)?;
     io::register(m)?;
+    progress::register(m)?;
     analysis::register(m)?;
     sequences::register(m)?;
     enrichment::register(m)?;

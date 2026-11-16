@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-from . import _core
+from . import _core, _progress
 from ._analysis import _default_rc, _make_unique, _sequence_pairs, _warn_unreachable
 from ._api import _check_motif
 from ._core import Motif
@@ -120,6 +120,7 @@ def match_motifs(
     use_gaps: bool = True,
     correct_gaps: bool = True,
     nthreads: int | None = None,
+    progress: bool | None = None,
 ) -> MotifMatches:
     """Which motifs match which sequences, as a sparse matrix.
 
@@ -174,6 +175,11 @@ def match_motifs(
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
 
+    progress
+        Show a progress bar on stderr once the call has run for a second,
+        and let Ctrl-C stop it; by default the package setting from
+        [`set_progress()`][universalmotif.set_progress].
+
     Returns
     -------
     MotifMatches
@@ -197,6 +203,9 @@ def match_motifs(
     >>> int(once.matrix[:, 3].sum()), int(once.matrix[:, 3].max())
     (12, 1)
     """
+    if _progress.wanted(progress):
+        args = {**locals(), "progress": False}
+        return _progress.run(lambda: match_motifs(**args))
     nthreads = _nthreads(nthreads)
     sp = _scipy_sparse()
     if value not in _DTYPES:
