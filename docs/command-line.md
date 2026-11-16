@@ -305,7 +305,9 @@ umotif bkg -g genome.fa.gz -r peaks.bed -n 2 --seed 1 --table matched.tsv -o bkg
 
 `enrich` and `find` compare the targets with background sequences given
 with `-b`, or without them with shuffled targets, here keeping
-trinucleotides with `--shuffle-k 3`:
+trinucleotides with `--shuffle-k 3`. `find` and `find-gapped` shuffle the
+targets three times by default, which `--bkg-shuffles` changes, so that
+motifs in only a few percent of the targets are found whatever the seed:
 
 ```sh
 umotif enrich motifs.meme -s peaks.fa --shuffle-k 3 --seed 1 -o enriched.tsv

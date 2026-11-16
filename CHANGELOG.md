@@ -4,6 +4,13 @@
 
 Changes in behaviour:
 
+- `motif_finder()` and `gapped_motif_finder()` build their background, when
+  none is given, from three shuffles of the sequences rather than one
+  (`bkg_shuffles`, and `--bkg-shuffles` for the `find` and `find-gapped`
+  commands). Motifs in a few percent of the sequences are then found
+  whatever the seed: a motif planted in a tenth of 400 sequences was
+  missed with three seeds in eight with one shuffle, and found with every
+  seed with three. `bkg_shuffles=1` gives the results of earlier versions.
 - polars 1.17 or later is required, the first release with everything the
   package uses; older ones failed on reading BED and VCF files and on
   `hit_contributions()`.

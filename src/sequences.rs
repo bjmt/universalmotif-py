@@ -312,7 +312,7 @@ fn _implant_motifs<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (seqs, negatives, k, min_gap, max_gap, nmotifs, hit_pvalue, stop_pvalue, flank, min_ic, n_seed_pairs, min_fraction, holdout, mismatch, mask, rc, shuffle_k, seed, nthreads))]
+#[pyo3(signature = (seqs, negatives, k, min_gap, max_gap, nmotifs, hit_pvalue, stop_pvalue, flank, min_ic, n_seed_pairs, min_fraction, holdout, mismatch, mask, rc, shuffle_k, bkg_shuffles, seed, nthreads))]
 #[allow(clippy::too_many_arguments)]
 fn _gapped_motif_finder<'py>(
     py: Python<'py>,
@@ -333,6 +333,7 @@ fn _gapped_motif_finder<'py>(
     mask: bool,
     rc: bool,
     shuffle_k: usize,
+    bkg_shuffles: usize,
     seed: u64,
     nthreads: usize,
 ) -> PyResult<(Vec<PyMotif>, Bound<'py, PyDict>)> {
@@ -352,6 +353,7 @@ fn _gapped_motif_finder<'py>(
         mask,
         rc,
         shuffle_k,
+        bkg_shuffles,
         seed,
         nthreads,
     };
@@ -408,7 +410,7 @@ fn _gapped_motif_finder<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (seqs, negatives, min_width, max_width, nmotifs, hit_pvalue, stop_pvalue, qvalue, dedup_overlap, rc, shuffle_k, seed, pseudocount, nthreads))]
+#[pyo3(signature = (seqs, negatives, min_width, max_width, nmotifs, hit_pvalue, stop_pvalue, qvalue, dedup_overlap, rc, shuffle_k, bkg_shuffles, seed, pseudocount, nthreads))]
 #[allow(clippy::too_many_arguments)]
 fn _motif_finder<'py>(
     py: Python<'py>,
@@ -423,6 +425,7 @@ fn _motif_finder<'py>(
     dedup_overlap: f64,
     rc: bool,
     shuffle_k: usize,
+    bkg_shuffles: usize,
     seed: u64,
     pseudocount: u32,
     nthreads: usize,
@@ -437,6 +440,7 @@ fn _motif_finder<'py>(
         dedup_overlap,
         rc,
         shuffle_k,
+        bkg_shuffles,
         seed,
         pseudocount,
         nthreads,
@@ -592,7 +596,7 @@ fn _refine_motifs(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, seqs, negatives, min_width, max_width, nmotifs, hit_pvalue, stop_pvalue, qvalue, dedup_overlap, rc, shuffle_k, seed, pseudocount, nthreads, rounds, fraction, min_similarity))]
+#[pyo3(signature = (motifs, seqs, negatives, min_width, max_width, nmotifs, hit_pvalue, stop_pvalue, qvalue, dedup_overlap, rc, shuffle_k, bkg_shuffles, seed, pseudocount, nthreads, rounds, fraction, min_similarity))]
 #[allow(clippy::too_many_arguments)]
 fn _motif_stability(
     py: Python<'_>,
@@ -608,6 +612,7 @@ fn _motif_stability(
     dedup_overlap: f64,
     rc: bool,
     shuffle_k: usize,
+    bkg_shuffles: usize,
     seed: u64,
     pseudocount: u32,
     nthreads: usize,
@@ -626,6 +631,7 @@ fn _motif_stability(
         dedup_overlap,
         rc,
         shuffle_k,
+        bkg_shuffles,
         seed,
         pseudocount,
         nthreads,

@@ -20,7 +20,8 @@ def test_finds_a_planted_direct_repeat(planted):
     assert top["consensus"] in ("AGGTCA[1-5]AGGTCA", "TGACCT[1-5]TGACCT")
     assert (top["left"], top["right"], top["min_gap"], top["max_gap"]) == (6, 6, 1, 5)
     assert top["seqs_pos"] > 150 and top["seqs_neg"] < 10
-    assert (top["n_pos"], top["n_neg"]) == (400, 400)
+    # The background is three shuffles of the sequences by default.
+    assert (top["n_pos"], top["n_neg"]) == (400, 1200)
     assert top["log10_spacing_pvalue"] < -3 and top["spacing_pvalue"] < 1e-3
     m = top["motif"]
     assert m.isgapped and m.name == "gapped_1" and m.gaploc == [6]

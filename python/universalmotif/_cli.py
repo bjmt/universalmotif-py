@@ -724,8 +724,8 @@ def cmd_find(a):
     bkg = read_sequences(a.bkg) if a.bkg else None
     res = um.motif_finder(targets, bkg, min_width=a.min_width, max_width=a.max_width,
                           nmotifs=a.nmotifs, hit_pvalue=a.hit_pvalue, stop_pvalue=a.stop_pvalue,
-                          qvalue=a.qvalue, rc=a.rc, shuffle_k=a.shuffle_k, seed=a.seed,
-                          nthreads=a.threads)
+                          qvalue=a.qvalue, rc=a.rc, shuffle_k=a.shuffle_k, bkg_shuffles=a.bkg_shuffles,
+                          seed=a.seed, nthreads=a.threads)
     if a.table:
         write_table(res, a.table)
     if res.height == 0:
@@ -742,8 +742,8 @@ def cmd_find_gapped(a):
     res = um.gapped_motif_finder(targets, bkg, k=a.k, min_gap=a.min_gap, max_gap=a.max_gap,
                                  nmotifs=a.nmotifs, hit_pvalue=a.hit_pvalue, stop_pvalue=a.stop_pvalue,
                                  n_seed_pairs=a.seed_pairs, min_fraction=a.min_fraction, holdout=a.holdout,
-                                 mismatch=a.mismatch, mask=a.mask, shuffle_k=a.shuffle_k, rc=a.rc,
-                                 seed=a.seed, nthreads=a.threads)
+                                 mismatch=a.mismatch, mask=a.mask, shuffle_k=a.shuffle_k,
+                                 bkg_shuffles=a.bkg_shuffles, rc=a.rc, seed=a.seed, nthreads=a.threads)
     if a.table:
         write_table(res, a.table)
     if res.height == 0:
@@ -1309,6 +1309,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="search only the forward strand, as is done by default for RNA")
     p.add_argument("--shuffle-k", type=int, default=2,
                    help="k-mer size kept when shuffling targets for a background (default: 2)")
+    p.add_argument("--bkg-shuffles", type=int, default=3,
+                   help="shuffles of the targets making up the background, without --bkg (default: 3)")
     _seed_arg(p)
     _progress_arg(p)
     _threads_arg(p)
@@ -1347,6 +1349,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--no-rc", dest="rc", action="store_false", help="search only the forward strand")
     p.add_argument("--shuffle-k", type=int, default=2,
                    help="k-mer size kept when shuffling targets for a background (default: 2)")
+    p.add_argument("--bkg-shuffles", type=int, default=3,
+                   help="shuffles of the targets making up the background, without --bkg (default: 3)")
     _seed_arg(p)
     _progress_arg(p)
     _threads_arg(p)

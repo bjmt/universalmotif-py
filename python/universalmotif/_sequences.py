@@ -844,6 +844,7 @@ def motif_finder(
     progress: bool | None = None,
     stability: int = 0,
     stability_fraction: float = 0.5,
+    bkg_shuffles: int = 3,
 ) -> pl.DataFrame:
     """Discover motifs enriched in DNA or RNA sequences.
 
@@ -905,6 +906,12 @@ def motif_finder(
     shuffle_k
         The size of the k-mers whose counts the shuffled background keeps,
         at least 1. Only used without ``bkg_sequences``.
+    bkg_shuffles
+        How many shuffles of the sequences make up the background, without
+        ``bkg_sequences``. Several steady the background, so that motifs in
+        only a few percent of the sequences are found whatever the seed:
+        with one, a motif in a tenth of 400 sequences was missed with three
+        seeds in eight, and with three it was found with all of them.
     seed
         Seed for shuffling the background; a fresh one by default.
     pseudocount
@@ -966,7 +973,7 @@ def motif_finder(
     >>> seqs = um.implant_motifs(site, seqs, seed=1)
     >>> res = um.motif_finder(seqs, min_width=6, max_width=10, seed=1)
     >>> res.select("consensus", "seqs_pos", "seqs_neg").rows()
-    [('TGGTCAA', 20, 0)]
+    [('ATGGTCA', 20, 1)]
     """
     if _progress.wanted(progress):
         args = {**locals(), "progress": False}
@@ -978,6 +985,8 @@ def motif_finder(
         raise ValueError("shuffle_k must be at least 1")
     if pseudocount < 0:
         raise ValueError("pseudocount must be non-negative")
+    if bkg_shuffles < 1:
+        raise ValueError("bkg_shuffles must be at least 1")
     if stability < 0 or not 0 < stability_fraction < 1:
         raise ValueError("stability must be zero or positive, and stability_fraction above 0 and below 1")
     _, seqs = _sequence_pairs(sequences)
@@ -985,8 +994,8 @@ def motif_finder(
     if rc is None:
         rc = not any("U" in s or "u" in s for s in seqs)
     seed = _seed(seed)
-    args = (min_width, max_width, nmotifs, hit_pvalue, stop_pvalue, qvalue, dedup_overlap, rc, shuffle_k, seed,
-            pseudocount, nthreads)
+    args = (min_width, max_width, nmotifs, hit_pvalue, stop_pvalue, qvalue, dedup_overlap, rc, shuffle_k,
+            bkg_shuffles, seed, pseudocount, nthreads)
     motifs, cols = _core._motif_finder(seqs, neg, *args)
     cols["name"] = [m.name for m in motifs]
     cols["consensus"] = [m.consensus or "" for m in motifs]

@@ -56,6 +56,7 @@ def gapped_motif_finder(
     seed: int | None = None,
     nthreads: int | None = None,
     progress: bool | None = None,
+    bkg_shuffles: int = 3,
 ) -> pl.DataFrame:
     """Find motifs made of two parts with a spacer of varying length.
 
@@ -146,6 +147,10 @@ def gapped_motif_finder(
     shuffle_k
         The size of the k-mers whose counts the shuffled background keeps.
         Only used without ``bkg_sequences``.
+    bkg_shuffles
+        How many shuffles of the sequences make up the background, without
+        ``bkg_sequences``; several steady it, so that rarer motifs are found
+        whatever the seed.
     rc
         Search both strands.
     seed
@@ -187,7 +192,8 @@ def gapped_motif_finder(
     Examples
     --------
     Direct repeats of ``AGGTCA`` with spacers of 1 to 5 letters, planted in
-    half of 400 random sequences, are found with their spacing:
+    half of 400 random sequences, are found with their spacing, here as
+    their reverse complement:
 
     >>> import universalmotif as um
     >>> dr = um.add_gap(um.create_motif("AGGTCAAGGTCA"), gaploc=6, mingap=1, maxgap=5)
@@ -195,17 +201,19 @@ def gapped_motif_finder(
     >>> seqs = um.implant_motifs(dr, seqs[:200], seed=1) + seqs[200:]
     >>> found = um.gapped_motif_finder(seqs, k=5, seed=1)
     >>> found.select("consensus", "seqs_pos", "seqs_neg").row(0)
-    ('AGGTCA[1-5]AGGTCA', 200, 1)
+    ('TGACCT[1-5]TGACCT', 200, 5)
     """
     if _progress.wanted(progress):
         args = {**locals(), "progress": False}
         return _progress.run(lambda: gapped_motif_finder(**args))
+    if bkg_shuffles < 1:
+        raise ValueError("bkg_shuffles must be at least 1")
     _, pos = _sequence_pairs(sequences)
     neg = None if bkg_sequences is None else list(_sequence_pairs(bkg_sequences)[1])
     ks = [int(k)] if isinstance(k, (int, np.integer)) else [int(x) for x in k]
     found, info = _core._gapped_motif_finder(
         list(pos), neg, ks, min_gap, max_gap, nmotifs, hit_pvalue, stop_pvalue, flank, min_ic, n_seed_pairs,
-        min_fraction, holdout, mismatch, mask, rc, shuffle_k, _seed(seed), _nthreads(nthreads),
+        min_fraction, holdout, mismatch, mask, rc, shuffle_k, bkg_shuffles, _seed(seed), _nthreads(nthreads),
     )
     motifs = list(found)
     cols = {

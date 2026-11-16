@@ -463,6 +463,7 @@ def _motif_finder(
     dedup_overlap: float,
     rc: bool,
     shuffle_k: int,
+    bkg_shuffles: int,
     seed: int,
     pseudocount: int,
     nthreads: int,
@@ -507,6 +508,27 @@ def _refine_motifs(
     rc: bool,
     nthreads: int,
 ) -> tuple[list[Motif], list[int]]: ...
+def _motif_stability(
+    motifs: list[Motif],
+    seqs: list[str],
+    negatives: list[str] | None,
+    min_width: int,
+    max_width: int,
+    nmotifs: int,
+    hit_pvalue: float,
+    stop_pvalue: float,
+    qvalue: float,
+    dedup_overlap: float,
+    rc: bool,
+    shuffle_k: int,
+    bkg_shuffles: int,
+    seed: int,
+    pseudocount: int,
+    nthreads: int,
+    rounds: int,
+    fraction: float,
+    min_similarity: float,
+) -> list[float]: ...
 def _gapped_motif_finder(
     seqs: list[str],
     negatives: list[str] | None,
@@ -525,6 +547,7 @@ def _gapped_motif_finder(
     mask: bool,
     rc: bool,
     shuffle_k: int,
+    bkg_shuffles: int,
     seed: int,
     nthreads: int,
 ) -> tuple[list[Motif], dict[str, Any]]: ...
@@ -536,7 +559,7 @@ def _enrich(
     test: str,
     rc: bool,
     shuffle_k: int,
-    seed: int,
+        seed: int,
     pseudocount: int,
     nthreads: int,
 ) -> dict[str, Any]: ...
