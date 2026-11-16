@@ -598,6 +598,29 @@ def cmd_scan(a):
         write_table(hits, a.output)
 
 
+def cmd_variants(a):
+    import universalmotif as um
+
+    motifs = read_motifs(a.motifs, a.format)
+    if a.variants != "-" and not Path(a.variants).exists():
+        raise CliError(f"no such file: {a.variants}")
+    text = _read_bytes(a.variants).decode()
+    if text.lstrip().startswith(("##fileformat=VCF", "#CHROM")):
+        from ._variants import _vcf_frame
+
+        try:
+            variants = _vcf_frame(text, a.variants)
+        except ValueError as e:
+            raise CliError(str(e)) from None
+    else:
+        variants = pl.read_csv(io.StringIO(text), separator="\t", null_values="NA", infer_schema_length=10000,
+                               comment_prefix="#")
+    hits = read_table(a.hits) if a.hits else None
+    table = um.variant_motif_effects(variants, open_genome(a.genome), motifs, pvalue=a.pvalue, hits=hits,
+                                     rc=a.rc, nthreads=a.threads, progress=a.progress)
+    write_table(table, a.output)
+
+
 def write_hits_bed(hits: pl.DataFrame, path: str | None) -> None:
     """Hits as BED6, named by motif, on the chromosome where they have
     one and otherwise on the sequence scanned."""
@@ -1192,6 +1215,24 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--genomic", action="store_true",
                    help="with -s, read each sequence's place in the genome from names like "
                         "chrom:start-end and report hits in genomic coordinates")
+    _progress_arg(p)
+    _threads_arg(p)
+
+    p = command("variants", cmd_variants, "score how variants change motif sites",
+                "Score how variants change the motif sites they fall in, for substitutions, "
+                "insertions and deletions alike. Variants come from a VCF file, or from a "
+                "tab-separated table with chrom, position, ref and alt columns with positions "
+                "counted from 0, and are applied to the genome given with -g one at a time.")
+    _motif_args(p)
+    p.add_argument("-v", "--variants", required=True,
+                   help="VCF file (plain, gzipped or bgzipped) or table of variants; - reads standard "
+                        "input")
+    p.add_argument("-g", "--genome", required=True,
+                   help="genome the variants are in (FASTA, bgzipped FASTA or 2bit)")
+    p.add_argument("--hits", help="table of hits from scan -g, to score only those sites, whatever their "
+                                  "scores")
+    _out_arg(p)
+    _scan_args(p)
     _progress_arg(p)
     _threads_arg(p)
 

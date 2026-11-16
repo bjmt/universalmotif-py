@@ -146,9 +146,9 @@ def test_motif_effects_variant_rows_and_inputs(data):
             (205, seq[205], "T")]
     rows = [r for r in rows if r[1] != r[2]]
     table = variant_motif_effects(rows, seq, gata)
-    # The deletion is left out, and rows keep their numbers in the input.
-    assert 2 not in table["variant"].to_list()
-    assert set(table["variant"].to_list()) <= {1, 3}
+    # Rows keep their numbers in the input, the deletion among them.
+    assert 2 in table["variant"].to_list()
+    assert set(table["variant"].to_list()) <= {1, 2, 3}
     assert variant_motif_effects(rows, seq.lower(), gata).equals(table)
     assert variant_motif_effects(rows, seq, gata, rc=False)["strand"].unique().to_list() in ([], ["+"])
     pd = pytest.importorskip("pandas")

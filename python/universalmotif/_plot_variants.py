@@ -9,10 +9,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import polars as pl
 
-from ._analysis import _make_unique
-from ._api import _check_motif
 from ._core import Motif
 from ._plot import _ALPHABET_NAMES, _default_colours, _nice_step, _pyplot
+from ._variants import _motif_list, _variants, variant_motif_effects
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -24,143 +23,10 @@ _FLAT = "#9E9E9E"
 _RING = "#1A1A1A"
 _MUTED = "#5E5E5E"
 _SUMMARIES = ("mean", "min", "max", "strongest")
-_COMPLEMENTS = {"DNA": ("ACGT", "TGCA"), "RNA": ("ACGU", "UGCA")}
 # Heights in inches of the panels of a figure made here.
 _EFFECT_INCHES = 2.4
 _LETTER_INCHES = 0.24
 _LANE_INCHES = 0.17
-
-
-def _column(df: pl.DataFrame, name: str) -> str | None:
-    """The column called ``name``, matched without regard to case."""
-    if name in df.columns:
-        return name
-    return next((c for c in df.columns if c.lower() == name), None)
-
-
-def _as_frame(variants: Any) -> pl.DataFrame | None:
-    """A table of variants as a polars DataFrame, or None for an array."""
-    if isinstance(variants, pl.LazyFrame):
-        return variants.collect()
-    if isinstance(variants, pl.DataFrame):
-        return variants
-    if type(variants).__module__.startswith("pandas") and hasattr(variants, "columns"):
-        return pl.from_pandas(variants)
-    if isinstance(variants, Mapping):
-        return pl.DataFrame(dict(variants))
-    rows = isinstance(variants, (list, tuple)) and variants and isinstance(variants[0], (list, tuple))
-    if rows and any(isinstance(v, str) for v in variants[0]):
-        if len(variants[0]) not in (3, 4):
-            raise ValueError("variants given as rows must be (position, ref, alt) or "
-                             "(position, ref, alt, effect)")
-        names = ["position", "ref", "alt", "effect"][:len(variants[0])]
-        return pl.DataFrame([list(v) for v in variants], schema=names, orient="row")
-    return None
-
-
-def _from_array(variants: Any, sequence: str | None, alphabet: str, start: int) -> pl.DataFrame:
-    """Every substitution in an array of effects of shape (letters, length),
-    such as from mutagenesis_effects()."""
-    from ._deep import _to_numpy
-
-    m = _to_numpy(variants)
-    n = len(alphabet)
-    if m.ndim == 2 and m.shape[0] != n and m.shape[1] == n:
-        m = m.T
-    if m.ndim == 3:
-        raise ValueError("the effects have several outputs; pick one, such as effects[0]")
-    if m.ndim != 2 or m.shape[0] != n:
-        raise ValueError(f"an array of effects must have shape ({n}, length), one row per letter of "
-                         f"{alphabet}")
-    if sequence is None:
-        raise ValueError("an array of effects needs the sequence, to know the reference letters")
-    if len(sequence) != m.shape[1]:
-        raise ValueError(f"the sequence has {len(sequence)} letters for {m.shape[1]} positions of effects; "
-                         "for effects of part of a sequence, give that part and its start")
-    if not np.isfinite(m).all():
-        raise ValueError("the effects have missing or infinite values")
-    letters = np.array(list(alphabet))
-    seq = np.array(list(sequence.upper() if alphabet.isupper() else sequence))
-    ref = seq[None, :] == letters[:, None]
-    let, pos = np.nonzero(~ref)
-    order = np.lexsort((let, pos))
-    let, pos = let[order], pos[order]
-    return pl.DataFrame({
-        "position": pl.Series(pos + start, dtype=pl.Int64),
-        "ref": np.array(list(sequence))[pos].tolist(),
-        "alt": letters[let].tolist(),
-        "effect": m[let, pos].astype(float),
-    })
-
-
-def _variants(variants: Any, effects: Any, sequence: str | None, alphabet: str, start: int,
-              need_effects: bool) -> pl.DataFrame:
-    """Variants as a table with position, ref and alt columns, and an effect
-    column when ``need_effects``, with any other columns kept after them."""
-    df = _as_frame(variants)
-    if df is None:
-        if effects is not None:
-            raise ValueError("effects cannot be given with an array of effects")
-        return _from_array(variants, sequence, alphabet, start)
-    rename = {}
-    for name in ("position", "ref", "alt"):
-        col = _column(df, name)
-        if col is None:
-            raise ValueError(f"variants must have a {name!r} column")
-        rename[col] = name
-    if effects is None or isinstance(effects, str):
-        col = _column(df, effects or "effect")
-        if col is not None:
-            rename[col] = "effect"
-        elif effects is not None:
-            raise ValueError(f"variants has no {effects!r} column")
-        elif need_effects:
-            raise ValueError("variants needs an 'effect' column, or give the effects with effects")
-    df = df.rename({k: v for k, v in rename.items() if k != v})
-    if effects is not None and not isinstance(effects, str):
-        from ._deep import _to_numpy
-
-        e = _to_numpy(effects).ravel()
-        if len(e) != df.height:
-            raise ValueError(f"{len(e)} effects for {df.height} variants")
-        df = df.with_columns(pl.Series("effect", e.astype(float)))
-    if df.height == 0:
-        raise ValueError("there are no variants")
-    if not df["position"].dtype.is_integer():
-        raise ValueError("positions must be whole numbers, counted from 0")
-    df = df.with_columns(pl.col("position").cast(pl.Int64), pl.col("ref").cast(pl.String),
-                         pl.col("alt").cast(pl.String))
-    if df["position"].null_count() or df["ref"].null_count():
-        raise ValueError("positions and reference letters cannot be missing")
-    if "effect" in df.columns:
-        if not df["effect"].dtype.is_numeric():
-            raise ValueError("effects must be numbers")
-        df = df.with_columns(pl.col("effect").cast(pl.Float64))
-        if df["effect"].null_count() or not np.isfinite(df["effect"].to_numpy()).all():
-            raise ValueError("the effects have missing or infinite values")
-    lead = ["position", "ref", "alt"] + (["effect"] if "effect" in df.columns else [])
-    df = df.select(lead + [c for c in df.columns if c not in lead])
-    if sequence is not None:
-        _check_refs(df, sequence, start)
-    return df
-
-
-def _check_refs(df: pl.DataFrame, sequence: str, start: int) -> None:
-    i = df["position"].to_numpy() - start
-    refs = df["ref"].to_list()
-    width = np.array([len(r) for r in refs])
-    out = np.flatnonzero((i < 0) | (i + np.maximum(width, 1) > len(sequence)))
-    if out.size:
-        p = int(df["position"][int(out[0])])
-        raise ValueError(f"variant at position {p} lies outside the sequence, which runs from {start} to "
-                         f"{start + len(sequence)}")
-    bad = [k for k in range(df.height) if sequence[i[k]:i[k] + width[k]].upper() != refs[k].upper()]
-    if bad:
-        shown = "; ".join(f"position {int(i[k]) + start} has {sequence[i[k]:i[k] + width[k]]}, not {refs[k]}"
-                          for k in bad[:3])
-        more = f" and {len(bad) - 3} more" if len(bad) > 3 else ""
-        raise ValueError(f"the reference letters of {len(bad)} variants do not match the sequence: "
-                         f"{shown}{more}")
 
 
 def _summarize(df: pl.DataFrame, summary: str) -> pl.DataFrame:
@@ -176,178 +42,6 @@ def _summarize(df: pl.DataFrame, summary: str) -> pl.DataFrame:
     key = {"min": pl.col("effect"), "max": -pl.col("effect"), "strongest": -pl.col("effect").abs()}[summary]
     return (df.with_columns(key.alias("_key")).sort("position", "_key", maintain_order=True)
             .unique("position", keep="first", maintain_order=True).drop("_key"))
-
-
-def _motif_list(motifs: Motif | Iterable[Motif]) -> tuple[list[Motif], list[str]]:
-    ms = [motifs] if isinstance(motifs, Motif) else [_check_motif(m) for m in motifs]
-    if not ms:
-        raise ValueError("motifs is empty")
-    return ms, _make_unique([m.name for m in ms])
-
-
-def _windows(motif: Motif, codes: np.ndarray, idx: np.ndarray, alt: np.ndarray):
-    """The windows of the motif's width around each variant, as the variant
-    of each, its start, and its letters with the reference and the
-    alternative letter, keeping those made only of the motif's letters."""
-    w, n = motif.width, len(codes)
-    s = idx[:, None] - np.arange(w)[None, :]
-    rows, offs = np.nonzero((s >= 0) & (s <= n - w))
-    s = s[rows, offs]
-    ref = codes[s[:, None] + np.arange(w)]
-    alts = ref.copy()
-    alts[np.arange(len(s)), offs] = alt[rows]
-    ok = np.zeros(256, dtype=bool)
-    ok[np.frombuffer("".join(motif.letters).encode(), dtype=np.uint8)] = True
-    keep = ok[ref].all(axis=1) & ok[alts].all(axis=1)
-    return rows[keep], s[keep], ref[keep], alts[keep]
-
-
-def _words(x: np.ndarray) -> list[str]:
-    return np.ascontiguousarray(x).view(f"S{x.shape[1]}").ravel().astype(str).tolist() if len(x) else []
-
-
-def variant_motif_effects(
-    variants: Any,
-    sequence: str,
-    motifs: Motif | Iterable[Motif],
-    pvalue: float = 1e-4,
-    start: int = 0,
-    hits: pl.DataFrame | None = None,
-    rc: bool | None = None,
-) -> pl.DataFrame:
-    """How single-letter variants change the motif sites they fall in.
-
-    Every window of each motif's width that holds a variant is scored before
-    and after the change, as [`scan_sequences()`][universalmotif.scan_sequences]
-    scores it, on both strands of DNA and RNA with ``rc``, which is on by
-    default for DNA and off for RNA, and on the one strand of a motif whose
-    ``strand`` is ``"+"`` or ``"-"``. A window is kept
-    when it reaches the ``pvalue`` cutoff in either sequence, so that the
-    table holds sites a variant weakens or destroys and sites it strengthens
-    or creates. With ``hits``, such as from ``scan_sequences()`` run on
-    ``sequence``, only those sites are scored instead, whatever their
-    scores.
-
-    ``variants`` is a table with ``position``, ``ref`` and ``alt`` columns,
-    as a polars or pandas DataFrame or a list of (position, ref, alt) rows,
-    an array of effects from
-    [`mutagenesis_effects()`][universalmotif.mutagenesis_effects], or
-    ``None`` for every single-letter substitution of ``sequence``.
-    Positions are counted from ``start``, such as the genomic position of
-    the first letter, while the positions of ``hits`` are counted along the
-    sequence from 0, as ``scan_sequences()`` gives them. Variants that
-    change more or fewer than one letter are left out.
-
-    Returns
-    -------
-    polars.DataFrame
-        One row per variant and motif site, with the columns ``variant``,
-        the row of the variant in ``variants``, ``position``, ``ref``,
-        ``alt``, ``motif``, ``start``, ``end``, ``strand``, ``ref_score``,
-        ``alt_score``, ``delta``, the change in score, ``ref_pvalue`` and
-        ``alt_pvalue``. The site's ``start`` and ``end`` are counted from
-        ``start`` like the positions, with the end left out.
-
-    Examples
-    --------
-    >>> import polars as pl
-    >>> import universalmotif as um
-    >>> gata = um.example_motifs()[6]
-    >>> seq = "TTACGCTTAGATAAGGCTTACGCATCGT"
-    >>> variants = [(10, "A", "C"), (11, "T", "C"), (20, "C", "T")]
-    >>> effects = um.variant_motif_effects(variants, seq, gata, pvalue=1e-3)
-    >>> effects.select("position", "alt", "strand", "delta").rows()
-    [(10, 'C', '+', -4.296), (11, 'C', '+', -7.561)]
-    >>> every = um.variant_motif_effects(None, seq, gata, pvalue=1e-3)
-    >>> every.height, every.filter(pl.col("delta") > 0).height
-    (24, 3)
-    """
-    if not isinstance(sequence, str):
-        raise TypeError("give the sequence as a string")
-    if not 0 < pvalue <= 1:
-        raise ValueError("pvalue must be above 0 and at most 1")
-    ms, names = _motif_list(motifs)
-    alphabet = "".join(ms[0].letters)
-    if variants is None:
-        variants = _every_substitution(sequence, alphabet, start)
-    df = _variants(variants, None, sequence, alphabet, start, need_effects=False)
-    df = df.with_row_index("variant")
-    snv = df.filter((pl.col("ref").str.len_chars() == 1) & (pl.col("alt").str.len_chars() == 1))
-    allowed = None
-    if hits is not None:
-        for col in ("motif", "start", "end"):
-            if col not in hits.columns:
-                raise ValueError(f"hits must have a {col!r} column")
-        allowed = hits.select(pl.col("motif").cast(pl.String), pl.col("start").cast(pl.Int64),
-                              (pl.col("strand").cast(pl.String) if "strand" in hits.columns
-                               else pl.lit("+")).alias("strand")).unique()
-    from ._analysis import motif_pvalue
-    from ._utils import score_match
-
-    frames = []
-    variant_ids = snv["variant"].to_numpy()
-    idx = snv["position"].to_numpy() - start
-    for name, motif in zip(names, ms):
-        upper = motif.alphabet in ("DNA", "RNA", "AA")
-        seq = sequence.upper() if upper else sequence
-        alt = snv["alt"].str.to_uppercase() if upper else snv["alt"]
-        try:
-            codes = np.frombuffer(seq.encode("ascii"), dtype=np.uint8)
-            alt_codes = np.frombuffer("".join(alt.to_list()).encode("ascii"), dtype=np.uint8)
-        except UnicodeEncodeError as e:
-            raise ValueError("the sequence and variants must be plain ASCII letters") from e
-        rows, s, ref_w, alt_w = _windows(motif, codes, idx, alt_codes)
-        nucleotide = motif.alphabet in _COMPLEMENTS
-        both = motif.strand == "+-" and (motif.alphabet != "RNA" if rc is None else rc)
-        strands = [("+", ref_w, alt_w)] if not nucleotide or motif.strand != "-" else []
-        if nucleotide and (both or motif.strand == "-"):
-            table = np.arange(256, dtype=np.uint8)
-            a, b = _COMPLEMENTS[motif.alphabet]
-            table[np.frombuffer(a.encode(), dtype=np.uint8)] = np.frombuffer(b.encode(), dtype=np.uint8)
-            strands.append(("-", table[ref_w[:, ::-1]], table[alt_w[:, ::-1]]))
-        threshold = float(motif_pvalue(motif, pvalue=pvalue))
-        for strand, r, a in strands:
-            ref_score = np.asarray(score_match(motif, _words(r)), dtype=float)
-            alt_score = np.asarray(score_match(motif, _words(a)), dtype=float)
-            part = pl.DataFrame({
-                "variant": pl.Series(variant_ids[rows], dtype=pl.UInt32),
-                "motif": pl.Series([name] * len(rows), dtype=pl.String),
-                "start": pl.Series(s, dtype=pl.Int64),
-                "strand": pl.Series([strand] * len(rows), dtype=pl.String),
-                "ref_score": ref_score,
-                "alt_score": alt_score,
-            })
-            if allowed is not None:
-                part = part.join(allowed, on=["motif", "start", "strand"], how="semi")
-            else:
-                part = part.filter((pl.col("ref_score") >= threshold) | (pl.col("alt_score") >= threshold))
-            if part.height:
-                pv = np.asarray(motif_pvalue(motif, score=np.concatenate(
-                    [part["ref_score"].to_numpy(), part["alt_score"].to_numpy()]).tolist()), dtype=float)
-                part = part.with_columns(pl.Series("ref_pvalue", pv[:part.height]),
-                                         pl.Series("alt_pvalue", pv[part.height:]),
-                                         pl.lit(names.index(name)).alias("_m"))
-                frames.append(part.with_columns((pl.col("start") + motif.width).alias("end")))
-    schema = {"variant": pl.UInt32, "position": pl.Int64, "ref": pl.String, "alt": pl.String,
-              "motif": pl.String, "start": pl.Int64, "end": pl.Int64, "strand": pl.String,
-              "ref_score": pl.Float64, "alt_score": pl.Float64, "delta": pl.Float64,
-              "ref_pvalue": pl.Float64, "alt_pvalue": pl.Float64}
-    if not frames:
-        return pl.DataFrame(schema=schema)
-    out = (pl.concat(frames)
-           .join(snv.select("variant", "position", "ref", "alt"), on="variant", how="left")
-           .with_columns((pl.col("start") + start), (pl.col("end") + start),
-                         (pl.col("alt_score") - pl.col("ref_score")).round(3).alias("delta"))
-           .sort("variant", "_m", "start", "strand"))
-    return out.select(list(schema)).cast(schema)
-
-
-def _every_substitution(sequence: str, alphabet: str, start: int) -> pl.DataFrame:
-    seq = sequence.upper() if alphabet.isupper() else sequence
-    rows = [(start + i, sequence[i], b) for i, a in enumerate(seq) for b in alphabet if b != a]
-    if not rows:
-        raise ValueError("the sequence is empty")
-    return pl.DataFrame(rows, schema=["position", "ref", "alt"], orient="row")
 
 
 def _sizes(df: pl.DataFrame, col: str) -> tuple[np.ndarray, str]:
@@ -632,20 +326,26 @@ def plot_variant_effects(
     n = df.height
     direction = np.zeros(n)
     in_hit = np.zeros(n, dtype=bool)
-    best: list[tuple[str, float] | None] = [None] * n
+    best: list[str | None] = [None] * n
     # Variants are numbered by row of the table scored, which leaves out
     # those without an alternative letter.
     rows = np.flatnonzero(df["alt"].is_not_null().to_numpy())
     if ms and rows.size:
         changes = variant_motif_effects(df[rows].drop("effect"), sequence, ms, pvalue=pvalue, start=start)
         if changes.height:
-            top = (changes.with_columns(pl.col("delta").abs().alias("_size"))
+            # A site an insertion or deletion makes or loses outright, with
+            # no score in one sequence, counts as the largest change.
+            top = (changes.with_columns(pl.col("delta").abs().fill_null(float("inf")).alias("_size"))
                    .sort("variant", "_size", descending=[False, True], maintain_order=True)
                    .unique("variant", keep="first", maintain_order=True))
-            for v, motif, delta in top.select("variant", "motif", "delta").iter_rows():
+            for v, motif, delta, ref in top.select("variant", "motif", "delta", "ref_score").iter_rows():
                 i = rows[v]
-                direction[i] = np.sign(delta)
-                best[i] = (motif, delta)
+                if delta is None:
+                    direction[i] = -1 if ref is not None else 1
+                    best[i] = f"{motif} {'lost' if ref is not None else 'made'}"
+                else:
+                    direction[i] = np.sign(delta)
+                    best[i] = f"{motif} {delta:+.1f}"
     if hits is not None and hits.height:
         pos = df["position"].to_numpy() - start
         end = pos + np.maximum(df["ref"].str.len_chars().to_numpy(), 1)
@@ -850,7 +550,7 @@ def plot_variant_effects(
                 p, r, alt = df["position"][i], df["ref"][i], df["alt"][i]
                 t = f"{p:,} {r}>{alt}" if alt is not None else f"{p:,} {r}"
             if best[i] is not None:
-                t += f"\n{best[i][0]} {best[i][1]:+.1f}"
+                t += f"\n{best[i]}"
             text[i] = t
         if not _label_rows(eff_ax, x, y, area, chosen, text, 0.9 * text_size):
             # Labels keep clear of the larger effects only, so that in a

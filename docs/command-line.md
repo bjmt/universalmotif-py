@@ -26,6 +26,7 @@ umotif scan --help
 | `logo` | Draw logos, in one aligned figure or one file per motif. | [`view_motifs()`][universalmotif.view_motifs], [`logo_svg()`][universalmotif.logo_svg] |
 | `heatmap` | Draw motif similarities as a clustered heatmap, optionally with the tree cut at a score. | [`plot_comparison()`][universalmotif.plot_comparison] |
 | `scan` | Scan sequences, whole genomes or genomic ranges for motif hits. | [`scan_sequences()`][universalmotif.scan_sequences] |
+| `variants` | Score how the variants of a VCF file change motif sites in a genome. | [`variant_motif_effects()`][universalmotif.variant_motif_effects] |
 | `compare` | Compare motifs with each other or with a database. | [`compare_motifs()`][universalmotif.compare_motifs] |
 | `enrich` | Test motifs for enrichment in target sequences. | [`enrich_motifs()`][universalmotif.enrich_motifs] |
 | `find` | Discover motifs *de novo*. | [`motif_finder()`][universalmotif.motif_finder] |
@@ -270,6 +271,16 @@ umotif scan motifs.meme -g genome.fa.gz -r peaks.bed --local -o peak_hits.tsv
 ```
 
 <!-- output: peak_hits.bed 4 -->
+
+`variants` scores how the variants of a VCF file change the motif sites
+they fall in, substitutions, insertions and deletions alike, with one row
+per variant and site holding its score and P-value with each allele. With
+`--hits`, only the sites of an earlier genome scan are scored:
+
+```sh
+umotif variants motifs.meme -v calls.vcf.gz -g genome.fa.gz -o variant_sites.tsv
+umotif variants motifs.meme -v calls.vcf.gz -g genome.fa.gz --hits genome_hits.tsv -o variant_hits.tsv
+```
 
 ### Sequences and backgrounds
 

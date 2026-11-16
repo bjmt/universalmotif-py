@@ -114,7 +114,8 @@ from ._hit_contrib import (
     scan_contributions,
 )
 from ._plot_pairs import pair_spacings, plot_pair_spacing
-from ._plot_variants import plot_variant_effects, variant_motif_effects
+from ._plot_variants import plot_variant_effects
+from ._variants import read_vcf, variant_batches, variant_motif_effects
 from ._plot_response import plot_marginalization, plot_spacing
 from ._plot_results import plot_coocc, plot_enrichment
 from ._plot_scores import plot_score_distribution
@@ -266,6 +267,7 @@ __all__ = [
     "read_seqlets",
     "read_transfac",
     "read_uniprobe",
+    "read_vcf",
     "resize_ranges",
     "round_motif",
     "sample_sites",
@@ -294,6 +296,7 @@ __all__ = [
     "trim_cwm",
     "trim_motifs",
     "ungap",
+    "variant_batches",
     "variant_motif_effects",
     "view_attribution_tracks",
     "view_attributions",

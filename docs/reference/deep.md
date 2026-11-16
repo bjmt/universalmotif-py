@@ -77,6 +77,13 @@ each, and [`site_spacings()`][universalmotif.site_spacings]
 places two sites at a range of distances apart.
 [`view_variant()`][universalmotif.view_variant] compares the scores of a
 sequence with those of a variant of it.
+[`variant_batches()`][universalmotif.variant_batches] reads the reference
+and alternative sequences around each variant of a VCF file, as
+[`read_vcf()`][universalmotif.read_vcf] reads it, so that a model can
+score them, and
+[`variant_motif_effects()`][universalmotif.variant_motif_effects] finds
+the motif sites the same variants change, to set beside the model's
+effects in [`plot_variant_effects()`][universalmotif.plot_variant_effects].
 [`pair_mutagenesis()`][universalmotif.pair_mutagenesis] adds every pair of
 substitutions, and [`interaction_effects()`][universalmotif.interaction_effects]
 turns the predictions for them into the epistasis between each pair of
@@ -86,6 +93,8 @@ draws as a map.
 ::: universalmotif.mutagenesis
 
 ::: universalmotif.mutagenesis_effects
+
+::: universalmotif.variant_batches
 
 ::: universalmotif.pair_mutagenesis
 

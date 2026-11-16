@@ -12,9 +12,23 @@ Changes in behaviour:
   `target_gaps` columns, merged motifs with the same number of gaps keep
   gaps spanning all of theirs, and aligned logos leave the gaps blank.
   `use_gaps=False` ignores the gaps as before.
+- `variant_motif_effects()` scores insertions, deletions and longer
+  substitutions, which it left out before. A site starting in letters only
+  one allele has gets a null score in the other sequence. Variants it
+  cannot score are left out with a warning.
 
 New:
 
+- `variant_motif_effects()` takes a genome in place of a sequence, with
+  variants given by chromosome and position, and reads only the letters
+  around each one, so that a whole VCF file can be scored at once.
+- `read_vcf()` reads the variants of a VCF file, one row per alternative
+  allele.
+- `variant_batches()` makes one-hot batches of the reference and
+  alternative sequences around each variant, insertions and deletions
+  included, to score variants with a model.
+- The `variants` command scores how the variants of a VCF file or table
+  change motif sites in a genome.
 - `view_motifs()` marks the gaps of gapped motifs with a dashed line
   labelled with the gap sizes.
 - `scan_sequences()`, `match_motifs()`, `enrich_motifs()`,

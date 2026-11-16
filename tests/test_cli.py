@@ -452,6 +452,32 @@ def test_sequences_from_standard_input(tmp_path, monkeypatch, capsys):
         want.select("motif", "sequence", "start", "strand").rows()
 
 
+def test_variants(tmp_path, genome):
+    fasta, _bed, chroms, _peaks = genome
+    seq = chroms["chr1"]
+    at = seq.index("TGACTCA")
+    vcf = tmp_path / "calls.vcf"
+    vcf.write_text("##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+                   f"chr1\t{at + 3}\trs1\t{seq[at + 2]}\tC,<DEL>\t.\t.\t.\n"
+                   f"chr1\t{at + 1}\trs2\t{seq[at:at + 4]}\t{seq[at]}\t.\t.\t.\n")
+    variants = um.read_vcf(vcf)
+    with pytest.warns(UserWarning):
+        want = um.variant_motif_effects(variants, um.Genome(fasta), um.read_transfac(MOTIFS))
+    with warnings.catch_warnings():
+        warnings.simplefilter("default")
+        run("variants", MOTIFS, "-v", vcf, "-g", fasta, "-o", tmp_path / "v.tsv")
+    got = table(tmp_path / "v.tsv")
+    assert got.height == want.height > 0
+    assert got.select("variant", "id", "motif", "start", "strand").rows() == \
+        want.select("variant", "id", "motif", "start", "strand").rows()
+    rows = tmp_path / "rows.tsv"
+    rows.write_text(f"chrom\tposition\tref\talt\nchr1\t{at}\t{seq[at:at + 4]}\t{seq[at]}\n")
+    run("variants", MOTIFS, "-v", rows, "-g", fasta, "-o", tmp_path / "r.tsv")
+    assert table(tmp_path / "r.tsv").select("motif", "start").rows() == \
+        want.filter(pl.col("id") == "rs2").select("motif", "start").rows()
+    run("variants", MOTIFS, "-v", tmp_path / "missing.vcf", "-g", fasta, ok=False)
+
+
 def test_scan_options(tmp_path, genome, capsys):
     fasta, _bed, chroms, _peaks = genome
     # Sequences named after their place in the genome, one of them from
