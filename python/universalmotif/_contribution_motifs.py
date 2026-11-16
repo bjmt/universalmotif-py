@@ -165,15 +165,14 @@ class ContributionMotifs:
                 found = names.filter(pl.col("motif_i") == k)
                 if found.height:
                     lines = []
-                    for j, r in enumerate(found.iter_rows(named=True)):
-                        line = (f'<b>{html.escape(r["altname"] or r["match"])}</b> <span class="m">'
-                                f'{html.escape(r["match"])} · q {r["qvalue"]:.1g}</span>')
-                        if j == 0:
-                            m = logos[r["match"]]
-                            m = motif_rc(m) if r["strand"] == "-" else m
-                            line += logo_svg(m, height=22, position_width=6)
-                        lines.append(f"<div>{line}</div>")
-                    cells.append(f'<td class="match">{"".join(lines)}</td>')
+                    for r in found.iter_rows(named=True):
+                        # Each match is drawn on the strand it matches the pattern on.
+                        m = logos[r["match"]]
+                        m = motif_rc(m) if r["strand"] == "-" else m
+                        lines.append(f'<span><b>{html.escape(r["altname"] or r["match"])}</b> <span class="m">'
+                                     f'{html.escape(r["match"])} · q {r["qvalue"]:.1g}</span></span>'
+                                     + logo_svg(m, height=18, position_width=6))
+                    cells.append(f'<td class="match"><div class="mg">{"".join(lines)}</div></td>')
                 else:
                     cells.append('<td class="m">none</td>')
             if members.height > 1:
@@ -230,8 +229,9 @@ th { position: sticky; top: 0; background: var(--head); font-weight: 600; color:
 td { padding: 4px 10px 4px 0; border-bottom: 1px solid var(--rule); vertical-align: middle; }
 td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 td.logo svg { display: block; max-width: none; }
-td.match div { white-space: nowrap; }
-td.match svg { display: inline-block; vertical-align: middle; margin-left: 6px; }
+.mg { display: grid; grid-template-columns: max-content max-content; gap: 1px 8px; align-items: center; }
+.mg > span { white-space: nowrap; }
+.mg svg { max-width: none; }
 .m { color: var(--muted); }
 code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
 details summary { cursor: pointer; color: var(--muted); }
