@@ -43,7 +43,8 @@ def test_every_window_matches_a_slow_reading():
     got = um.scan_contributions(motifs, projected, min_similarity=-1, min_importance=0, no_overlaps=False)
     want = _slow(motifs, projected)
     assert got.height == want.height
-    joined = got.join(want, on=["motif_i", "sequence_i", "start", "strand"], suffix="_want")
+    keys = ["motif_i", "sequence_i", "start", "strand"]
+    joined = got.join(want.cast(dict(got.select(keys).schema)), on=keys, suffix="_want")
     assert joined.height == want.height
     for col in ("score", "similarity", "importance"):
         np.testing.assert_allclose(joined[col], joined[f"{col}_want"], rtol=1e-5, atol=1e-6)

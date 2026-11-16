@@ -2,6 +2,7 @@
 the R package manages; the crate checks both strands against plain scoring)."""
 
 import numpy as np
+import polars as pl
 import pytest
 
 import universalmotif as um
@@ -47,7 +48,7 @@ def test_gap_correction():
     adj = um.scan_sequences(motifs, seqs, pvalue=1e-2)
     assert adj.equals(um.scan_sequences(motifs, seqs, pvalue=1e-2, correct_gaps=True))
     combos = {0: 4, 1: 12, 2: 1}
-    n = raw["motif_i"].replace_strict(combos, return_dtype=float)
+    n = raw["motif_i"].replace_strict(combos, return_dtype=pl.Float64)
     keep = raw.with_columns((raw["pvalue"] * n).clip(upper_bound=1.0).alias("pvalue")).filter(
         raw["pvalue"] * n <= 1e-2)
     cols = ["motif_i", "sequence_i", "start", "strand", "match", "pvalue"]

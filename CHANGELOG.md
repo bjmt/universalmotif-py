@@ -4,6 +4,9 @@
 
 Changes in behaviour:
 
+- polars 1.17 or later is required, the first release with everything the
+  package uses; older ones failed on reading BED and VCF files and on
+  `hit_contributions()`.
 - Gapped motifs are compared, merged and aligned with their gaps in
   `compare_motifs()`, `merge_motifs()`, `merge_similar()`, `motif_tree()`
   and `view_motifs()`: each combination of gap sizes is tried with the

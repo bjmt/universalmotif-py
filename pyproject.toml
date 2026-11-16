@@ -17,7 +17,7 @@ classifiers = [
     "Programming Language :: Rust",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-dependencies = ["numpy>=1.24", "polars>=1.0"]
+dependencies = ["numpy>=1.24", "polars>=1.17"]
 
 [project.urls]
 Documentation = "https://bjmt.github.io/universalmotif-py/"
