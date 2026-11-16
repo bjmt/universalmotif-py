@@ -140,9 +140,10 @@ def test_report_and_names(model, tmp_path):
     path = tmp_path / "report.html"
     page = found.report(path, database=db)
     assert path.read_text() == page and page.startswith("<!doctype html>")
-    assert page.count('class="pat"') == found.patterns.height
+    # One row per pattern, after the header's.
+    assert page.count("</tr>") == found.patterns.height + 1
     assert "FOS::JUN" in page and "<svg" in page
     # Without a database the report still lists the patterns.
-    assert found.report().count('class="pat"') == found.patterns.height
+    assert found.report().count("</tr>") == found.patterns.height + 1
     with pytest.raises(ValueError, match="top"):
         um.name_motifs(found.ppms, db, top=0)

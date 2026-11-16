@@ -132,46 +132,49 @@ class ContributionMotifs:
         out.append(f"<h1>{html.escape(title)}</h1>")
         n_hits = sum(counts.values())
         out.append(f'<p class="sum">{pats.height} patterns of {rows.height} motifs, from {n_seqlets:,} seqlets'
-                   + (f", with {n_hits:,} hits" if counts else "") + ".</p>")
+                   + (f", with {n_hits:,} hits" if counts else "")
+                   + ". Each pattern is led by the motif reaching the most seqlets; <i>added</i> is the share of "
+                   "seqlets its members reach that motifs chosen before them do not.</p>")
+        head = ["", "Pattern", "Seqlets", "Added", *(["Hits"] if counts else []), "CWM", "PPM",
+                *(["Database matches"] if names is not None else []), "Members"]
+        out.append('<div class="wrap"><table class="pats"><thead><tr>'
+                   + "".join(f"<th>{h}</th>" for h in head) + "</tr></thead><tbody>")
         for k, pat in enumerate(pats.iter_rows(named=True)):
             members = rows.filter(pl.col("pattern") == pat["pattern"])
-            hits = sum(counts.get(m, 0) for m in pat["members"])
-            out.append('<section class="pat">')
-            out.append(f'<h2>{html.escape(pat["pattern"])} <span>{html.escape(pat["consensus"])}</span></h2>')
-            out.append(f'<p class="facts">{pat["seqlets"]:,} seqlets reached by {html.escape(pat["representative"])}'
-                       f' · {100 * pat["gain"]:.1f}% of seqlets added by its {len(pat["members"])} '
-                       f'member{"s" if len(pat["members"]) != 1 else ""}'
-                       + (f" · {hits:,} hits" if counts else "") + "</p>")
-            out.append('<div class="logos">')
-            out.append(f'<figure><figcaption>CWM</figcaption>{logo_svg(pat["cwm"], height=56)}</figure>')
-            out.append(f'<figure><figcaption>PPM</figcaption>{logo_svg(pat["motif"], height=56)}</figure>')
-            out.append("</div>")
+            cells = [f'<td class="n">{k + 1}</td>',
+                     (f'<td><b>{html.escape(pat["pattern"])}</b><br><code>{html.escape(pat["consensus"])}</code>'
+                      f'<br><span class="m">{html.escape(pat["representative"])}</span></td>'),
+                     f'<td class="n">{pat["seqlets"]:,}</td>', f'<td class="n">{100 * pat["gain"]:.1f}%</td>']
+            if counts:
+                cells.append(f'<td class="n">{sum(counts.get(m, 0) for m in pat["members"]):,}</td>')
+            cells.append(f'<td class="logo">{logo_svg(pat["cwm"], height=34, position_width=8)}</td>')
+            cells.append(f'<td class="logo">{logo_svg(pat["motif"], height=34, position_width=8)}</td>')
             if names is not None:
                 found = names.filter(pl.col("motif_i") == k)
                 if found.height:
-                    out.append('<table class="names"><thead><tr><th>Match</th><th>Factor</th><th>q-value</th>'
-                               "<th>Logo</th></tr></thead><tbody>")
-                    for r in found.iter_rows(named=True):
-                        m = logos[r["match"]]
-                        if r["strand"] == "-":
-                            m = motif_rc(m)
-                        out.append(f'<tr><td>{html.escape(r["match"])}</td><td>{html.escape(r["altname"])}</td>'
-                                   f'<td>{r["qvalue"]:.2g}</td><td>{logo_svg(m, height=32, position_width=10)}</td></tr>')
-                    out.append("</tbody></table>")
+                    lines = []
+                    for j, r in enumerate(found.iter_rows(named=True)):
+                        line = (f'<b>{html.escape(r["altname"] or r["match"])}</b> <span class="m">'
+                                f'{html.escape(r["match"])} · q {r["qvalue"]:.1g}</span>')
+                        if j == 0:
+                            m = logos[r["match"]]
+                            m = motif_rc(m) if r["strand"] == "-" else m
+                            line += logo_svg(m, height=22, position_width=6)
+                        lines.append(f"<div>{line}</div>")
+                    cells.append(f'<td class="match">{"".join(lines)}</td>')
                 else:
-                    out.append(f'<p class="none">No database motif matches at a q-value of {qvalue:g}.</p>')
+                    cells.append('<td class="m">none</td>')
             if members.height > 1:
-                out.append('<details><summary>Members</summary><table class="members"><thead><tr><th>Motif</th>'
-                           "<th>Found in</th><th>Consensus</th><th>Seqlets</th><th>Gain</th><th>Hits</th>"
-                           "<th>CWM</th></tr></thead><tbody>")
-                for r in members.iter_rows(named=True):
-                    out.append(f'<tr><td>{html.escape(r["name"])}</td><td>{html.escape(r["source"])}</td>'
-                               f'<td><code>{html.escape(r["consensus"])}</code></td><td>{r["seqlets"]:,}</td>'
-                               f'<td>{100 * r["gain"]:.2f}%</td><td>{counts.get(r["name"], 0):,}</td>'
-                               f'<td>{logo_svg(r["cwm"], height=32, position_width=10)}</td></tr>')
-                out.append("</tbody></table></details>")
-            out.append("</section>")
-        out.append("</main>")
+                inner = "".join(
+                    f'<div class="mem"><span><b>{html.escape(r["name"])}</b> <code>{html.escape(r["consensus"])}</code>'
+                    f' <span class="m">{r["seqlets"]:,} seqlets, {html.escape(r["source"])}</span></span>'
+                    f'{logo_svg(r["cwm"], height=24, position_width=6)}</div>'
+                    for r in members.iter_rows(named=True))
+                cells.append(f"<td><details><summary>{members.height}</summary>{inner}</details></td>")
+            else:
+                cells.append('<td class="m">1</td>')
+            out.append("<tr>" + "".join(cells) + "</tr>")
+        out.append("</tbody></table></div></main>")
         page = "\n".join(out)
         if path is not None:
             pathlib.Path(path).write_text(page)
@@ -190,29 +193,29 @@ _REPORT_HEAD = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
 <style>
-:root { --bg: #fbfbfa; --fg: #1f2629; --muted: #5f6b6e; --rule: #d6dcdb; --panel: #ffffff; }
+:root { --bg: #fbfbfa; --fg: #1f2629; --muted: #5f6b6e; --rule: #dde2e1; --head: #f1f4f3; }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #141a1b; --fg: #e3e8e8; --muted: #9aa6a8; --rule: #2f393b; --panel: #1b2325; color-scheme: dark; }
+  :root { --bg: #141a1b; --fg: #e3e8e8; --muted: #9aa6a8; --rule: #2a3436; --head: #1b2325; color-scheme: dark; }
 }
-body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+body { background: var(--bg); color: var(--fg); font: 13px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
        margin: 0; }
-main { max-width: 1000px; margin: 0 auto; padding: 32px 16px 64px; }
-h1 { font-size: 1.7rem; margin: 0 0 6px; }
-.sum, .facts, .none { color: var(--muted); }
-.pat { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px 18px;
-       margin: 18px 0; }
-.pat h2 { font-size: 1.15rem; margin: 0 0 4px; }
-.pat h2 span { font: 500 0.9rem ui-monospace, Menlo, monospace; color: var(--muted); margin-left: 8px; }
-.logos { display: flex; flex-wrap: wrap; gap: 24px; margin: 10px 0; }
-.logos figure { margin: 0; }
-figcaption { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-svg { max-width: 100%; height: auto; display: block; }
-table { border-collapse: collapse; font-size: 0.88rem; margin-top: 8px; }
-th, td { text-align: left; padding: 4px 14px 4px 0; border-bottom: 1px solid var(--rule); vertical-align: middle; }
-th { font-weight: 600; color: var(--muted); }
-details { margin-top: 10px; }
-summary { cursor: pointer; color: var(--muted); }
-code { font-family: ui-monospace, Menlo, monospace; }
+main { max-width: 1500px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 1.4rem; margin: 0 0 4px; }
+.sum { color: var(--muted); margin: 0 0 12px; max-width: 90ch; }
+.wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th { position: sticky; top: 0; background: var(--head); font-weight: 600; color: var(--muted); text-align: left;
+     padding: 6px 10px 6px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; z-index: 1; }
+td { padding: 4px 10px 4px 0; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.logo svg { display: block; max-width: none; }
+td.match div { white-space: nowrap; }
+td.match svg { display: inline-block; vertical-align: middle; margin-left: 6px; }
+.m { color: var(--muted); }
+code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
+details summary { cursor: pointer; color: var(--muted); }
+.mem { display: flex; align-items: center; gap: 8px; white-space: nowrap; margin: 2px 0; }
+.mem svg { max-width: none; }
 </style></head><body><main>
 """
 
