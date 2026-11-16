@@ -109,7 +109,7 @@ nav:
       - Sequence motifs: guides/motif-basics.ipynb
       - Working with motifs: guides/working-with-motifs.ipynb
       - Working with sequences: guides/sequences.ipynb
-      - Scanning and enrichment: guides/scanning-and-enrichment.ipynb
+      - Scanning, enrichment and discovery: guides/scanning-and-enrichment.ipynb
       - Comparing motifs and P-values: guides/comparison-and-pvalues.ipynb
       - Choosing a background: guides/background-models.ipynb
       - Scanning large genomes: guides/large-genomes.ipynb
