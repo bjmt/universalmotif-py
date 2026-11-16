@@ -53,8 +53,9 @@ New:
   motifs' CWMs at thresholds set from their own seqlets. On a chromBPNet
   model of K562 cells it recovers more of the model's published
   TF-MoDISco patterns than TF-MoDISco does on the same regions, the NFI
-  palindrome and TAL1–GATA composite among them, in 22 seconds against 40
-  minutes.
+  palindrome and TAL1–GATA composite among them, in 15 seconds against 40
+  minutes, and takes two minutes and 2.6 GB over all 187,000 of its
+  regions.
 - `call_seqlets()` calls seqlets in a sequence model's contribution scores:
   stretches whose total, and the total of every stretch inside them, is
   unlikely under a null from the scores themselves, kept down to a false

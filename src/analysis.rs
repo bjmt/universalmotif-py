@@ -890,9 +890,9 @@ fn _scan_contributions<'py>(
 /// when the array is contiguous. Rows are passed this way rather than as
 /// one array each, whose borrows numpy would check against one another.
 fn score_rows<'a>(
-    a: &'a PyReadonlyArray2<'_, f64>,
+    a: &'a PyReadonlyArray2<'_, f32>,
     lengths: &[usize],
-) -> PyResult<Vec<Cow<'a, [f64]>>> {
+) -> PyResult<Vec<Cow<'a, [f32]>>> {
     let ncol = a.shape()[1];
     if a.shape()[0] != lengths.len() || lengths.iter().any(|&n| n > ncol) {
         return Err(pyo3::exceptions::PyValueError::new_err(
@@ -921,9 +921,9 @@ fn score_rows<'a>(
 #[allow(clippy::too_many_arguments)]
 fn _call_seqlets<'py>(
     py: Python<'py>,
-    scores: PyReadonlyArray2<'py, f64>,
+    scores: PyReadonlyArray2<'py, f32>,
     lengths: Vec<usize>,
-    decoys: Option<PyReadonlyArray2<'py, f64>>,
+    decoys: Option<PyReadonlyArray2<'py, f32>>,
     decoy_lengths: Option<Vec<usize>>,
     threshold: f64,
     min_len: usize,

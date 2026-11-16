@@ -3,6 +3,7 @@ discovery in them, refinement and selection, in one call."""
 
 from __future__ import annotations
 
+import re
 import warnings
 from dataclasses import dataclass
 from typing import Any
@@ -26,6 +27,11 @@ from ._sequences import _seed, motif_finder
 from ._threads import _nthreads
 from ._utils import add_gap
 
+# Positions kept around each seqlet when refining and selecting motifs, and
+# how far refine_motifs() can widen a motif on each side over its iterations.
+_WINDOW_PAD = 64
+_REFINE_GROWTH = 15
+_NOT_ACGT = re.compile("[^ACGTacgt]+")
 # Seqlets shorter than this are widened around their middles for discovery,
 # and for the gapped search, to fit two parts and their spacer.
 _MIN_TARGET = 20
@@ -109,16 +115,19 @@ def _background(seqs: list[str], seqlets: pl.DataFrame, widths: np.ndarray, rng,
     """Windows of the seqlets' widths drawn from the sequences where there is
     no seqlet and no letter outside ACGT, ``ratio`` per seqlet."""
     lengths = np.array([len(s) for s in seqs])
-    blocked = []
+    # The stretches each window must avoid, merged and sorted, per sequence.
     by_seq = seqlets.group_by("sequence_i").agg("start", "end")
-    spans = {int(i): (np.array(s), np.array(e)) for i, s, e in by_seq.iter_rows()}
+    spans = {int(i): (list(s), list(e)) for i, s, e in by_seq.iter_rows()}
+    blocked: dict[int, tuple[np.ndarray, np.ndarray]] = {}
     for i, s in enumerate(seqs):
-        bad = np.frombuffer(s.upper().encode("latin-1", "replace"), dtype=np.uint8)
-        b = ~np.isin(bad, np.frombuffer(b"ACGT", dtype=np.uint8))
-        if i in spans:
-            for a, z in zip(*spans[i]):
-                b[max(a, 0):z] = True
-        blocked.append(np.concatenate([[0], np.cumsum(b)]))
+        starts, ends = spans.get(i, ([], []))
+        for m in _NOT_ACGT.finditer(s):
+            starts.append(m.start())
+            ends.append(m.end())
+        if starts:
+            order = np.argsort(starts)
+            st, en = np.asarray(starts)[order], np.maximum.accumulate(np.asarray(ends)[order])
+            blocked[i] = (np.maximum(st, 0), en)
     want = np.repeat(widths, ratio)
     out, todo = [None] * len(want), np.arange(len(want))
     for _ in range(200):
@@ -128,8 +137,15 @@ def _background(seqs: list[str], seqlets: pl.DataFrame, widths: np.ndarray, rng,
         room = lengths[seq] - want[todo]
         ok = room >= 0
         start = (rng.random(len(todo)) * np.maximum(room + 1, 1)).astype(np.int64)
-        free = np.array([ok[k] and blocked[seq[k]][start[k] + want[todo[k]]] == blocked[seq[k]][start[k]]
-                         for k in range(len(todo))], dtype=bool)
+        free = np.zeros(len(todo), dtype=bool)
+        for k in np.flatnonzero(ok):
+            b = blocked.get(int(seq[k]))
+            if b is None:
+                free[k] = True
+                continue
+            # The first stretch ending after the window starts must begin at or after its end.
+            j = np.searchsorted(b[1], start[k], side="right")
+            free[k] = j == len(b[1]) or b[0][j] >= start[k] + want[todo[k]]
         for k in np.flatnonzero(free):
             out[todo[k]] = seqs[seq[k]][start[k]:start[k] + want[todo[k]]]
         todo = todo[~free]
@@ -305,13 +321,23 @@ def contribution_motifs(
     accessibility in K562 cells, over 21,000 regions, the defaults with
     hypothetical scores recovered more of the model's published TF-MoDISco
     patterns closely (a CWM cosine of 0.8 or more) than TF-MoDISco did on
-    the same regions, 28 against 25, in 22 seconds against its 40 minutes.
+    the same regions, 28 against 25, in 15 seconds against its 40 minutes.
     These included the NFI palindrome, held by about 1% of the seqlets, and
     the TAL1–GATA composite, CTG then WGATAA 7 or 8 letters on. Without
     hypothetical scores, NFI was found in only some of the runs. The hits
     were about as many as those of the published CWMs at the thresholds
     of ``modisco_thresholds()``, and fewer of them fell outside the
-    published seqlets.
+    published seqlets. Over all 187,000 of the model's regions, the call
+    took two minutes on two threads, with a peak of 2.6 GB, half of it the
+    scores and sequences themselves.
+
+    The motifs found in different samples of regions differ mostly in the
+    rarer ones: in three random 70% samples of the 30,000 regions, the
+    same 25 published patterns were recovered every time and up to four
+    others only some of the time, while TF-MoDISco recovered the same 25
+    each time and no others. Keeping fewer near-identical motifs, with a
+    lower ``max_similarity``, made the motifs themselves match more
+    often across samples but lost some of those patterns.
 
     Parameters
     ----------
@@ -498,21 +524,60 @@ def _search(part, sub, sources, lengths, label, prefix, min_width, max_width, nm
     return found
 
 
+def _windows(seqs: list[str], sites: pl.DataFrame, motifs: list[Motif]) -> tuple[list[str], pl.DataFrame]:
+    """The stretches of the sequences around the sites, merged where they
+    meet, and the sites placed in them, row for row. Every hit that can
+    reach a site lies within its stretch, so refining and selecting motifs
+    on these gives what the whole sequences would, for a fraction of the
+    scanning."""
+    widest = max((m.width + (sum(m.maxgap) if m.isgapped else 0) for m in motifs), default=0)
+    # Refinement can widen a motif by a few positions on each side.
+    pad = max(_WINDOW_PAD, widest + 2 * _REFINE_GROWTH)
+    si = sites["sequence_i"].to_numpy().astype(np.int64)
+    start, end = sites["start"].to_numpy(), sites["end"].to_numpy()
+    lengths = np.array([len(seqs[i]) for i in si], dtype=np.int64)
+    lo, hi = np.maximum(start - pad, 0), np.minimum(end + pad, lengths)
+    order = np.lexsort((lo, si))
+    window = np.empty(len(si), dtype=np.int64)
+    offset = np.empty(len(si), dtype=np.int64)
+    out: list[str] = []
+    cur_seq, cur_lo, cur_hi = -1, 0, 0
+    members: list[int] = []
+
+    def close():
+        if members:
+            out.append(seqs[cur_seq][cur_lo:cur_hi])
+            window[members] = len(out) - 1
+            offset[members] = cur_lo
+
+    for k in order:
+        if si[k] == cur_seq and lo[k] <= cur_hi:
+            cur_hi = max(cur_hi, hi[k])
+            members.append(k)
+        else:
+            close()
+            cur_seq, cur_lo, cur_hi, members = si[k], lo[k], hi[k], [k]
+    close()
+    return out, pl.DataFrame({"sequence_i": window, "start": start - offset, "end": end - offset})
+
+
 def _choose(found, seqs, sites, observed, sg, refine, min_gain, max_similarity, nthreads):
     """The motifs found, refined, that select_motifs() keeps, as rows of the
     table, and the hits of all of them in the seqlets."""
     ms = [f[0] for f in found]
-    if refine and ms:
-        ms = refine_motifs(ms, seqs, sites=sites, min_overlap=_MIN_OVERLAP, nthreads=nthreads, progress=False)
     if not ms:
         return [], None
+    wseqs, wsites = _windows(seqs, sites, ms)
+    if refine:
+        ms = refine_motifs(ms, wseqs, sites=wsites, min_overlap=_MIN_OVERLAP, nthreads=nthreads, progress=False)
     hits = _site_hits(ms, seqs, sites, nthreads)
     cwms = _cwms(hits, observed)
     have = [m for m in ms if m.name in cwms]
     if not have:
         return [], hits
     meta = {f[0].name: f for f in found}
-    sel = select_motifs(have, seqs, sites=sites, min_gain=min_gain, min_overlap=_MIN_OVERLAP,
+    wseqs, wsites = _windows(seqs, sites, have)
+    sel = select_motifs(have, wseqs, sites=wsites, min_gain=min_gain, min_overlap=_MIN_OVERLAP,
                         max_similarity=max_similarity,
                         compare_as=[cwms[m.name] for m in have] if max_similarity is not None else None,
                         nthreads=nthreads, progress=False)
@@ -588,7 +653,8 @@ def _gapped_pass(seqs, sub, sites, si, lengths, observed, reached, label, sg, ma
                               nthreads=nthreads, progress=False)
     ms = [m.replace(name=f"{label}_g{k + 1}") for k, m in enumerate(res["motif"].to_list())]
     if refine and ms:
-        ms = refine_motifs(ms, seqs, sites=sites, min_overlap=_MIN_OVERLAP, nthreads=nthreads, progress=False)
+        wseqs, wsites = _windows(seqs, sites, ms)
+        ms = refine_motifs(ms, wseqs, sites=wsites, min_overlap=_MIN_OVERLAP, nthreads=nthreads, progress=False)
     if not ms:
         return []
     hits = _site_hits(ms, seqs, sites, nthreads)

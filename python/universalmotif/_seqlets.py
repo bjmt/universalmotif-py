@@ -27,7 +27,8 @@ def _observed(contributions: Any, sequences: Any) -> tuple[np.ndarray, list[int]
             values = values.sum(axis=1)
     names = scores.names or [f"seq{i + 1}" for i in range(values.shape[0])]
     lengths = [int(n) for n in scores.lengths]
-    return np.ascontiguousarray(values, dtype=np.float64), lengths, names, scores.codes
+    # Single precision, which the extension reads in place, halves the memory of a copy.
+    return np.ascontiguousarray(values, dtype=np.float32), lengths, names, scores.codes
 
 
 def call_seqlets(
