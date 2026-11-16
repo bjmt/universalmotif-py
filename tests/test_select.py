@@ -117,3 +117,16 @@ def test_refine_keeps_a_weak_motif_apart():
         um.refine_motifs(start, seqs, flank=-1)
     with pytest.raises(ValueError, match="max_width"):
         um.refine_motifs(start, seqs, max_width=0)
+
+
+def test_refine_gapped_motifs_part_by_part():
+    seqs = um.create_sequences(seqlen=250, seqnum=300, seed=11)
+    spacers = ["ACG", "TTCA", "GACTT", "CATGCA"]
+    seqs = [s[:100] + f"GCTGACTCA{spacers[i % 4]}AGATAAGCG" + s[100 + 12 + 6 + len(spacers[i % 4]):]
+            if i % 2 == 0 else s for i, s in enumerate(seqs)]
+    start = um.add_gap(um.create_motif("TGACTCAAGATAAG", name="pair", nsites=20, pseudocount=1), gaploc=7,
+                       mingap=3, maxgap=6)
+    refined = um.refine_motifs(start, seqs)[0]
+    assert refined.isgapped and refined.gaploc == [9]
+    assert (refined.mingap, refined.maxgap) == ([3], [6])
+    assert refined.consensus == "GCTGACTCAAGATAAGCG"

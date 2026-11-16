@@ -227,10 +227,14 @@ def refine_motifs(
     its edges, or lose edges they don't share. With ``sites``, such as the
     seqlets of a sequence model, only hits reaching them are used. A motif
     wider than ``max_width`` keeps its most informative stretch of that
-    width, and gapped motifs and motifs with fewer than ``min_sites`` hits
-    are left as they are. Each rebuilt motif keeps the name, type and other
-    details of the one given, with ``nsites`` the number of hits it was
-    built from.
+    width. Gapped motifs, such as those of
+    [`gapped_motif_finder()`][universalmotif.gapped_motif_finder], are
+    rebuilt part by part from the letters their hits put in each part,
+    whatever the spacer, with flanks added and trimmed at their outer ends
+    only, and their gaps keep their ranges. Motifs with fewer than
+    ``min_sites`` hits are left as they are. Each rebuilt motif keeps the
+    name, type and other details of the one given, with ``nsites`` the
+    number of hits it was built from.
 
     With ``competitive``, as by default, overlapping hits of different
     motifs are reduced to the best one, so that each site builds only one

@@ -17,6 +17,7 @@ use universalmotif::scan::{
     HitTable, MatchValue, NoOverlaps, OverlapPriority, ScanOptions, motif_matches, scan_encoded,
     scan_fasta, scan_table,
 };
+use universalmotif::seqlets::{SeqletOptions, SeqletSign, call_seqlets};
 use universalmotif::similarity::{self, CwmCompareOptions, CwmMetric};
 
 use pyo3_arrow::PyTable;
@@ -883,11 +884,75 @@ fn _scan_contributions<'py>(
     ))
 }
 
+#[pyfunction]
+#[pyo3(signature = (scores, threshold, min_len, max_len, flank, fdr, sign, n_bins, seed, nthreads))]
+#[allow(clippy::too_many_arguments)]
+fn _call_seqlets<'py>(
+    py: Python<'py>,
+    scores: Vec<PyReadonlyArray1<'py, f64>>,
+    threshold: f64,
+    min_len: usize,
+    max_len: usize,
+    flank: usize,
+    fdr: Option<f64>,
+    sign: &str,
+    n_bins: usize,
+    seed: u64,
+    nthreads: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    let sign = match sign {
+        "both" => SeqletSign::Both,
+        "positive" => SeqletSign::Positive,
+        "negative" => SeqletSign::Negative,
+        other => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "sign must be 'both', 'positive' or 'negative', not {other:?}"
+            )));
+        }
+    };
+    let x: Vec<Vec<f64>> = scores.iter().map(|a| a.as_array().to_vec()).collect();
+    let opts = SeqletOptions {
+        threshold,
+        min_len,
+        max_len,
+        flank,
+        fdr,
+        sign,
+        n_bins,
+        seed,
+        nthreads,
+    };
+    let found = py.detach(|| call_seqlets(&x, &opts)).map_err(err)?;
+    let d = PyDict::new(py);
+    d.set_item(
+        "sequence_i",
+        found.iter().map(|s| s.sequence).collect::<Vec<_>>(),
+    )?;
+    d.set_item("start", found.iter().map(|s| s.start).collect::<Vec<_>>())?;
+    d.set_item("end", found.iter().map(|s| s.end).collect::<Vec<_>>())?;
+    d.set_item(
+        "core_start",
+        found.iter().map(|s| s.core_start).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "core_end",
+        found.iter().map(|s| s.core_end).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "positive",
+        found.iter().map(|s| s.positive).collect::<Vec<_>>(),
+    )?;
+    d.set_item("score", found.iter().map(|s| s.score).collect::<Vec<_>>())?;
+    d.set_item("pvalue", found.iter().map(|s| s.pvalue).collect::<Vec<_>>())?;
+    Ok(d)
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_compare_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(_compare_table, m)?)?;
     m.add_function(wrap_pyfunction!(_compare_cwms, m)?)?;
     m.add_function(wrap_pyfunction!(_scan_contributions, m)?)?;
+    m.add_function(wrap_pyfunction!(_call_seqlets, m)?)?;
     m.add_function(wrap_pyfunction!(_cwm_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(_merge_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_merge_similar, m)?)?;

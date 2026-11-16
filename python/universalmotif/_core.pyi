@@ -467,6 +467,18 @@ def _motif_finder(
     pseudocount: int,
     nthreads: int,
 ) -> tuple[list[Motif], dict[str, Any]]: ...
+def _call_seqlets(
+    scores: list[Any],
+    threshold: float,
+    min_len: int,
+    max_len: int,
+    flank: int,
+    fdr: float | None,
+    sign: str,
+    n_bins: int,
+    seed: int,
+    nthreads: int,
+) -> dict[str, Any]: ...
 def _select_motifs(
     motifs: list[Motif],
     sequences: list[str],
