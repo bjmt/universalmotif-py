@@ -54,6 +54,8 @@ plugins:
         - guides/deep-learning.ipynb
         - guides/variants.ipynb
         - guides/contribution-motifs.ipynb
+        - guides/tfmodisco.ipynb
+        - guides/model-experiments.ipynb
       include_source: true
       allow_errors: false
       # The cache is keyed on the notebooks alone, so it would keep outputs
@@ -119,7 +121,9 @@ nav:
       - A ChIP-seq workflow: guides/chipseq-workflow.ipynb
       - Building a motif library: guides/building-a-library.ipynb
       - Motifs and deep learning: guides/deep-learning.ipynb
+      - TF-MoDISco results: guides/tfmodisco.ipynb
       - Motifs from contribution scores: guides/contribution-motifs.ipynb
+      - Experiments on a model: guides/model-experiments.ipynb
       - Variant analysis: guides/variants.ipynb
   - Command line: command-line.md
   - API reference:
@@ -135,7 +139,9 @@ nav:
       - Genomic intervals: reference/genomic.md
       - Plotting: reference/plotting.md
       - Databases and Biopython: reference/databases.md
-      - Deep learning: reference/deep.md
+      - Contribution scores: reference/contributions.md
+      - Motifs from contribution scores: reference/contribution-motifs.md
+      - Model inputs and experiments: reference/model-inputs.md
       - Example data: reference/data.md
   - Differences from the R package: differences.md
   - Benchmarks: benchmarks.md

@@ -8,9 +8,9 @@ pip install universalmotif
 
 !!! note "Development version"
     These pages follow the latest code on GitHub, which can be ahead of the
-    latest release on PyPI. Functions and guides marked as unreleased in
-    the [changelog](changelog.md) are only available by installing
-    [from source](#from-source) until the next release.
+    latest release on PyPI. Until the next release, functions and guides
+    marked as unreleased in the [changelog](changelog.md) are only available
+    by installing [from source](#from-source).
 
 Wheels are built for Linux (x86_64 and aarch64), macOS (Intel and Apple
 Silicon) and Windows (x86_64), so on those there is nothing to compile.
@@ -20,9 +20,10 @@ Installing also adds the `universalmotif` and `umotif` commands described in
 ## Optional dependencies
 
 The only required dependencies are numpy and polars. Everything else is an
-optional extra, needed only by the functions that use it, and installed by
-naming it in brackets, such as `pip install "universalmotif[plot]"` or
-`pip install "universalmotif[plot,scipy]"` for several at once:
+optional extra, needed only by the functions that use it. An extra is
+installed by naming it in brackets, such as
+`pip install "universalmotif[plot]"`, or `pip install "universalmotif[plot,scipy]"`
+for several at once:
 
 - `plot`: matplotlib, for logos and the other plotting functions.
 - `scipy`: SciPy, for the sparse matrices of
@@ -40,20 +41,19 @@ naming it in brackets, such as `pip install "universalmotif[plot]"` or
   given as ranges without it.
 - `polars-bio`: polars-bio, for `to_polars_bio()`, which marks tables as
   0-based for polars-bio's range operations.
-- `pandas`: pandas and pyarrow, for anyone who prefers pandas DataFrames,
-  so that any table the package returns can be converted with
-  `.to_pandas()`, and for `to_logomaker()`.
+- `pandas`: pandas and pyarrow, for `to_logomaker()` and for converting any
+  table the package returns with `.to_pandas()`.
 
 ## From source
 
-On other platforms pip builds the package from its source distribution,
-which needs a Rust toolchain, installed with [rustup](https://rustup.rs/).
+On other platforms pip builds the package from its source distribution.
+This needs a Rust toolchain, installed with [rustup](https://rustup.rs/).
 The build takes a minute or two, as the Rust code is compiled with
 optimizations.
 
 To install the latest code from GitHub instead of a release, clone the
-package and the Rust crate next to each other, since the package builds
-against the crate in the neighbouring folder:
+package and the Rust crate next to each other. The package builds against
+the crate in the neighbouring folder:
 
 ```sh
 git clone https://github.com/bjmt/universalmotif-rs.git
@@ -73,7 +73,7 @@ uv run --no-sync maturin develop --release
 uv run --no-sync pytest
 ```
 
-Many of the tests compare the package against reference values that live
-with the Rust crate, so they also need it checked out next door. To build
-this documentation, use the `docs` group instead and run
+Many of the tests compare the package against reference values kept with
+the Rust crate, so they also need it checked out next door. To build this
+documentation, use the `docs` group instead and run
 `uv run --no-sync mkdocs serve`.

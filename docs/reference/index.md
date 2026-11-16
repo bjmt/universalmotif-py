@@ -26,16 +26,20 @@ The functions are grouped by what they do:
 - [Plotting](plotting.md): logos, trees and plots of results.
 - [Databases and Biopython](databases.md): motifs from JASPAR, HOCOMOCO
   and CIS-BP, and conversion to and from Biopython.
-- [Deep learning](deep.md): convolution filters, one-hot sequences and
-  TF-MoDISco results.
+- [Contribution scores](contributions.md): a model's contribution scores
+  and TF-MoDISco results, and where the model used each motif.
+- [Motifs from contribution scores](contribution-motifs.md): finding a
+  model's motifs from its scores.
+- [Model inputs and experiments](model-inputs.md): one-hot sequences,
+  convolution filters, in silico experiments and variants for a model.
 - [Example data](data.md): synthetic motifs, sequences and files for trying things out.
 
 Most functions that do a lot of work take an `nthreads` argument, where 0
-uses every core. Left out, it takes the package setting, which is 1 unless
-changed with [`set_nthreads()`][universalmotif.set_nthreads] or set with the
-`UNIVERSALMOTIF_NTHREADS` environment variable before the package is
-imported. Functions that use random numbers take a `seed`, and the same seed
-gives the same results again; without one they draw a fresh seed each time.
+uses every core. Left out, it takes the package setting. That is 1 unless
+changed with [`set_nthreads()`][universalmotif.set_nthreads], or with the
+`UNIVERSALMOTIF_NTHREADS` environment variable set before the package is
+imported. Functions that use random numbers take a `seed`. The same seed gives
+the same results again, and without one they draw a fresh seed each time.
 
 ::: universalmotif.set_nthreads
 
@@ -44,8 +48,8 @@ gives the same results again; without one they draw a fresh seed each time.
 Functions that can run for a long time, such as scanning a genome or
 searching for motifs, take a `progress` argument. With it, a bar appears on
 stderr once the call has run for a second, and Ctrl-C stops the call. Left
-out, it takes the package setting, which is off unless changed with
-[`set_progress()`][universalmotif.set_progress] or set with the
+out, it takes the package setting. That is off unless changed with
+[`set_progress()`][universalmotif.set_progress], or with the
 `UNIVERSALMOTIF_PROGRESS` environment variable.
 
 ::: universalmotif.set_progress

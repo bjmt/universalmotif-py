@@ -1,4 +1,4 @@
 The Python package and the Rust crate share their behaviour, so the list
-below, which is kept with the crate, covers both.
+below covers both. It is kept with the crate.
 
 --8<-- "universalmotif-rs/DIVERGENCES.md"

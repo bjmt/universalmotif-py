@@ -67,6 +67,13 @@ New:
 - `read_contributions()` reads the contribution scores ENCODE publishes
   for its chromBPNet and BPNet models, whose Blosc compression needs
   `hdf5plugin`, now part of the `h5py` extra.
+- `plot_modisco()` takes the matches of `name_motifs()` as well as those of
+  `compare_motifs()`.
+- The deep-learning guides are reorganized into an introduction to
+  contribution scores and three guides: TF-MoDISco results, motifs from
+  contribution scores, and experiments on a model. The deep-learning
+  reference page is split the same way, and the prose of the guides,
+  reference pages and docstrings is rewritten in shorter sentences.
 - `call_seqlets()` calls seqlets in a sequence model's contribution scores:
   stretches whose total, and the total of every stretch inside them, is
   unlikely under a null from the scores themselves, kept down to a false
