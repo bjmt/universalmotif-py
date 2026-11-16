@@ -64,6 +64,9 @@ New:
 - `name_motifs()` names motifs by the database motifs, such as JASPAR's,
   they resemble most, scored the TOMTOM way, with q-values corrected for
   the size of the database.
+- `read_contributions()` reads the contribution scores ENCODE publishes
+  for its chromBPNet and BPNet models, whose Blosc compression needs
+  `hdf5plugin`, now part of the `h5py` extra.
 - `call_seqlets()` calls seqlets in a sequence model's contribution scores:
   stretches whose total, and the total of every stretch inside them, is
   unlikely under a null from the scores themselves, kept down to a false

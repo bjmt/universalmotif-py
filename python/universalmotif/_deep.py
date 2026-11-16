@@ -819,6 +819,18 @@ def _chrombpnet_regions(path: str, regions: Any, length: int):
     })
 
 
+def _encode_regions(chrom: np.ndarray, start: np.ndarray, end: np.ndarray, length: int):
+    """The genomic window of each sequence of an ENCODE scores file: its
+    coordinates, recentred to the sequences' length where they differ."""
+    import polars as pl
+
+    chrom = [c.decode() if isinstance(c, bytes) else str(c) for c in chrom]
+    start, end = np.asarray(start, dtype=np.int64), np.asarray(end, dtype=np.int64)
+    centre = (start + end) // 2
+    lo = np.where(end - start == length, start, centre - length // 2)
+    return pl.DataFrame({"chrom": chrom, "start": lo, "end": lo + length})
+
+
 def read_contributions(
     path: str | os.PathLike[str],
     sequences: Any = None,
@@ -829,8 +841,13 @@ def read_contributions(
 ) -> ContributionScores:
     """Read the contribution scores a sequence model gives its inputs.
 
-    Two layouts are read:
+    Three layouts are read:
 
+    - The HDF5 files ENCODE publishes for its chromBPNet and BPNet models,
+      such as ``seq_contrib.counts.fold_mean.<accession>.h5`` in their
+      sequence contribution archives, which hold the one-hot sequences,
+      their hypothetical scores and their coordinates. They are compressed
+      with Blosc, which needs ``hdf5plugin`` installed as well as ``h5py``.
     - The HDF5 files chromBPNet writes, ``<prefix>.counts_scores.h5`` and
       ``<prefix>.profile_scores.h5``, which hold the one-hot sequences and
       their scores. ``scores`` picks the hypothetical scores of every letter
@@ -887,28 +904,54 @@ def read_contributions(
                 "reading HDF5 contribution scores needs h5py; install it with `pip install "
                 "'universalmotif[h5py]'`"
             ) from e
-        with h5py.File(path, "r") as f:
-            if not ("raw" in f and "shap" in f):
-                raise ValueError(f"{path} is not a chromBPNet scores file; it holds {', '.join(f)}")
-            key = "shap" if scores == "hypothetical" else "projected_shap"
+        try:
+            # ENCODE's files are compressed with Blosc, which h5py reads once hdf5plugin is loaded.
+            import hdf5plugin  # noqa: F401
+        except ImportError:
+            pass
+        if pick is not None and len(set(pick)) != len(pick):
+            raise ValueError("indices must not repeat")
 
-            def read(name):
-                ds = f[name]["seq"]
-                if pick is None:
-                    return ds[()]
-                order = np.argsort(pick)
-                got = ds[np.asarray(pick)[order]]
-                out = np.empty_like(got)
-                out[order] = got
-                return out
+        def read(ds):
+            if pick is None:
+                return ds[()]
+            order = np.argsort(pick)
+            got = ds[np.asarray(pick)[order]]
+            out = np.empty_like(got)
+            out[order] = got
+            return out
 
-            if pick is not None and len(set(pick)) != len(pick):
-                raise ValueError("indices must not repeat")
-            onehot = _letters_first(np.asarray(read("raw")), n, "the sequences")
-            values = _letters_first(np.asarray(read(key), dtype=np.float32), n, "the scores")
-        ranges = _chrombpnet_regions(path, regions, values.shape[-1])
-        if ranges is not None and pick is not None:
-            ranges = ranges[pick]
+        try:
+            with h5py.File(path, "r") as f:
+                if "hyp_scores" in f and "input_seqs" in f:
+                    # The layout ENCODE publishes for its chromBPNet and BPNet models.
+                    onehot = _letters_first(np.asarray(read(f["input_seqs"])), n, "the sequences")
+                    values = _letters_first(np.asarray(read(f["hyp_scores"]), dtype=np.float32), n, "the scores")
+                    if scores == "projected":
+                        values = values * onehot
+                    coords = None
+                    if regions is None and all(f"coords_{k}" in f for k in ("chrom", "start", "end")):
+                        coords = [np.asarray(read(f[f"coords_{k}"])) for k in ("chrom", "start", "end")]
+                elif "raw" in f and "shap" in f:
+                    key = "shap" if scores == "hypothetical" else "projected_shap"
+                    onehot = _letters_first(np.asarray(read(f["raw"]["seq"])), n, "the sequences")
+                    values = _letters_first(np.asarray(read(f[key]["seq"]), dtype=np.float32), n, "the scores")
+                    coords = None
+                else:
+                    raise ValueError(f"{path} is not a chromBPNet or BPNet scores file; it holds {', '.join(f)}")
+        except OSError as e:
+            if "plugin" in str(e) or "filter" in str(e):
+                raise ImportError(
+                    f"{path} is compressed with a filter h5py cannot read on its own, such as the Blosc of "
+                    "ENCODE's files; install hdf5plugin with `pip install hdf5plugin`"
+                ) from e
+            raise
+        if coords is not None:
+            ranges = _encode_regions(*coords, values.shape[-1])
+        else:
+            ranges = _chrombpnet_regions(path, regions, values.shape[-1])
+            if ranges is not None and pick is not None:
+                ranges = ranges[pick]
     else:
         if regions is not None:
             warnings.warn("regions is only used with chromBPNet HDF5 files and is ignored", stacklevel=2)

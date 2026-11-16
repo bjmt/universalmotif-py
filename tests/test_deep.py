@@ -236,6 +236,33 @@ def test_read_contributions_chrombpnet(tmp_path):
         um.read_contributions(path, indices=[0, 0])
 
 
+def test_read_contributions_encode(tmp_path):
+    h5py = pytest.importorskip("h5py")
+    seqs = ["ACGTACGTAA", "TTTTGGGGCA", "GATTACAGAT"]
+    onehot = um.one_hot(seqs, dtype=np.float32)
+    hyp = np.random.default_rng(1).normal(size=onehot.shape).astype(np.float32)
+    path = tmp_path / "seq_contrib.counts.fold_mean.ENCSR000AAA.h5"
+    # ENCODE writes (sequences, length, letters), with each sequence's coordinates.
+    with h5py.File(path, "w") as f:
+        f["hyp_scores"] = hyp.transpose(0, 2, 1)
+        f["input_seqs"] = onehot.transpose(0, 2, 1)
+        f["coords_chrom"] = np.array([b"chr1", b"chr2", b"chr1"])
+        f["coords_start"] = np.array([100, 0, 1000])
+        f["coords_end"] = np.array([110, 20, 1010])
+    c = um.read_contributions(path)
+    assert c.sequences == seqs and c.scores.shape == (3, 4, 10)
+    np.testing.assert_allclose(c.scores, hyp)
+    # Coordinates of another width are recentred on the sequences.
+    assert c.names == ["chr1:100-110", "chr2:5-15", "chr1:1000-1010"]
+    proj = um.read_contributions(path, scores="projected", indices=[2, 0])
+    np.testing.assert_allclose(proj.scores, (hyp * onehot)[[2, 0]])
+    assert proj.names == ["chr1:1000-1010", "chr1:100-110"]
+    with h5py.File(tmp_path / "other.h5", "w") as f:
+        f["x"] = np.zeros(3)
+    with pytest.raises(ValueError, match="not a chromBPNet or BPNet"):
+        um.read_contributions(tmp_path / "other.h5")
+
+
 def test_read_contributions_numpy(tmp_path):
     seqs = ["ACGTA", "GGCAT"]
     onehot = um.one_hot(seqs, dtype=np.int8)
@@ -457,7 +484,7 @@ def test_read_contributions_shape_checks(tmp_path):
     other = tmp_path / "other.h5"
     with h5py.File(other, "w") as f:
         f["something"] = np.zeros(3)
-    with pytest.raises(ValueError, match="not a chromBPNet scores file; it holds something"):
+    with pytest.raises(ValueError, match="not a chromBPNet or BPNet scores file; it holds something"):
         um.read_contributions(other)
     np.save(tmp_path / "flat.npy", np.zeros(10))
     with pytest.raises(ValueError, match="scores must have shape"):
