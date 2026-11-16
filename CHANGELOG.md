@@ -48,9 +48,13 @@ New:
 - `contribution_motifs()` finds the motifs a sequence model relies on from
   its contribution scores in one call: seqlets, `motif_finder()` on them
   and, with hypothetical scores, on their idealized letters, then
-  refinement and selection. On a chromBPNet model it recovers about as
-  many of the model's published TF-MoDISco patterns as TF-MoDISco does on
-  the same regions, in 12 seconds against 40 minutes.
+  refinement and selection, a second search of the seqlets left
+  unreached, `gapped_motif_finder()` for composite motifs, and hits of the
+  motifs' CWMs at thresholds set from their own seqlets. On a chromBPNet
+  model of K562 cells it recovers more of the model's published
+  TF-MoDISco patterns than TF-MoDISco does on the same regions, the NFI
+  palindrome and TAL1–GATA composite among them, in 22 seconds against 40
+  minutes.
 - `call_seqlets()` calls seqlets in a sequence model's contribution scores:
   stretches whose total, and the total of every stretch inside them, is
   unlikely under a null from the scores themselves, kept down to a false

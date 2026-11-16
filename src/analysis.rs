@@ -1,6 +1,8 @@
 //! Bindings for P-values, scanning and hit deduplication.
 
-use numpy::PyReadonlyArray1;
+use std::borrow::Cow;
+
+use numpy::{PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::{PyDict, PyList};
@@ -884,13 +886,45 @@ fn _scan_contributions<'py>(
     ))
 }
 
+/// The rows of a 2-D array of scores, each cut to its length, read in place
+/// when the array is contiguous. Rows are passed this way rather than as
+/// one array each, whose borrows numpy would check against one another.
+fn score_rows<'a>(
+    a: &'a PyReadonlyArray2<'_, f64>,
+    lengths: &[usize],
+) -> PyResult<Vec<Cow<'a, [f64]>>> {
+    let ncol = a.shape()[1];
+    if a.shape()[0] != lengths.len() || lengths.iter().any(|&n| n > ncol) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "score lengths do not fit the array",
+        ));
+    }
+    Ok(match a.as_slice() {
+        Ok(all) => lengths
+            .iter()
+            .enumerate()
+            .map(|(i, &n)| Cow::Borrowed(&all[i * ncol..i * ncol + n]))
+            .collect(),
+        Err(_) => {
+            let v = a.as_array();
+            lengths
+                .iter()
+                .enumerate()
+                .map(|(i, &n)| Cow::Owned(v.row(i).iter().take(n).copied().collect()))
+                .collect()
+        }
+    })
+}
+
 #[pyfunction]
-#[pyo3(signature = (scores, decoys, threshold, min_len, max_len, flank, fdr, sign, n_bins, seed, nthreads))]
+#[pyo3(signature = (scores, lengths, decoys, decoy_lengths, threshold, min_len, max_len, flank, fdr, sign, n_bins, seed, nthreads))]
 #[allow(clippy::too_many_arguments)]
 fn _call_seqlets<'py>(
     py: Python<'py>,
-    scores: Vec<PyReadonlyArray1<'py, f64>>,
-    decoys: Option<Vec<PyReadonlyArray1<'py, f64>>>,
+    scores: PyReadonlyArray2<'py, f64>,
+    lengths: Vec<usize>,
+    decoys: Option<PyReadonlyArray2<'py, f64>>,
+    decoy_lengths: Option<Vec<usize>>,
     threshold: f64,
     min_len: usize,
     max_len: usize,
@@ -911,9 +945,11 @@ fn _call_seqlets<'py>(
             )));
         }
     };
-    let x: Vec<Vec<f64>> = scores.iter().map(|a| a.as_array().to_vec()).collect();
-    let d: Option<Vec<Vec<f64>>> =
-        decoys.map(|v| v.iter().map(|a| a.as_array().to_vec()).collect());
+    let x = score_rows(&scores, &lengths)?;
+    let d = match (&decoys, &decoy_lengths) {
+        (Some(a), Some(n)) => Some(score_rows(a, n)?),
+        _ => None,
+    };
     let opts = SeqletOptions {
         threshold,
         min_len,

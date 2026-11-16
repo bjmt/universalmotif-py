@@ -13,9 +13,10 @@ from ._sequences import _seed
 from ._threads import _nthreads
 
 
-def _observed(contributions: Any, sequences: Any) -> tuple[list[np.ndarray], list[str], np.ndarray | None]:
-    """The observed score of each position of each sequence, the sequences'
-    names, and their letters as codes when known."""
+def _observed(contributions: Any, sequences: Any) -> tuple[np.ndarray, list[int], list[str], np.ndarray | None]:
+    """The observed score of each position of each sequence as one
+    contiguous array, the sequences' lengths and names, and their letters
+    as codes when known."""
     scores = _gather_scores(contributions, sequences, None)
     values = scores.values
     if values.ndim == 3:
@@ -25,8 +26,8 @@ def _observed(contributions: Any, sequences: Any) -> tuple[list[np.ndarray], lis
         else:
             values = values.sum(axis=1)
     names = scores.names or [f"seq{i + 1}" for i in range(values.shape[0])]
-    rows = [np.ascontiguousarray(values[i, :n], dtype=np.float64) for i, n in enumerate(scores.lengths)]
-    return rows, names, scores.codes
+    lengths = [int(n) for n in scores.lengths]
+    return np.ascontiguousarray(values, dtype=np.float64), lengths, names, scores.codes
 
 
 def call_seqlets(
@@ -157,9 +158,9 @@ def call_seqlets(
         raise ValueError("max_len must be at most 200")
     if flank < 0:
         raise ValueError("flank must be zero or positive")
-    rows, names, codes = _observed(contributions, sequences)
-    decoy_rows = None if decoys is None else _observed(decoys, decoy_sequences)[0]
-    out = _core._call_seqlets(rows, decoy_rows, threshold, min_len, max_len, flank, fdr, sign, n_bins, _seed(seed),
+    values, lengths, names, codes = _observed(contributions, sequences)
+    decoy_values, decoy_lengths = (None, None) if decoys is None else _observed(decoys, decoy_sequences)[:2]
+    out = _core._call_seqlets(values, lengths, decoy_values, decoy_lengths, threshold, min_len, max_len, flank, fdr, sign, n_bins, _seed(seed),
                               _nthreads(nthreads))
     seq_i = np.asarray(out["sequence_i"], dtype=np.int64)
     df = pl.DataFrame({

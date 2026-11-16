@@ -41,7 +41,9 @@ these together on the outputs of a published model.
 
 [`contribution_motifs()`][universalmotif.contribution_motifs] finds the
 motifs a model relies on in one call, from its contribution scores, by way
-of the functions below.
+of the functions below, along with composite motifs from
+[`gapped_motif_finder()`][universalmotif.gapped_motif_finder] and the hits
+of every motif.
 [`call_seqlets()`][universalmotif.call_seqlets] calls seqlets, the short
 stretches of high contribution, in a model's scores, and their letters can
 go to [`motif_finder()`][universalmotif.motif_finder] to find the motifs the

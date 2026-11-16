@@ -22,7 +22,7 @@ def test_finds_the_motifs_the_model_uses(model):
     found = um.contribution_motifs(model["scores"], model["seqs"], seed=1)
     assert isinstance(found, um.ContributionMotifs)
     assert found.motifs.columns == ["name", "sign", "source", "consensus", "width", "seqlets", "gain", "cumulative",
-                                    "motif", "cwm"]
+                                    "min_similarity", "min_importance", "motif", "cwm"]
     cons = found.motifs["consensus"].to_list()
     assert any("TGACTCA" in c or "TGAGTCA" in c for c in cons)
     assert any("GATAAG" in c or "CTTATC" in c for c in cons)
@@ -32,6 +32,42 @@ def test_finds_the_motifs_the_model_uses(model):
     gains = found.motifs["gain"].to_list()
     assert gains == sorted(gains, reverse=True)
     assert "ContributionMotifs(" in repr(found)
+    # Hits of the CWMs at thresholds set from the seqlets reach most planted sites.
+    assert found.thresholds.columns == ["motif", "min_similarity", "min_importance"]
+    assert (found.thresholds["min_similarity"] > 0.9).all()
+    hits = found.hits
+    assert {"motif", "sequence_i", "start", "end", "strand", "similarity", "importance"} <= set(hits.columns)
+    ap1 = hits.filter(pl.col("motif") == found.motifs.filter(pl.col("consensus").str.contains("TGA.TCA"))["name"][0])
+    assert ap1["sequence_i"].n_unique() >= 130 and (ap1["sequence_i"] % 2 == 0).mean() > 0.95
+    assert um.contribution_motifs(model["scores"], model["seqs"], seed=1, hits=False).hits is None
+
+
+def test_composites():
+    """CAGCTG then AGATAAG 7 or 8 letters on, in every third of 400
+    sequences, beside AP-1 sites in half."""
+    rng = np.random.default_rng(1)
+    seqs = ["".join(rng.choice(list("ACGT"), 120)) for _ in range(400)]
+    scores = rng.normal(0, 0.005, (400, 120))
+    for i, s in enumerate(seqs):
+        if i % 2 == 0:
+            s = s[:20] + "TGACTCA" + s[27:]
+            scores[i, 20:27] += 0.1
+        if i % 3 == 0:
+            gap = 7 + (i // 3) % 2
+            site = "CAGCTG" + s[56:56 + gap] + "AGATAAG"
+            s = s[:50] + site + s[50 + len(site):]
+            scores[i, 50:56] += 0.05
+            scores[i, 56 + gap:63 + gap] += 0.08
+        seqs[i] = s
+    found = um.contribution_motifs(scores, seqs, seed=1)
+    comp = found.motifs.filter(pl.col("source") == "gapped")
+    assert comp.height >= 1 and found.motifs["source"].to_list()[-comp.height:] == ["gapped"] * comp.height
+    for m in comp["motif"]:
+        assert m.isgapped and m.mingap[0] >= 2
+        assert "CAGCTG" in m.consensus and ("CTTATCT" in m.consensus or "AGATAAG" in m.consensus)
+    assert comp["min_similarity"].is_not_null().all()
+    plain = um.contribution_motifs(scores, seqs, seed=1, gapped=False, rounds=1)
+    assert not (plain.motifs["source"] == "gapped").any()
 
 
 def test_inputs_and_options(model):
