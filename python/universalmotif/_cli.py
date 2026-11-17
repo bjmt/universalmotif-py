@@ -1703,7 +1703,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("-k", type=int, nargs="+", default=[4, 5, 6],
                    help="k-mer sizes to seed motifs from, each from 2 to 6 (default: 4 5 6)")
     p.add_argument("--min-gap", type=int, default=0, help="shortest spacer (default: 0)")
-    p.add_argument("--max-gap", type=int, default=20, help="longest spacer, at most 100 (default: 20)")
+    p.add_argument("--max-gap", type=int, default=20, help="longest spacer, at most 31 (default: 20)")
     p.add_argument("--nmotifs", type=int, default=3, help="most motifs to find (default: 3)")
     p.add_argument("--hit-pvalue", type=float, default=1e-4,
                    help="P-value of a site counting as a hit (default: 1e-4)")

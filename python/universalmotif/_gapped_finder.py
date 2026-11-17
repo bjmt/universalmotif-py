@@ -117,7 +117,7 @@ def gapped_motif_finder(
         2 to 6.
     min_gap, max_gap
         The shortest and longest spacers searched, with ``max_gap`` at most
-        100.
+        31, so that the motifs found can be compared with their gaps.
     nmotifs
         The most motifs to find.
     hit_pvalue

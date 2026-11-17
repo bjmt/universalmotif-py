@@ -20,6 +20,9 @@ Changes in behaviour:
   and `view_motifs()`; `use_gaps=False` ignores them as before.
 - `variant_motif_effects()` scores insertions, deletions and longer
   substitutions.
+- Gapped motifs with more than 32 combinations of gap sizes are refused
+  by comparisons, merging and alignment, and `gapped_motif_finder()`
+  takes `max_gap` up to 31.
 - polars 1.17 or later is required.
 
 New:
