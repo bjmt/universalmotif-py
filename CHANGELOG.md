@@ -75,6 +75,13 @@ New:
   cosine, averages each cluster weighted by seqlets, records the sources
   of each, names them by a database and flags those that may be noise,
   and `plot_modisco()` draws the clusters as a report.
+- `call_seqlets()` takes a `null` to build its null from, such as a first
+  batch of scores or a model's decoys, so that batches called against it
+  get the seqlets of one call, and `seqlet_fdr()` applies one false
+  discovery rate to seqlets gathered from batches. `contribution_motifs()`
+  takes sequences already idealized as `idealized`, in place of
+  hypothetical scores. Together these let scores be used as a model
+  produces them, keeping only those near seqlets.
 - `name_motifs()` names motifs by the database motifs, such as JASPAR's,
   they resemble most, scored the TOMTOM way, with q-values corrected for
   the size of the database.

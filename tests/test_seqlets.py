@@ -75,3 +75,31 @@ def test_errors(scores):
     with pytest.raises(ValueError, match="fdr"):
         um.call_seqlets(scores, fdr=2)
     assert um.call_seqlets(np.zeros((3, 50))).height == 0
+
+
+def test_batches_against_one_null_give_one_call():
+    rng = np.random.default_rng(7)
+    scores = rng.normal(0, 0.01, (300, 120))
+    scores[::3, 50:58] += 0.15
+    scores[1::4, 20:26] -= 0.15
+    decoys = rng.permuted(scores, axis=1)
+    pilot = scores[:80]
+    found, fake = [], []
+    for lo in range(0, 300, 70):
+        part = um.call_seqlets(scores[lo:lo + 70], null=pilot, fdr=None, flank=1)
+        found.append(part.with_columns(pl.col("sequence_i") + lo))
+        fake.append(um.call_seqlets(decoys[lo:lo + 70], null=pilot, fdr=None, flank=1))
+    kept = um.seqlet_fdr(pl.concat(found), pl.concat(fake))
+    whole = um.call_seqlets(scores, null=pilot, decoys=decoys, flank=1)
+    cols = ["sequence_i", "start", "end", "sign", "score"]
+    assert kept.select(cols).equals(whole.select(cols))
+    assert set(kept["sign"]) == {"+", "-"}
+    # Decoys of half the positions count double.
+    half = um.seqlet_fdr(pl.concat(found), pl.concat(fake[:2]), positions=300 * 120, decoy_positions=140 * 120)
+    assert half.height <= kept.height + 5
+    with pytest.raises(ValueError, match="fdr"):
+        um.seqlet_fdr(kept, kept, fdr=0)
+    with pytest.raises(ValueError, match="both positions"):
+        um.seqlet_fdr(kept, kept, positions=10)
+    with pytest.raises(ValueError, match="score"):
+        um.seqlet_fdr(kept.drop("score"), kept)

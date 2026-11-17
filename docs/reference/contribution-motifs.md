@@ -8,7 +8,7 @@ guide works through them on a published model.
 
 | Step | Function |
 | --- | --- |
-| Call seqlets, the stretches of high contribution | [`call_seqlets()`][universalmotif.call_seqlets] |
+| Call seqlets, the stretches of high contribution | [`call_seqlets()`][universalmotif.call_seqlets], with [`seqlet_fdr()`][universalmotif.seqlet_fdr] for seqlets called in batches |
 | Rewrite seqlets in the letters the model prefers | [`idealize_sequences()`][universalmotif.idealize_sequences] |
 | Search the seqlets for motifs | [`motif_finder()`][universalmotif.motif_finder], [`gapped_motif_finder()`][universalmotif.gapped_motif_finder] |
 | Rebuild motifs from their sites in the seqlets | [`refine_motifs()`][universalmotif.refine_motifs] |
@@ -23,6 +23,8 @@ guide works through them on a published model.
 ::: universalmotif.ContributionMotifs
 
 ::: universalmotif.call_seqlets
+
+::: universalmotif.seqlet_fdr
 
 ::: universalmotif.idealize_sequences
 

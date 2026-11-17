@@ -19,7 +19,7 @@ use universalmotif::scan::{
     HitTable, MatchValue, NoOverlaps, OverlapPriority, ScanOptions, motif_matches, scan_encoded,
     scan_fasta, scan_table,
 };
-use universalmotif::seqlets::{SeqletOptions, SeqletSign, call_seqlets};
+use universalmotif::seqlets::{SeqletOptions, SeqletSign, call_seqlets_with_null};
 use universalmotif::similarity::{self, CwmCompareOptions, CwmMetric};
 
 use pyo3_arrow::PyTable;
@@ -917,7 +917,7 @@ fn score_rows<'a>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (scores, lengths, decoys, decoy_lengths, threshold, min_len, max_len, flank, fdr, sign, n_bins, seed, nthreads))]
+#[pyo3(signature = (scores, lengths, decoys, decoy_lengths, threshold, min_len, max_len, flank, fdr, sign, n_bins, seed, nthreads, null=None, null_lengths=None))]
 #[allow(clippy::too_many_arguments)]
 fn _call_seqlets<'py>(
     py: Python<'py>,
@@ -934,6 +934,8 @@ fn _call_seqlets<'py>(
     n_bins: usize,
     seed: u64,
     nthreads: usize,
+    null: Option<PyReadonlyArray2<'py, f32>>,
+    null_lengths: Option<Vec<usize>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let sign = match sign {
         "both" => SeqletSign::Both,
@@ -950,6 +952,10 @@ fn _call_seqlets<'py>(
         (Some(a), Some(n)) => Some(score_rows(a, n)?),
         _ => None,
     };
+    let nl = match (&null, &null_lengths) {
+        (Some(a), Some(n)) => Some(score_rows(a, n)?),
+        _ => None,
+    };
     let opts = SeqletOptions {
         threshold,
         min_len,
@@ -962,7 +968,7 @@ fn _call_seqlets<'py>(
         nthreads,
     };
     let found = py
-        .detach(|| call_seqlets(&x, d.as_deref(), &opts))
+        .detach(|| call_seqlets_with_null(&x, nl.as_deref(), d.as_deref(), &opts))
         .map_err(err)?;
     let d = PyDict::new(py);
     d.set_item(

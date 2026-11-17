@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 import re
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -310,6 +310,7 @@ def contribution_motifs(
     contributions: Any,
     sequences: Any = None,
     hypothetical: Any = None,
+    idealized: Any = None,
     seqlets: pl.DataFrame | None = None,
     decoys: Any = None,
     sign: str = "positive",
@@ -346,7 +347,8 @@ def contribution_motifs(
        windows of the same widths, taken from the sequences away from any
        seqlet. With ``hypothetical`` scores, it also searches the seqlets
        rewritten in the letters the model prefers by
-       [`idealize_sequences()`][universalmotif.idealize_sequences]. This
+       [`idealize_sequences()`][universalmotif.idealize_sequences], or
+       rewritten beforehand and given as ``idealized``. This
        finds degenerate sites, such as spaced palindromes, whose letters
        vary too much for a plain search.
     3. With ``stability``, each search is rerun that many times on half of
@@ -454,6 +456,12 @@ def contribution_motifs(
         position, for the search on idealized seqlets. They can be an array
         of shape (sequences, 4, length) or a ContributionScores of
         hypothetical scores.
+    idealized
+        The sequences already rewritten by ``idealize_sequences()``, in
+        place of ``hypothetical``, in any of the forms ``sequences`` takes.
+        Idealizing sequences as a model gives their hypothetical scores
+        means those scores need not be kept. With ``sign="both"``, give a
+        dict of the ``"positive"`` and ``"negative"`` rewritings.
     seqlets
         Seqlets to use instead of calling them, as a table with ``start``
         and ``end`` columns and a ``sequence_i`` column, or a ``sequence``
@@ -566,6 +574,8 @@ def contribution_motifs(
         return _progress.run(lambda: contribution_motifs(**args))
     if sign not in ("positive", "negative", "both"):
         raise ValueError("sign must be 'positive', 'negative' or 'both'")
+    if hypothetical is not None and idealized is not None:
+        raise ValueError("give hypothetical scores or idealized sequences, not both")
     nthreads = _nthreads(nthreads)
     seed = _seed(seed)
     rng = np.random.default_rng(seed)
@@ -586,7 +596,7 @@ def contribution_motifs(
     else:
         seqlets = _given_seqlets(seqlets, scores.names, len(seqs))
     signs = {"positive": ["+"], "negative": ["-"], "both": ["+", "-"]}[sign]
-    ideal = {}
+    ideal = {} if idealized is None else _given_idealized(idealized, seqs, sign)
     rows = []
     reach_by_motif: dict[str, np.ndarray] = {}
     for sg in signs:
@@ -597,10 +607,10 @@ def contribution_motifs(
             continue
         label = "pos" if sg == "+" else "neg"
         sources = {"seqlets": seqs}
-        if hypothetical is not None:
-            key = "positive" if sg == "+" else "negative"
-            if key not in ideal:
-                ideal[key] = idealize_sequences(seqs, hypothetical, threshold=idealize_threshold, sign=key)
+        key = "positive" if sg == "+" else "negative"
+        if hypothetical is not None and key not in ideal:
+            ideal[key] = idealize_sequences(seqs, hypothetical, threshold=idealize_threshold, sign=key)
+        if key in ideal:
             sources["idealized"] = ideal[key]
         sites = sub.select("sequence_i", "start", "end")
         found, kept, reached = [], [], set()
@@ -859,6 +869,24 @@ def _gapped_pass(seqs, sub, sites, si, lengths, observed, reached, label, sg, ma
                     "width": m.width, "seqlets": len(reach[m.name]), "gain": len(new) / n,
                     "cumulative": len(reached) / n, "stability": None, "motif": m, "cwm": cwms[m.name]})
         kept_cwms.append(cwms[m.name])
+    return out
+
+
+def _given_idealized(idealized: Any, seqs: list[str], sign: str) -> dict[str, list[str]]:
+    """Idealized sequences for each sign searched, checked against the
+    sequences."""
+    if isinstance(idealized, Mapping) and idealized and set(idealized) <= {"positive", "negative"}:
+        given = dict(idealized)
+    elif sign == "both":
+        raise ValueError("with sign='both', give idealized as a dict of 'positive' and 'negative' sequences")
+    else:
+        given = {sign: idealized}
+    out = {}
+    for key, value in given.items():
+        values = [value] if isinstance(value, str) else list(value.values() if isinstance(value, Mapping) else value)
+        if len(values) != len(seqs) or any(len(a) != len(b) for a, b in zip(values, seqs)):
+            raise ValueError(f"the {key} idealized sequences must match the sequences in number and length")
+        out[key] = [str(v) for v in values]
     return out
 
 

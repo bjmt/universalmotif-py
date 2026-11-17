@@ -46,6 +46,8 @@ def call_seqlets(
     seed: int | None = None,
     nthreads: int | None = None,
     progress: bool | None = None,
+    null: Any = None,
+    null_sequences: Any = None,
 ) -> pl.DataFrame:
     """Call seqlets, the short stretches of high contribution, in a sequence
     model's contribution scores.
@@ -75,6 +77,15 @@ def call_seqlets(
     keep the scores' values but not the model's view of empty sequence, so
     they let through more seqlets of weak contribution.
 
+    The null comes from the scores given, unless ``null`` gives others to
+    build it from. Batches of sequences called against one ``null``, such
+    as the scores of a first batch or a model's decoy scores, all get the
+    same P-values, so together they give the seqlets of one call. Calling
+    each batch with ``fdr=None`` keeps every candidate, and
+    [`seqlet_fdr()`][universalmotif.seqlet_fdr] then applies one false
+    discovery rate to them all. This way scores can be called as a model
+    produces them, without keeping them all.
+
     The seqlets can go straight to
     [`motif_finder()`][universalmotif.motif_finder] as the sequences of
     their windows. They can also go to
@@ -98,6 +109,9 @@ def call_seqlets(
     decoys, decoy_sequences
         Decoy scores, and their sequences when needed, in the same forms
         as ``contributions`` and ``sequences``.
+    null, null_sequences
+        Scores to build the null from in place of ``contributions``, and
+        their sequences when needed, in the same forms.
     threshold
         The P-value every stretch inside a seqlet must reach.
     min_len, max_len
@@ -179,8 +193,9 @@ def call_seqlets(
         raise ValueError("flank must be zero or positive")
     values, lengths, names, codes = _observed(contributions, sequences)
     decoy_values, decoy_lengths = (None, None) if decoys is None else _observed(decoys, decoy_sequences)[:2]
+    null_values, null_lengths = (None, None) if null is None else _observed(null, null_sequences)[:2]
     out = _core._call_seqlets(values, lengths, decoy_values, decoy_lengths, threshold, min_len, max_len, flank, fdr, sign, n_bins, _seed(seed),
-                              _nthreads(nthreads))
+                              _nthreads(nthreads), null_values, null_lengths)
     seq_i = np.asarray(out["sequence_i"], dtype=np.int64)
     df = pl.DataFrame({
         "sequence": pl.Series([names[i] for i in seq_i], dtype=pl.String),
@@ -201,4 +216,77 @@ def call_seqlets(
     return df
 
 
-__all__ = ["call_seqlets"]
+def seqlet_fdr(
+    seqlets: pl.DataFrame,
+    decoys: pl.DataFrame,
+    fdr: float = 0.2,
+    positions: int | None = None,
+    decoy_positions: int | None = None,
+) -> pl.DataFrame:
+    """Keep seqlets down to a false discovery rate set by decoy seqlets.
+
+    Seqlets called in batches by
+    [`call_seqlets()`][universalmotif.call_seqlets] with ``fdr=None`` and
+    one ``null``, and the seqlets of decoy scores called the same way, get
+    the cut ``call_seqlets()`` gives them in one call. For each sign,
+    seqlets are kept down to the lowest total at which decoy seqlets of at
+    least that total make up at most ``fdr`` of the seqlets. The decoys
+    are counted as if they had as many positions as the scores.
+    ``positions`` and ``decoy_positions`` give those numbers of positions,
+    and by default they are taken to be equal.
+
+    Returns the seqlets kept, in their order.
+
+    Examples
+    --------
+    Scores with a block of high contribution in every other sequence,
+    called in two batches against the null of the first. The decoys are
+    each sequence's scores shuffled, as ``call_seqlets()`` makes them when
+    given none:
+
+    >>> import numpy as np
+    >>> import polars as pl
+    >>> import universalmotif as um
+    >>> rng = np.random.default_rng(1)
+    >>> scores = rng.normal(0, 0.01, (200, 100))
+    >>> scores[::2, 40:48] += 0.2
+    >>> decoys = rng.permuted(scores, axis=1)
+    >>> first = scores[:100]
+    >>> found, fake = [], []
+    >>> for lo in (0, 100):
+    ...     batch = um.call_seqlets(scores[lo:lo + 100], null=first, fdr=None, flank=0)
+    ...     found.append(batch.with_columns(pl.col("sequence_i") + lo))
+    ...     fake.append(um.call_seqlets(decoys[lo:lo + 100], null=first, fdr=None, flank=0))
+    >>> kept = um.seqlet_fdr(pl.concat(found), pl.concat(fake))
+
+    These are the seqlets of a single call with the same null and decoys:
+
+    >>> whole = um.call_seqlets(scores, null=first, decoys=decoys, flank=0)
+    >>> kept.height, kept.select("sequence_i", "start", "end").equals(whole.select("sequence_i", "start", "end"))
+    (101, True)
+    """
+    if not 0 < fdr <= 1:
+        raise ValueError("fdr must be above 0 and at most 1")
+    for name, df in (("seqlets", seqlets), ("decoys", decoys)):
+        if not isinstance(df, pl.DataFrame) or "score" not in df.columns:
+            raise ValueError(f"{name} must be a DataFrame from call_seqlets(), with a 'score' column")
+    if (positions is None) != (decoy_positions is None):
+        raise ValueError("give both positions and decoy_positions, or neither")
+    scale = 1.0 if positions is None else max(positions, 1) / max(decoy_positions, 1)
+    sign = "sign" in seqlets.columns
+    keep = np.zeros(seqlets.height, dtype=bool)
+    for sg in (seqlets["sign"].unique().to_list() if sign else [None]):
+        mine = (seqlets["sign"] == sg).to_numpy() if sign else np.ones(seqlets.height, dtype=bool)
+        theirs = decoys.filter(pl.col("sign") == sg) if sg is not None and "sign" in decoys.columns else decoys
+        real = np.abs(seqlets["score"].to_numpy()[mine])
+        fake = np.sort(np.abs(theirs["score"].to_numpy()))
+        # The lowest total at which the scaled decoys at or above it are at most fdr of the seqlets.
+        v = np.sort(real)[::-1]
+        n_fake = len(fake) - np.searchsorted(fake, v, side="left")
+        ok = np.flatnonzero(n_fake * scale / np.arange(1, len(v) + 1) <= fdr)
+        cut = v[ok[-1]] if ok.size else np.inf
+        keep[np.flatnonzero(mine)[real >= cut]] = True
+    return seqlets.filter(pl.Series(keep))
+
+
+__all__ = ["call_seqlets", "seqlet_fdr"]

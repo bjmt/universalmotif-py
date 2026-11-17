@@ -175,3 +175,25 @@ def test_report_and_names(model, tmp_path):
     matplotlib.pyplot.close(fig)
     with pytest.raises(ValueError, match="top"):
         um.name_motifs(found.ppms, db, top=0)
+
+
+def test_idealized_sequences_stand_in_for_hypothetical_scores(model):
+    seqs, scores = model["seqs"], model["scores"]
+    rng = np.random.default_rng(5)
+    # Hypothetical scores that prefer the planted letters, and other letters elsewhere.
+    hyp = rng.normal(0, 0.004, (300, 4, 120))
+    codes = np.array([["ACGT".index(c) for c in s] for s in seqs])
+    np.put_along_axis(hyp, codes[:, None, :], scores[:, None, :], axis=1)
+    from_scores = um.contribution_motifs(scores, seqs, hypothetical=hyp, seed=1, hits=False)
+    ideal = um.idealize_sequences(seqs, hyp)
+    given = um.contribution_motifs(scores, seqs, idealized=ideal, seed=1, hits=False)
+    assert given.motifs.drop("motif", "cwm").equals(from_scores.motifs.drop("motif", "cwm"))
+    both = um.contribution_motifs(scores, seqs, idealized={"positive": ideal, "negative": seqs}, sign="both",
+                                  seed=1, hits=False)
+    assert both.motifs.height >= 1
+    with pytest.raises(ValueError, match="not both"):
+        um.contribution_motifs(scores, seqs, hypothetical=hyp, idealized=ideal)
+    with pytest.raises(ValueError, match="dict of 'positive' and 'negative'"):
+        um.contribution_motifs(scores, seqs, idealized=ideal, sign="both")
+    with pytest.raises(ValueError, match="number and length"):
+        um.contribution_motifs(scores, seqs, idealized=ideal[:10])
