@@ -24,7 +24,9 @@ if TYPE_CHECKING:
     from ._contribution_motifs import ContributionMotifs
 
 _LOGO_TYPES = ("CWM", "hCWM", "PPM")
-_COLUMNS = ("seqlets", "hits", *_LOGO_TYPES)
+_COLUMNS = ("seqlets", "sources", "hits", *_LOGO_TYPES)
+# The columns of numbers, in the order they are drawn.
+_COUNTS = ("seqlets", "sources", "hits")
 _GROUPS = {"pos": "Positive patterns", "neg": "Negative patterns", None: None}
 _MIN_OVERLAP = 5
 _GREY = "#6E6E6E"
@@ -43,7 +45,9 @@ class _Pattern:
     span: int = 0
     # Known only for the patterns of contribution_motifs().
     share: float | None = None
+    sources: int | None = None
     hits: int | None = None
+    flags: list[str] | None = None
     consensus: str | None = None
     members: list[dict[str, Any]] = field(default_factory=list)
 
@@ -230,6 +234,34 @@ def _match_lines(target: str, m: Motif | None, qvalue) -> list[str]:
     return [target, q] if q else [target]
 
 
+def _count(p: _Pattern, column: str) -> int | None:
+    return {"seqlets": p.nsites, "sources": p.sources, "hits": p.hits}[column]
+
+
+_FLAGS = ("truncated", "mixed_sign", "low_complexity", "diffuse")
+
+
+def _combined_motifs(comp) -> tuple[dict[str, list[Motif]], dict[str, dict[str, Any]]]:
+    """The clusters of combine_patterns() as CWMs and PPMs, with their
+    patterns as members."""
+    cl = comp.clusters
+    if not cl.height:
+        raise ValueError("no patterns to draw")
+    given: dict[str, list[Motif]] = {"CWM": cl["cwm"].to_list()}
+    if all(m is not None for m in cl["ppm"]):
+        given["PPM"] = cl["ppm"].to_list()
+    extra = {}
+    for row in cl.iter_rows(named=True):
+        members = comp.patterns.filter(pl.col("cluster") == row["cluster"]).sort("seqlets", descending=True)
+        extra[row["cluster"]] = {
+            "nsites": row["seqlets"], "sources": row["n_sources"], "consensus": row["consensus"] or None,
+            "flags": [f.replace("_", " ") for f in _FLAGS if row[f]],
+            "members": [{"name": f"{r['source']} {r['pattern']}", "seqlets": r["seqlets"], "cwm": r["cwm"]}
+                        for r in members.iter_rows(named=True)],
+        }
+    return given, extra
+
+
 def _found_motifs(found: ContributionMotifs) -> tuple[dict[str, list[Motif]], dict[str, dict[str, Any]]]:
     """The patterns of contribution_motifs() as CWMs and PPMs named by
     pattern, and what else is known of each."""
@@ -268,13 +300,15 @@ def _subpatterns(path, trim_threshold) -> dict[str, dict[str, Any]]:
 def _prepare(modisco, matches, database, names, patterns, columns, n_matches, qvalue, use_type, trim_threshold,
              align, nthreads):
     """The patterns to report, with their matches, and the columns shown."""
+    from ._combine import CombinedPatterns
     from ._contribution_motifs import ContributionMotifs
 
     if columns is not None:
         columns = [columns] if isinstance(columns, str) else list(columns)
         bad = [c for c in columns if c not in _COLUMNS]
         if bad:
-            raise ValueError(f"columns must be among 'seqlets', 'hits', 'CWM', 'hCWM' and 'PPM', not {bad[0]!r}")
+            raise ValueError(f"columns must be among 'seqlets', 'sources', 'hits', 'CWM', 'hCWM' and 'PPM', "
+                             f"not {bad[0]!r}")
     if n_matches < 1:
         raise ValueError("n_matches must be at least 1")
     if use_type not in ("ICM", "PPM"):
@@ -285,6 +319,10 @@ def _prepare(modisco, matches, database, names, patterns, columns, n_matches, qv
         given, extra = _found_motifs(modisco)
         if columns is None:
             columns = ["seqlets", "CWM", "PPM"]
+    elif isinstance(modisco, CombinedPatterns):
+        given, extra = _combined_motifs(modisco)
+        if columns is None:
+            columns = ["seqlets", "sources", *given]
     elif isinstance(modisco, (str, os.PathLike)):
         if columns is None:
             columns = ["seqlets", "CWM", "PPM"]
@@ -303,6 +341,8 @@ def _prepare(modisco, matches, database, names, patterns, columns, n_matches, qv
         raise ValueError(f"no {missing[0]} motifs were given for that column")
     if "hits" in columns and not any(e.get("hits") is not None for e in extra.values()):
         raise ValueError("the hits column needs the result of contribution_motifs(), with its hits")
+    if "sources" in columns and not any(e.get("sources") is not None for e in extra.values()):
+        raise ValueError("the sources column needs the result of combine_patterns()")
     shown = [c for c in columns if c in _LOGO_TYPES]
 
     first = next(iter(given.values()))
@@ -520,9 +560,8 @@ def plot_modisco(
     fig = plt.figure()
     small = 0.8 * text_size
     labels = [p.label for p in pats]
-    counted = [c for c in ("seqlets", "hits") if c in columns]
-    numbers = {c: ["" if v is None else f"{v:,}" for v in (p.nsites if c == "seqlets" else p.hits for p in pats)]
-               for c in counted}
+    counted = [c for c in _COUNTS if c in columns]
+    numbers = {c: ["" if v is None else f"{v:,}" for v in (_count(p, c) for p in pats)] for c in counted}
     head = _headings(use_type, n_cols)
     lines = [_match_lines(m[0], m[1], m[3]) for p in pats for m in p.matches]
     has_db = database is not None
@@ -661,7 +700,8 @@ def plot_modisco(
 
 def _headings(use_type: str, n_cols: int) -> dict[str, str]:
     # The PPM column is headed by what it shows: information content (ICM) or probabilities (PPM).
-    head = {"label": "Pattern", "seqlets": "Seqlets", "hits": "Hits", "CWM": "CWM", "hCWM": "hCWM", "PPM": use_type}
+    head = {"label": "Pattern", "seqlets": "Seqlets", "sources": "Sources", "hits": "Hits", "CWM": "CWM",
+            "hCWM": "hCWM", "PPM": use_type}
     head["match"] = "Best match" if n_cols == 1 else "Matches"
     return head
 
@@ -728,27 +768,29 @@ def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[st
                title: str | None) -> str:
     """The report as one self-contained HTML page, with the same columns as
     the figure and one more that lists the CWMs making up each pattern."""
+    from ._combine import CombinedPatterns
     from ._contribution_motifs import ContributionMotifs
     from ._display import logo_svg
 
-    found = isinstance(modisco, ContributionMotifs)
     if title is None:
-        title = ("Motifs from contribution scores" if found
+        title = ("Motifs from contribution scores" if isinstance(modisco, ContributionMotifs)
+                 else "Combined patterns" if isinstance(modisco, CombinedPatterns)
                  else "TF-MoDISco patterns" if isinstance(modisco, (str, os.PathLike)) else "Patterns")
     esc = _html.escape
     head = _headings(use_type, n_cols)
-    counted = [c for c in ("seqlets", "hits") if c in columns]
+    counted = [c for c in _COUNTS if c in columns]
     with_parts = any(p.members for p in pats)
+    with_flags = any(p.flags is not None for p in pats)
 
     # Columns that sort, and the way each sorts first: counts from the most,
     # q-values from the least, and the rest from the top.
     cols = [("Pattern", "asc"), ("Sign", "asc"), *[(head[c], "desc") for c in counted],
             *[(head[t], None) for t in shown], *([(head["match"], "asc")] if n_cols else []),
-            *([("CWMs", "desc")] if with_parts else [])]
+            *([("CWMs", "desc")] if with_parts else []), *([("Flags", "desc")] if with_flags else [])]
     out = [_HTML_HEAD.replace("__TITLE__", esc(title))]
     heads = []
     for name, first in cols:
-        cls = " ".join(x for x in ("sort" if first else "", "n" if name in ("Seqlets", "Hits") else "") if x)
+        cls = " ".join(x for x in ("sort" if first else "", "n" if name in ("Seqlets", "Sources", "Hits") else "") if x)
         attrs = (f' class="{cls}"' if cls else "") + (f' data-first="{first}"' if first else "")
         heads.append(f"<th{attrs}>{esc(name)}</th>")
     out.append('<div class="wrap"><table><thead><tr>' + "".join(heads) + "</tr></thead><tbody>")
@@ -758,7 +800,7 @@ def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[st
                  + (f"<br><code>{esc(p.consensus)}</code>" if p.consensus else "") + "</td>",
                  f'<td data-v="{"pos neg".find(p.group or "x")}">{sign}</td>']
         for c in counted:
-            v = p.nsites if c == "seqlets" else p.hits
+            v = _count(p, c)
             text = "" if v is None else f"{v:,}"
             if c == "seqlets" and p.share is not None:
                 text += f'<br><span class="m">{100 * p.share:.1f}%</span>'
@@ -791,6 +833,9 @@ def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[st
                              f"{inner}</details></td>")
             else:
                 cells.append('<td class="m" data-v="0">none</td>')
+        if with_flags:
+            flags = p.flags or []
+            cells.append(f'<td data-v="{len(flags)}">{esc(", ".join(flags))}</td>')
         out.append("<tr>" + "".join(cells) + "</tr>")
     out.append("</tbody></table></div></main>" + _SORT_SCRIPT + "</body></html>")
     return "\n".join(out)

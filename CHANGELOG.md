@@ -66,6 +66,11 @@ New:
   those of TF-MoDISco, and with `html` also writes the report as an HTML
   page whose columns sort and whose rows open to show each pattern's CWMs,
   or a TF-MoDISco pattern's subpatterns.
+- `combine_patterns()` combines the patterns of many TF-MoDISco runs or
+  `contribution_motifs()` results into one set. It clusters their CWMs by
+  cosine, averages each cluster weighted by seqlets, records the sources
+  of each, names them by a database and flags those that may be noise,
+  and `plot_modisco()` draws the clusters as a report.
 - `name_motifs()` names motifs by the database motifs, such as JASPAR's,
   they resemble most, scored the TOMTOM way, with q-values corrected for
   the size of the database.

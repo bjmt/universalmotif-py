@@ -16,6 +16,7 @@ guide works through them on a published model.
 | Give motifs as CWMs from their hits | [`HitContributions.to_cwms()`][universalmotif.HitContributions.to_cwms] |
 | Find where the model used each motif | [`scan_contributions()`][universalmotif.scan_contributions] |
 | Name the motifs by a motif database | [`name_motifs()`][universalmotif.name_motifs] |
+| Gather the patterns of many runs into one set | [`combine_patterns()`][universalmotif.combine_patterns] |
 
 ::: universalmotif.contribution_motifs
 
@@ -24,3 +25,9 @@ guide works through them on a published model.
 ::: universalmotif.call_seqlets
 
 ::: universalmotif.idealize_sequences
+
+## Patterns of many runs
+
+::: universalmotif.combine_patterns
+
+::: universalmotif.CombinedPatterns
