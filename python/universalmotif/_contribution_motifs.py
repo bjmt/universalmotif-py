@@ -434,11 +434,11 @@ def contribution_motifs(
     sequence matches used to choose motifs.
 
     Finally, motifs are gathered into patterns, as TF-MoDISco gathers
-    seqlets. In order of the seqlets given to them, each motif joins the first
-    pattern whose leading motif's CWM is at least ``pattern_similarity``
-    like its own. A factor's site found in several spellings thus becomes
-    one pattern, with those spellings as its members. Composites lead
-    patterns of their own. Every motif is kept and scanned for, whatever
+    seqlets. In order of the seqlets their sequence matches reach, each motif
+    joins the first pattern whose leading motif's CWM is at least
+    ``pattern_similarity`` like its own. A factor's site found in several
+    spellings thus becomes one pattern, with those spellings as its members.
+    Composites lead patterns of their own. Every motif is kept and scanned for, whatever
     its pattern, as the patterns only arrange them.
 
     Each sign of ``sign`` is searched on its own. The defaults aim at
@@ -692,7 +692,11 @@ def contribution_motifs(
             reach = _score_reach(kept, seqs, sites, observed, nthreads)
             for r in kept:
                 r["seqlets"] = len(reach.get(r["name"], ()))
-            _group(kept, label, pattern_similarity, nthreads)
+            # Patterns still form in order of the seqlets the sequence matches reach. A motif given many
+            # seqlets by its CWM can have a CWM much like others, such as one weighted on a CpG, and
+            # would gather unrelated motifs as the first of a pattern.
+            matched = _reach(_site_hits([r["motif"] for r in kept], seqs, sites, nthreads))
+            _group(kept, label, pattern_similarity, nthreads, {q: len(v) for q, v in matched.items()})
             for r in kept:
                 reach_by_motif[r["name"]] = sub_ids[np.sort(np.fromiter(reach.get(r["name"], ()), dtype=np.int64))]
             # Number the patterns by the seqlets their members reach between them.
@@ -831,15 +835,16 @@ def _scan(table: pl.DataFrame, observed: np.ndarray, seqs: list[str], names: lis
     return hits.with_columns(pl.Series("sequence", label, dtype=pl.String))
 
 
-def _group(kept: list[dict], label: str, similarity: float | None, nthreads: int) -> None:
-    """Give each kept motif a pattern. In order of the seqlets they reach,
-    each motif joins the first pattern whose representative's CWM is at
-    least ``similarity`` like its own by cosine, or starts a pattern of its
-    own. Composites always start their own, as one of their parts is often
-    another pattern."""
+def _group(kept: list[dict], label: str, similarity: float | None, nthreads: int,
+           matched: dict[str, int]) -> None:
+    """Give each kept motif a pattern. In order of the seqlets their
+    sequence matches reach, in ``matched``, each motif joins the first
+    pattern whose first motif's CWM is at least ``similarity`` like its own
+    by cosine, or starts a pattern of its own. Composites always start their
+    own, as one of their parts is often another pattern."""
     from ._compare import compare_motifs
 
-    order = sorted(range(len(kept)), key=lambda k: (-kept[k]["seqlets"], k))
+    order = sorted(range(len(kept)), key=lambda k: (-matched.get(kept[k]["name"], 0), k))
     sim = None
     if similarity is not None and len(kept) > 1:
         sim = np.asarray(compare_motifs([r["cwm"] for r in kept], nthreads=nthreads), dtype=float)
