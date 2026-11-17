@@ -186,20 +186,26 @@ def _widen(start: np.ndarray, end: np.ndarray, lengths: np.ndarray,
 def _background(seqs: list[str], seqlets: pl.DataFrame, widths: np.ndarray, rng, ratio: int = 2) -> list[str]:
     """Windows of the seqlets' widths drawn from the sequences where there is
     no seqlet and no letter outside ACGT, ``ratio`` per seqlet."""
-    lengths = np.array([len(s) for s in seqs])
-    # The stretches each window must avoid, merged and sorted, per sequence.
-    by_seq = seqlets.group_by("sequence_i").agg("start", "end")
-    spans = {int(i): (list(s), list(e)) for i, s, e in by_seq.iter_rows()}
-    blocked: dict[int, tuple[np.ndarray, np.ndarray]] = {}
-    for i, s in enumerate(seqs):
-        starts, ends = spans.get(i, ([], []))
-        for m in _NOT_ACGT.finditer(s):
-            starts.append(m.start())
-            ends.append(m.end())
-        if starts:
-            order = np.argsort(starts)
-            st, en = np.asarray(starts)[order], np.maximum.accumulate(np.asarray(ends)[order])
-            blocked[i] = (np.maximum(st, 0), en)
+    lengths = np.array([len(s) for s in seqs], dtype=np.int64)
+    offset = np.concatenate([[0], np.cumsum(lengths)])
+    # The stretches each window must avoid, the seqlets and the runs of other
+    # letters, in one coordinate along all the sequences, sorted, with the
+    # running furthest end.
+    si = seqlets["sequence_i"].to_numpy().astype(np.int64)
+    starts = [offset[si] + np.maximum(seqlets["start"].to_numpy(), 0)]
+    ends = [offset[si] + seqlets["end"].to_numpy()]
+    letters = np.frombuffer("".join(seqs).upper().encode("latin-1", "replace"), dtype=np.uint8)
+    other = ~np.isin(letters, np.frombuffer(b"ACGT", dtype=np.uint8))
+    if other.any():
+        edges = np.diff(np.concatenate([[0], other.view(np.int8), [0]]))
+        run_start, run_end = np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)
+        # Runs crossing from one sequence into the next are split at the boundary,
+        # which only adds stretches.
+        starts.append(run_start)
+        ends.append(run_end)
+    st, en = np.concatenate(starts), np.concatenate(ends)
+    order = np.argsort(st, kind="stable")
+    st, en = st[order], np.maximum.accumulate(en[order]) if len(order) else en
     want = np.repeat(widths, ratio)
     out, todo = [None] * len(want), np.arange(len(want))
     for _ in range(200):
@@ -209,15 +215,11 @@ def _background(seqs: list[str], seqlets: pl.DataFrame, widths: np.ndarray, rng,
         room = lengths[seq] - want[todo]
         ok = room >= 0
         start = (rng.random(len(todo)) * np.maximum(room + 1, 1)).astype(np.int64)
-        free = np.zeros(len(todo), dtype=bool)
-        for k in np.flatnonzero(ok):
-            b = blocked.get(int(seq[k]))
-            if b is None:
-                free[k] = True
-                continue
-            # The first stretch ending after the window starts must begin at or after its end.
-            j = np.searchsorted(b[1], start[k], side="right")
-            free[k] = j == len(b[1]) or b[0][j] >= start[k] + want[todo[k]]
+        gs = offset[seq] + start
+        # The first stretch ending after the window starts must begin at or after its end.
+        j = np.searchsorted(en, gs, side="right")
+        free = ok & ((j == len(en)) | (st[np.minimum(j, max(len(st) - 1, 0))] >= gs + want[todo]) if len(st)
+                     else ok)
         for k in np.flatnonzero(free):
             out[todo[k]] = seqs[seq[k]][start[k]:start[k] + want[todo[k]]]
         todo = todo[~free]
