@@ -45,8 +45,8 @@ def test_logo_svg_sorts_and_flips():
     # unsorted one keeps the alphabet order with A on top.
     ppm = um.create_motif(np.array([[0.1, 0.25, 0.1, 0.55]]).T, alphabet="DNA", type="PPM")
     green, blue, yellow, red = "#109648", "#255C99", "#F7B32B", "#D62839"
-    assert _stack(um.logo_svg(ppm)) == [blue, red]
-    assert _stack(um.logo_svg(ppm, sort_positions=False)) == [red, blue]
+    assert _stack(um.logo_svg(ppm)) == [yellow, green, blue, red]
+    assert _stack(um.logo_svg(ppm, sort_positions=False)) == [red, yellow, blue, green]
     assert _stack(um.logo_svg(ppm, use_type="PPM")) == [red, yellow, blue, green]
     assert _stack(um.logo_svg(ppm, use_type="PPM", sort_positions=True))[-2:] == [blue, red]
     # Negative letters are drawn upside down unless flip_neg is off.

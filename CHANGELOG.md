@@ -4,6 +4,9 @@
 
 Changes in behaviour:
 
+- Logos drawn by `draw_logo()`, `logo_svg()` and the reports leave out
+  only letters under 1% of the logo's full height, as `view_motifs()`
+  does, rather than 3%, so fewer columns of weak letters show as gaps.
 - `plot_modisco()` shows three matches per pattern by default, stacked in
   one column, each with its name, ID and q-value but no longer its score.
 - `motif_finder()` and `gapped_motif_finder()` build their background, when
