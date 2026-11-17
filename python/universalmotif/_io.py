@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import gzip
 import os
+import re
 import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
@@ -325,7 +326,9 @@ def read_matrix(
     rownames
         Whether the values come with letter labels, which are skipped.
     comment
-        Lines starting with this string are ignored.
+        Lines starting with this string are ignored. A first line such as
+        ``# type: CWM`` gives the type when ``type`` is not given, and
+        makes lines starting with ``#`` comments.
 
     Examples
     --------
@@ -339,9 +342,16 @@ def read_matrix(
     >>> motifs[0].type, motifs[0].consensus
     ('PCM', 'KTATAWAWRN')
     """
-    return _core._read_matrix(
-        _read_text(file, skip), positions, alphabet, type, sep, headers, rownames, comment
-    )
+    text = _read_text(file, skip)
+    # A first line such as "# type: CWM", as the command line writes for CWMs, gives the type.
+    first = text.lstrip().split("\n", 1)[0]
+    marked = re.match(r"#\s*type:\s*(\w+)\s*$", first)
+    if marked:
+        if type is None:
+            type = marked.group(1)
+        if comment is None:
+            comment = "#"
+    return _core._read_matrix(text, positions, alphabet, type, sep, headers, rownames, comment)
 
 
 def write_meme(

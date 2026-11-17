@@ -1140,8 +1140,12 @@ def read_cwms(paths: list[str], trim_threshold: float | None = 0.3) -> list:
 
 
 def write_cwms(cwms: list, path: str) -> None:
-    """CWMs as plain matrices, the one format that keeps their values."""
+    """CWMs as plain matrices, the one format that keeps their values, with
+    a first line saying they are CWMs so that every command reads them so."""
     write_motifs(cwms, path, "matrix")
+    if path not in (None, "-"):
+        body = Path(path).read_text()
+        Path(path).write_text("# type: CWM\n" + body)
 
 
 def _database(a) -> list | None:
@@ -1534,8 +1538,9 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--each", metavar="FOLDER", help="write one logo per motif into this folder")
     p.add_argument("--ext", choices=("svg", "png", "pdf"), default="svg",
                    help="file type for --each (default: svg, which needs no extra packages)")
-    p.add_argument("--type", choices=("ICM", "PPM", "PWM", "PCM"), default="ICM",
-                   help="what the letter heights show (default: ICM)")
+    p.add_argument("--type", choices=("ICM", "PPM", "PWM", "PCM"),
+                   help="what the letter heights show (default: contributions for CWMs, and information "
+                        "content for other motifs)")
     p.add_argument("--relative-entropy", action="store_true",
                    help="information content relative to the background")
     p.add_argument("--no-rc", dest="rc", action="store_false",

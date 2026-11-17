@@ -77,6 +77,9 @@ Fixes:
   from a FASTA file, and with `--centre` rename regions to their middles.
 - `variants` reads tables with a `#chrom` header, and `proximity` reads a
   gzipped BED universe as ranges.
+- CWMs written by the command line start with a `# type: CWM` line,
+  which `read_matrix()` reads as their type, so that every command reads
+  them as CWMs; `logo` draws CWMs as contributions by default.
 
 ## 0.5.0 (2026-11-15)
 
