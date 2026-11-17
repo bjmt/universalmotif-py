@@ -121,13 +121,13 @@ def test_errors(model):
         um.contribution_motifs(model["scores"], model["seqs"], seqlets=pl.DataFrame({"start": [1], "end": [5]}))
 
 
-def test_decoys_set_the_seqlet_cut(model):
+def test_null_scores_set_the_seqlet_cut(model):
     scores = model["scores"]
     loud = np.random.default_rng(2).normal(0, 0.005, (300, 120))
     loud[:, 50:57] += 0.1
     quiet = np.random.default_rng(3).normal(0, 0.005, (300, 120))
-    assert um.call_seqlets(scores, decoys=loud, sign="positive").height < 20
-    assert um.call_seqlets(scores, decoys=quiet, sign="positive").height >= 240
+    assert um.call_seqlets(scores, null_scores=loud, sign="positive").height < 20
+    assert um.call_seqlets(scores, null_scores=quiet, sign="positive").height >= 240
 
 
 def test_report_and_names(model, tmp_path):

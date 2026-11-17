@@ -471,8 +471,8 @@ def _motif_finder(
 def _call_seqlets(
     scores: Any,
     lengths: list[int],
-    decoys: Any | None,
-    decoy_lengths: list[int] | None,
+    null_scores: Any | None,
+    null_lengths: list[int] | None,
     threshold: float,
     min_len: int,
     max_len: int,

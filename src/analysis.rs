@@ -19,7 +19,7 @@ use universalmotif::scan::{
     HitTable, MatchValue, NoOverlaps, OverlapPriority, ScanOptions, motif_matches, scan_encoded,
     scan_fasta, scan_table,
 };
-use universalmotif::seqlets::{SeqletOptions, SeqletSign, call_seqlets_with_null};
+use universalmotif::seqlets::{SeqletOptions, SeqletSign, call_seqlets};
 use universalmotif::similarity::{self, CwmCompareOptions, CwmMetric};
 
 use pyo3_arrow::PyTable;
@@ -917,14 +917,14 @@ fn score_rows<'a>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (scores, lengths, decoys, decoy_lengths, threshold, min_len, max_len, flank, fdr, sign, n_bins, seed, nthreads, null=None, null_lengths=None))]
+#[pyo3(signature = (scores, lengths, null_scores, null_lengths, threshold, min_len, max_len, flank, fdr, sign, n_bins, seed, nthreads))]
 #[allow(clippy::too_many_arguments)]
 fn _call_seqlets<'py>(
     py: Python<'py>,
     scores: PyReadonlyArray2<'py, f32>,
     lengths: Vec<usize>,
-    decoys: Option<PyReadonlyArray2<'py, f32>>,
-    decoy_lengths: Option<Vec<usize>>,
+    null_scores: Option<PyReadonlyArray2<'py, f32>>,
+    null_lengths: Option<Vec<usize>>,
     threshold: f64,
     min_len: usize,
     max_len: usize,
@@ -934,8 +934,6 @@ fn _call_seqlets<'py>(
     n_bins: usize,
     seed: u64,
     nthreads: usize,
-    null: Option<PyReadonlyArray2<'py, f32>>,
-    null_lengths: Option<Vec<usize>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let sign = match sign {
         "both" => SeqletSign::Both,
@@ -948,11 +946,7 @@ fn _call_seqlets<'py>(
         }
     };
     let x = score_rows(&scores, &lengths)?;
-    let d = match (&decoys, &decoy_lengths) {
-        (Some(a), Some(n)) => Some(score_rows(a, n)?),
-        _ => None,
-    };
-    let nl = match (&null, &null_lengths) {
+    let nl = match (&null_scores, &null_lengths) {
         (Some(a), Some(n)) => Some(score_rows(a, n)?),
         _ => None,
     };
@@ -968,7 +962,7 @@ fn _call_seqlets<'py>(
         nthreads,
     };
     let found = py
-        .detach(|| call_seqlets_with_null(&x, nl.as_deref(), d.as_deref(), &opts))
+        .detach(|| call_seqlets(&x, nl.as_deref(), &opts))
         .map_err(err)?;
     let d = PyDict::new(py);
     d.set_item(

@@ -312,7 +312,7 @@ def contribution_motifs(
     hypothetical: Any = None,
     idealized: Any = None,
     seqlets: pl.DataFrame | None = None,
-    decoys: Any = None,
+    null_scores: Any = None,
     sign: str = "positive",
     min_width: int = 6,
     max_width: int = 15,
@@ -467,8 +467,8 @@ def contribution_motifs(
         and ``end`` columns and a ``sequence_i`` column, or a ``sequence``
         column naming the sequences. To search both signs, add a ``sign``
         column of ``+`` or ``-``.
-    decoys
-        Decoy scores for calling seqlets, such as the model's contributions
+    null_scores
+        Null scores for calling seqlets, such as the model's contributions
         for shuffled sequences; see ``call_seqlets()``.
     sign
         ``"positive"``, ``"negative"`` or ``"both"``.
@@ -497,7 +497,7 @@ def contribution_motifs(
         the first's pattern, or None to give every motif a pattern of its
         own.
     seed
-        Seed for the background, the reruns and the decoy shuffles.
+        Seed for the background, the reruns and the shuffles of the null.
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
@@ -592,7 +592,7 @@ def contribution_motifs(
     lengths = np.array([len(s) for s in seqs])
 
     if seqlets is None:
-        seqlets = call_seqlets(observed, seqs, decoys=decoys, sign=sign, seed=seed, nthreads=nthreads)
+        seqlets = call_seqlets(observed, seqs, null_scores=null_scores, sign=sign, seed=seed, nthreads=nthreads)
     else:
         seqlets = _given_seqlets(seqlets, scores.names, len(seqs))
     signs = {"positive": ["+"], "negative": ["-"], "both": ["+", "-"]}[sign]

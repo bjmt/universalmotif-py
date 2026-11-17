@@ -75,10 +75,9 @@ New:
   cosine, averages each cluster weighted by seqlets, records the sources
   of each, names them by a database and flags those that may be noise,
   and `plot_modisco()` draws the clusters as a report.
-- `call_seqlets()` takes a `null` to build its null from, such as a first
-  batch of scores or a model's decoys, so that batches called against it
-  get the seqlets of one call, and `seqlet_fdr()` applies one false
-  discovery rate to seqlets gathered from batches. `contribution_motifs()`
+- Batches of sequences called by `call_seqlets()` with the same
+  `null_scores` get the seqlets of one call, and `seqlet_fdr()` applies
+  one false discovery rate to seqlets gathered from batches. `contribution_motifs()`
   takes sequences already idealized as `idealized`, in place of
   hypothetical scores. Together these let scores be used as a model
   produces them, keeping only those near seqlets.
@@ -98,9 +97,10 @@ New:
   reference pages and docstrings is rewritten in shorter sentences.
 - `call_seqlets()` calls seqlets in a sequence model's contribution scores:
   stretches whose total, and the total of every stretch inside them, is
-  unlikely under a null from the scores themselves, kept down to a false
-  discovery rate estimated from decoys: the model's scores for shuffled
-  sequences when given, and otherwise the scores shuffled. On the scores
+  unlikely under a null, kept down to a false discovery rate estimated by
+  calling seqlets in the null scores (`null_scores`): the model's scores
+  for shuffled sequences when given, and otherwise the scores shuffled.
+  On the scores
   of a chromBPNet model, `motif_finder()` on its seqlets, then
   `refine_motifs()`, gives motifs that reach more held-out seqlets than
   TF-MoDISco's patterns, in about 8 seconds where TF-MoDISco takes 40

@@ -34,8 +34,8 @@ def _observed(contributions: Any, sequences: Any) -> tuple[np.ndarray, list[int]
 def call_seqlets(
     contributions: Any,
     sequences: Any = None,
-    decoys: Any = None,
-    decoy_sequences: Any = None,
+    null_scores: Any = None,
+    null_sequences: Any = None,
     threshold: float = 0.01,
     min_len: int = 4,
     max_len: int = 25,
@@ -46,40 +46,37 @@ def call_seqlets(
     seed: int | None = None,
     nthreads: int | None = None,
     progress: bool | None = None,
-    null: Any = None,
-    null_sequences: Any = None,
 ) -> pl.DataFrame:
     """Call seqlets, the short stretches of high contribution, in a sequence
     model's contribution scores.
 
     A stretch of positions is a seqlet when its total contribution is
-    unlikely under a null built from all the scores given. The total of
-    every stretch inside it of at least ``min_len`` positions must be
-    unlikely too, so that a seqlet holds no run of unremarkable positions.
-    Seqlets from ``min_len`` to ``max_len`` positions long are called from
-    the longest down, in order of P-value, without overlapping one another.
-    They are then widened by ``flank`` positions on either side. Positive
-    and negative seqlets, which raise and lower the prediction, are each
-    called from their own null.
+    unlikely under a null. The total of every stretch inside it of at
+    least ``min_len`` positions must be unlikely too, so that a seqlet
+    holds no run of unremarkable positions. Seqlets from ``min_len`` to
+    ``max_len`` positions long are called from the longest down, in order
+    of P-value, without overlapping one another. They are then widened by
+    ``flank`` positions on either side. Positive and negative seqlets,
+    which raise and lower the prediction, are each called from their own
+    null.
 
-    The null for each length comes from the distribution of the scores
-    themselves, so a set share of stretches passes even in noise. With
-    ``fdr``, the same calls are also made on decoy scores. Seqlets are then
-    kept down to the total at which the decoys' seqlets make up at most
-    ``fdr`` of those passing, counting the decoys as if they had as many
-    positions as the scores.
+    The null comes from null scores, the scores of sequences with nothing
+    to find. The null for each length comes from their distribution, so a
+    set share of stretches passes even in noise. With ``fdr``, the same
+    calls are also made on the null scores. Seqlets are then kept down to
+    the total at which the seqlets of the null scores make up at most
+    ``fdr`` of those passing, counting the null scores as if they had as
+    many positions as the scores.
 
-    The best decoys are the model's own contributions for sequences with
-    nothing to find, such as shuffled versions of the sequences from
+    The best null scores are the model's own contributions for sequences
+    with nothing to find, such as shuffled versions of the sequences from
     [`shuffled_references()`][universalmotif.shuffled_references]. These
-    show how the model treats sequence without sites. Without decoys, each
+    show how the model treats sequence without sites. Without them, each
     sequence's scores are shuffled to stand in for them. Shuffled scores
     keep the scores' values but not the model's view of empty sequence, so
     they let through more seqlets of weak contribution.
 
-    The null comes from the scores given, unless ``null`` gives others to
-    build it from. Batches of sequences called against one ``null``, such
-    as the scores of a first batch or a model's decoy scores, all get the
+    Batches of sequences called with the same ``null_scores`` all get the
     same P-values, so together they give the seqlets of one call. Calling
     each batch with ``fdr=None`` keeps every candidate, and
     [`seqlet_fdr()`][universalmotif.seqlet_fdr] then applies one false
@@ -106,12 +103,9 @@ def call_seqlets(
         The sequences the scores are for, as text or one-hot encoded. They
         pick the letters present from scores of every letter, and give each
         seqlet's letters.
-    decoys, decoy_sequences
-        Decoy scores, and their sequences when needed, in the same forms
-        as ``contributions`` and ``sequences``.
-    null, null_sequences
-        Scores to build the null from in place of ``contributions``, and
-        their sequences when needed, in the same forms.
+    null_scores, null_sequences
+        Null scores, and their sequences when needed, in the same forms as
+        ``contributions`` and ``sequences``.
     threshold
         The P-value every stretch inside a seqlet must reach.
     min_len, max_len
@@ -119,8 +113,8 @@ def call_seqlets(
     flank
         Positions added on either side of each seqlet, within its sequence.
     fdr
-        The largest share of decoys among the seqlets kept, or ``None`` to
-        keep every seqlet.
+        The largest share of the null scores' seqlets among the seqlets
+        kept, or ``None`` to keep every seqlet.
     sign
         ``"both"``, ``"positive"`` or ``"negative"``.
     n_bins
@@ -192,10 +186,9 @@ def call_seqlets(
     if flank < 0:
         raise ValueError("flank must be zero or positive")
     values, lengths, names, codes = _observed(contributions, sequences)
-    decoy_values, decoy_lengths = (None, None) if decoys is None else _observed(decoys, decoy_sequences)[:2]
-    null_values, null_lengths = (None, None) if null is None else _observed(null, null_sequences)[:2]
-    out = _core._call_seqlets(values, lengths, decoy_values, decoy_lengths, threshold, min_len, max_len, flank, fdr, sign, n_bins, _seed(seed),
-                              _nthreads(nthreads), null_values, null_lengths)
+    null_values, null_lengths = (None, None) if null_scores is None else _observed(null_scores, null_sequences)[:2]
+    out = _core._call_seqlets(values, lengths, null_values, null_lengths, threshold, min_len, max_len, flank, fdr, sign,
+                              n_bins, _seed(seed), _nthreads(nthreads))
     seq_i = np.asarray(out["sequence_i"], dtype=np.int64)
     df = pl.DataFrame({
         "sequence": pl.Series([names[i] for i in seq_i], dtype=pl.String),
@@ -218,31 +211,31 @@ def call_seqlets(
 
 def seqlet_fdr(
     seqlets: pl.DataFrame,
-    decoys: pl.DataFrame,
+    null_seqlets: pl.DataFrame,
     fdr: float = 0.2,
     positions: int | None = None,
-    decoy_positions: int | None = None,
+    null_positions: int | None = None,
 ) -> pl.DataFrame:
-    """Keep seqlets down to a false discovery rate set by decoy seqlets.
+    """Keep seqlets down to a false discovery rate set by the seqlets of
+    null scores.
 
     Seqlets called in batches by
     [`call_seqlets()`][universalmotif.call_seqlets] with ``fdr=None`` and
-    one ``null``, and the seqlets of decoy scores called the same way, get
-    the cut ``call_seqlets()`` gives them in one call. For each sign,
-    seqlets are kept down to the lowest total at which decoy seqlets of at
-    least that total make up at most ``fdr`` of the seqlets. The decoys
-    are counted as if they had as many positions as the scores.
-    ``positions`` and ``decoy_positions`` give those numbers of positions,
-    and by default they are taken to be equal.
+    the same ``null_scores``, and the seqlets of those null scores called
+    the same way, get the cut ``call_seqlets()`` gives them in one call.
+    For each sign, seqlets are kept down to the lowest total at which null
+    seqlets of at least that total make up at most ``fdr`` of the seqlets.
+    The null scores are counted as if they had as many positions as the
+    scores. ``positions`` and ``null_positions`` give those numbers of
+    positions, and by default they are taken to be equal.
 
     Returns the seqlets kept, in their order.
 
     Examples
     --------
     Scores with a block of high contribution in every other sequence,
-    called in two batches against the null of the first. The decoys are
-    each sequence's scores shuffled, as ``call_seqlets()`` makes them when
-    given none:
+    called in two batches. The null scores are the first batch's scores
+    shuffled, which have the same values and so the same null:
 
     >>> import numpy as np
     >>> import polars as pl
@@ -250,40 +243,40 @@ def seqlet_fdr(
     >>> rng = np.random.default_rng(1)
     >>> scores = rng.normal(0, 0.01, (200, 100))
     >>> scores[::2, 40:48] += 0.2
-    >>> decoys = rng.permuted(scores, axis=1)
-    >>> first = scores[:100]
-    >>> found, fake = [], []
+    >>> null = rng.permuted(scores[:100], axis=1)
+    >>> found = []
     >>> for lo in (0, 100):
-    ...     batch = um.call_seqlets(scores[lo:lo + 100], null=first, fdr=None, flank=0)
+    ...     batch = um.call_seqlets(scores[lo:lo + 100], null_scores=null, fdr=None, flank=0)
     ...     found.append(batch.with_columns(pl.col("sequence_i") + lo))
-    ...     fake.append(um.call_seqlets(decoys[lo:lo + 100], null=first, fdr=None, flank=0))
-    >>> kept = um.seqlet_fdr(pl.concat(found), pl.concat(fake))
+    >>> null_seqlets = um.call_seqlets(null, null_scores=null, fdr=None, flank=0)
+    >>> kept = um.seqlet_fdr(pl.concat(found), null_seqlets, positions=scores.size, null_positions=null.size)
 
-    These are the seqlets of a single call with the same null and decoys:
+    These are the seqlets of a single call with the same null scores:
 
-    >>> whole = um.call_seqlets(scores, null=first, decoys=decoys, flank=0)
+    >>> whole = um.call_seqlets(scores, null_scores=null, flank=0)
     >>> kept.height, kept.select("sequence_i", "start", "end").equals(whole.select("sequence_i", "start", "end"))
     (101, True)
     """
     if not 0 < fdr <= 1:
         raise ValueError("fdr must be above 0 and at most 1")
-    for name, df in (("seqlets", seqlets), ("decoys", decoys)):
+    for name, df in (("seqlets", seqlets), ("null_seqlets", null_seqlets)):
         if not isinstance(df, pl.DataFrame) or "score" not in df.columns:
             raise ValueError(f"{name} must be a DataFrame from call_seqlets(), with a 'score' column")
-    if (positions is None) != (decoy_positions is None):
-        raise ValueError("give both positions and decoy_positions, or neither")
-    scale = 1.0 if positions is None else max(positions, 1) / max(decoy_positions, 1)
+    if (positions is None) != (null_positions is None):
+        raise ValueError("give both positions and null_positions, or neither")
+    scale = 1.0 if positions is None else max(positions, 1) / max(null_positions, 1)
     sign = "sign" in seqlets.columns
     keep = np.zeros(seqlets.height, dtype=bool)
     for sg in (seqlets["sign"].unique().to_list() if sign else [None]):
         mine = (seqlets["sign"] == sg).to_numpy() if sign else np.ones(seqlets.height, dtype=bool)
-        theirs = decoys.filter(pl.col("sign") == sg) if sg is not None and "sign" in decoys.columns else decoys
+        theirs = (null_seqlets.filter(pl.col("sign") == sg) if sg is not None and "sign" in null_seqlets.columns
+                  else null_seqlets)
         real = np.abs(seqlets["score"].to_numpy()[mine])
         fake = np.sort(np.abs(theirs["score"].to_numpy()))
-        # The lowest total at which the scaled decoys at or above it are at most fdr of the seqlets.
+        # The lowest total at which the scaled null seqlets at or above it are at most fdr of the seqlets.
         v = np.sort(real)[::-1]
-        n_fake = len(fake) - np.searchsorted(fake, v, side="left")
-        ok = np.flatnonzero(n_fake * scale / np.arange(1, len(v) + 1) <= fdr)
+        n_null = len(fake) - np.searchsorted(fake, v, side="left")
+        ok = np.flatnonzero(n_null * scale / np.arange(1, len(v) + 1) <= fdr)
         cut = v[ok[-1]] if ok.size else np.inf
         keep[np.flatnonzero(mine)[real >= cut]] = True
     return seqlets.filter(pl.Series(keep))
