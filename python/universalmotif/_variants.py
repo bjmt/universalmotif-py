@@ -739,10 +739,12 @@ def _sites_from_hits(hits: pl.DataFrame, names: list[str], widths: np.ndarray, c
         if col not in hits.columns:
             raise ValueError(f"hits must have a {col!r} column")
     if on_genome:
-        col = next((c for c in ("sequence", "chrom", "chr", "seqnames", "chromosome") if c in hits.columns),
+        # A chromosome column comes first: hits moved to the genome by genomic_hits() keep the names of
+        # the ranges they were found in as their 'sequence'.
+        col = next((c for c in ("chrom", "chr", "seqnames", "chromosome", "sequence") if c in hits.columns),
                    None)
         if col is None:
-            raise ValueError("hits on a genome need the chromosome in a 'sequence' or 'chrom' column")
+            raise ValueError("hits on a genome need the chromosome in a 'chrom' or 'sequence' column")
         hit_chrom = hits[col].cast(pl.String).to_list()
     else:
         hit_chrom = [""] * hits.height
@@ -754,6 +756,9 @@ def _sites_from_hits(hits: pl.DataFrame, names: list[str], widths: np.ndarray, c
     codes = {c: i for i, c in enumerate(sorted(set(chroms)))}
     hc = np.array([codes.get(c, -1) for c in hit_chrom], dtype=np.int64)
     known = (m >= 0) & (hc >= 0)
+    if on_genome and hits.height and not (hc >= 0).any():
+        warnings.warn(f"no hit is on a chromosome of the variants, judged by the hits' {col!r} column",
+                      stacklevel=3)
     m, s, hc, strand = m[known], s[known], hc[known], strand[known]
     # Variants sorted by chromosome and position, so that those a hit can
     # overlap are a run found by binary search.

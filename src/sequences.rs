@@ -505,7 +505,7 @@ fn sites_from(sites: Option<Vec<(usize, usize, usize)>>) -> Option<Vec<Site>> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, sequences, sites, similarity, pvalue, min_gain, min_overlap, max_similarity, rc, nthreads))]
+#[pyo3(signature = (motifs, sequences, sites, similarity, pvalue, min_gain, min_overlap, max_similarity, rc, nthreads, reachable=false))]
 #[allow(clippy::too_many_arguments)]
 fn _select_motifs<'py>(
     py: Python<'py>,
@@ -519,6 +519,7 @@ fn _select_motifs<'py>(
     max_similarity: Option<f64>,
     rc: bool,
     nthreads: usize,
+    reachable: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let motifs: Vec<Motif> = motifs.iter().map(|m| m.inner.clone()).collect();
     let sites = sites_from(sites);
@@ -529,6 +530,7 @@ fn _select_motifs<'py>(
         max_similarity,
         rc,
         nthreads,
+        reachable,
     };
     let sel = py
         .detach(|| {
@@ -553,7 +555,7 @@ fn _select_motifs<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, sequences, sites, pvalue, flank, iterations, competitive, min_ic, max_width, min_sites, min_overlap, rc, nthreads))]
+#[pyo3(signature = (motifs, sequences, sites, pvalue, flank, iterations, competitive, min_ic, max_width, min_sites, min_overlap, rc, nthreads, reachable=false))]
 #[allow(clippy::too_many_arguments)]
 fn _refine_motifs(
     py: Python<'_>,
@@ -570,6 +572,7 @@ fn _refine_motifs(
     min_overlap: usize,
     rc: bool,
     nthreads: usize,
+    reachable: bool,
 ) -> PyResult<(Vec<PyMotif>, Vec<usize>)> {
     let motifs: Vec<Motif> = motifs.iter().map(|m| m.inner.clone()).collect();
     let sites = sites_from(sites);
@@ -584,6 +587,7 @@ fn _refine_motifs(
         min_overlap,
         rc,
         nthreads,
+        reachable,
     };
     let out = py
         .detach(|| refine_motifs(&motifs, &sequences, sites.as_deref(), &opts))

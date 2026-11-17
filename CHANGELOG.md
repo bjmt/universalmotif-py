@@ -43,6 +43,8 @@ New:
 - `read_vcf()` reads VCF files, and `variant_batches()` makes one-hot
   batches of both alleles for a model.
 - `drop_overlaps()` keeps only ranges that do not overlap one kept before.
+- `select_motifs()` and `refine_motifs()` take `reachable`, which lets
+  motifs too short to reach the cutoff hit at their best score.
 - `progress` shows a progress bar for long calls such as `scan_sequences()`
   and `motif_finder()`, with `set_progress()` to set the default.
 - `view_motifs()` marks the gaps of gapped motifs.
@@ -57,6 +59,20 @@ Fixes:
 
 - Reading bgzipped files, such as large BED and VCF files, takes seconds
   rather than minutes.
+- `contribution_motifs()` keeps motifs too short to reach its internal
+  cutoff of P < 1e-4, such as six-letter sites, which it dropped.
+- `contribution_motifs()` calls seqlets within each sequence's own length,
+  keeps the sequences' names in its seqlets, pairs scores and sequences
+  given by name, and checks given seqlets.
+- `combine_patterns()` no longer misaligns the PPMs of composite motifs.
+- `variant_motif_effects()` uses hits moved to the genome by
+  `genomic_hits()`, which it dropped.
+- `plot_comparison()` places gapped logos as it draws them.
+- Commands reading contribution scores read bigWig ranges on the `-`
+  strand the right way round, keep repeated regions apart, name sequences
+  from a FASTA file, and with `--centre` rename regions to their middles.
+- `variants` reads tables with a `#chrom` header, and `proximity` reads a
+  gzipped BED universe as ranges.
 
 ## 0.5.0 (2026-11-15)
 

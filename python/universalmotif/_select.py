@@ -79,6 +79,7 @@ def select_motifs(
     compare_as: Iterable[Motif] | None = None,
     rc: bool | None = None,
     nthreads: int | None = None,
+    reachable: bool = False,
     progress: bool | None = None,
 ) -> pl.DataFrame:
     """Rank motifs by how many new sequences or sites each reaches, and keep
@@ -137,6 +138,9 @@ def select_motifs(
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    reachable
+        Let motifs too short or too degenerate to reach ``pvalue`` hit at
+        the best score they can give, rather than not at all.
     progress
         Show a progress bar on stderr once the call has run for a second;
         by default the package setting from
@@ -196,7 +200,7 @@ def select_motifs(
     elif compare_as is not None:
         raise ValueError("compare_as needs max_similarity")
     out = _core._select_motifs(ms, seqs, _sites_of(sites, names), similarity, pvalue, min_gain, min_overlap,
-                               max_similarity, _rc(rc, seqs), _nthreads(nthreads))
+                               max_similarity, _rc(rc, seqs), _nthreads(nthreads), reachable)
     labels = [m.name for m in ms]
     similar = [labels[k] if k is not None else None for k in out["similar_to"]]
     df = pl.DataFrame({
@@ -227,6 +231,7 @@ def refine_motifs(
     min_overlap: int = 1,
     rc: bool | None = None,
     nthreads: int | None = None,
+    reachable: bool = False,
     progress: bool | None = None,
 ) -> list[Motif]:
     """Rebuild motifs from their hits, so that their edges and letters follow
@@ -289,6 +294,9 @@ def refine_motifs(
     nthreads
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    reachable
+        Let motifs too short or too degenerate to reach ``pvalue`` hit at
+        the best score they can give, rather than not at all.
     progress
         Show a progress bar on stderr once the call has run for a second;
         by default the package setting from
@@ -323,7 +331,7 @@ def refine_motifs(
             raise ValueError(f"{name} must be zero or positive")
     refined, _ = _core._refine_motifs(ms, seqs, _sites_of(sites, names), pvalue, flank, iterations, competitive,
                                       min_ic, max_width, min_sites, min_overlap, _rc(rc, seqs),
-                                      _nthreads(nthreads))
+                                      _nthreads(nthreads), reachable)
     return refined
 
 

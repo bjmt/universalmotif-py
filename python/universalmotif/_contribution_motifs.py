@@ -233,7 +233,7 @@ def _site_hits(motifs: list[Motif], seqs: list[str], sites: pl.DataFrame, nthrea
     """The motifs' hits that reach the sites, or with ``within`` that lie
     within them, with the index of the site in ``site``. Only windows around
     the sites wide enough to hold such hits are scanned."""
-    from ._analysis import scan_sequences
+    from ._analysis import _scan_strings
 
     pad = max(m.width + (sum(m.maxgap) if m.isgapped else 0) for m in motifs)
     si = sites["sequence_i"].to_numpy()
@@ -241,10 +241,8 @@ def _site_hits(motifs: list[Motif], seqs: list[str], sites: pl.DataFrame, nthrea
     lo = np.maximum(sites["start"].to_numpy() - pad, 0)
     hi = np.minimum(sites["end"].to_numpy() + pad, lengths)
     windows = [seqs[i][a:b] for i, a, b in zip(si, lo, hi)]
-    with warnings.catch_warnings():
-        # Motifs too short to reach the cutoff simply have no hits.
-        warnings.simplefilter("ignore")
-        hits = scan_sequences(motifs, windows, nthreads=nthreads)
+    # Motifs too short to reach the cutoff, such as one of six letters, hit at their best score.
+    hits = _scan_strings(motifs, windows, 1e-4, nthreads, reachable=True)
     w = hits["sequence_i"].to_numpy()
     hits = hits.drop("sequence", "sequence_i", strict=False).with_columns(
         pl.Series("site", w, dtype=pl.UInt32), pl.Series("sequence_i", si[w], dtype=pl.Int64),
@@ -353,6 +351,7 @@ def contribution_motifs(
     idealized: Any = None,
     seqlets: pl.DataFrame | None = None,
     null_scores: Any = None,
+    null_sequences: Any = None,
     sign: str = "positive",
     min_width: int = 6,
     max_width: int = 15,
@@ -385,7 +384,7 @@ def contribution_motifs(
     2. [`motif_finder()`][universalmotif.motif_finder] searches the seqlets'
        letters, widened to at least 20. The background is twice as many
        windows of the same widths, taken from the sequences away from any
-       seqlet. With ``hypothetical`` scores, it also searches the seqlets
+       seqlet of the sign searched. With ``hypothetical`` scores, it also searches the seqlets
        rewritten in the letters the model prefers by
        [`idealize_sequences()`][universalmotif.idealize_sequences], or
        rewritten beforehand and given as ``idealized``. This
@@ -506,13 +505,15 @@ def contribution_motifs(
         and ``end`` columns and a ``sequence_i`` column, or a ``sequence``
         column naming the sequences. To search both signs, add a ``sign``
         column of ``+`` or ``-``.
-    null_scores
+    null_scores, null_sequences
         Null scores for calling seqlets, such as the model's contributions
-        for shuffled sequences; see ``call_seqlets()``.
+        for shuffled sequences, and their sequences when the scores are
+        hypothetical; see ``call_seqlets()``.
     sign
         ``"positive"``, ``"negative"`` or ``"both"``.
     min_width, max_width, nmotifs
-        As for ``motif_finder()``.
+        As for ``motif_finder()``. Refinement can widen motifs beyond
+        ``max_width``, up to 30 letters.
     refine
         Rebuild the motifs from their hits.
     min_gain, max_similarity
@@ -632,9 +633,19 @@ def contribution_motifs(
     lengths = np.array([len(s) for s in seqs])
 
     if seqlets is None:
-        seqlets = call_seqlets(observed, seqs, null_scores=null_scores, sign=sign, seed=seed, nthreads=nthreads)
+        # Scores of different lengths come padded; each is called at its own length.
+        given = ([observed[i, :n] for i, n in enumerate(lengths)] if (lengths != observed.shape[1]).any()
+                 else observed)
+        seqlets = call_seqlets(given, seqs, null_scores=null_scores, null_sequences=null_sequences, sign=sign,
+                               seed=seed, nthreads=nthreads)
+        if scores.names is not None:
+            seqlets = seqlets.with_columns(pl.Series("sequence", np.asarray(scores.names, dtype=object)[
+                seqlets["sequence_i"].to_numpy()], dtype=pl.String))
     else:
-        seqlets = _given_seqlets(seqlets, scores.names, len(seqs))
+        seqlets = _given_seqlets(seqlets, scores.names, lengths)
+        if "sign" not in seqlets.columns and sign == "both":
+            raise ValueError("seqlets without a 'sign' column can be searched for one sign only; give "
+                             "sign='positive' or 'negative', or add a sign column of '+' and '-'")
     signs = {"positive": ["+"], "negative": ["-"], "both": ["+", "-"]}[sign]
     ideal = {} if idealized is None else _given_idealized(idealized, seqs, sign)
     rows = []
@@ -643,9 +654,13 @@ def contribution_motifs(
         sub = seqlets.filter(pl.col("sign") == sg) if "sign" in seqlets.columns else seqlets
         sub_ids = (seqlets.with_row_index("_id").filter(pl.col("sign") == sg)["_id"].to_numpy()
                    if "sign" in seqlets.columns else np.arange(seqlets.height))
-        if sub.height < 20:
-            continue
         label = "pos" if sg == "+" else "neg"
+        if sub.height < 20:
+            # A sign searched alongside the other may well have no seqlets at all.
+            if sub.height or sign != "both":
+                kind = "positive" if sg == "+" else "negative"
+                warnings.warn(f"only {sub.height} {kind} seqlets, too few to search", stacklevel=2)
+            continue
         sources = {"seqlets": seqs}
         key = "positive" if sg == "+" else "negative"
         if hypothetical is not None and key not in ideal:
@@ -726,7 +741,8 @@ def _search(part, sub, sources, lengths, label, prefix, min_width, max_width, nm
     for source, letters in sources.items():
         targets = [letters[i][a:b] for i, a, b in zip(si, s, e)]
         back = _background(letters, sub, e - s, np.random.default_rng(rng.integers(2**63)))
-        res = motif_finder(targets, back, min_width=min_width, max_width=max_width, nmotifs=nmotifs, rc=True,
+        # Sequences with no room beside their seqlets, such as short oligos, fall back to shuffles.
+        res = motif_finder(targets, back or None, min_width=min_width, max_width=max_width, nmotifs=nmotifs, rc=True,
                            seed=int(rng.integers(2**63)), nthreads=nthreads, stability=stability, progress=False)
         if stability:
             res = res.filter(pl.col("stability") >= min_stability)
@@ -776,31 +792,92 @@ def _windows(seqs: list[str], sites: pl.DataFrame, motifs: list[Motif]) -> tuple
 
 def _choose(found, seqs, sites, observed, sg, refine, min_gain, max_similarity, nthreads):
     """The motifs found, refined, that select_motifs() keeps, as rows of the
-    table, and the hits of all of them in the seqlets."""
+    table, and the hits of all of them in the seqlets.
+
+    Motifs too short to reach the P-value cutoff of the sequence matches,
+    such as one of six letters, are refined and chosen apart. Refined with
+    the others, their exact matches would compete for the same sites, and
+    chosen with them, short words common in GC-rich regions would win the
+    greedy order over longer motifs. They instead hit at their best score,
+    and come after the other motifs, each kept when it reaches at least
+    ``min_gain`` of the seqlets not reached yet and, with ``max_similarity``,
+    when its CWM differs from those kept."""
     ms = [f[0] for f in found]
     if not ms:
         return [], None
-    wseqs, wsites = _windows(seqs, sites, ms)
+    short = {m.name for m in ms if _unreachable(m)}
     if refine:
-        ms = refine_motifs(ms, wseqs, sites=wsites, min_overlap=_MIN_OVERLAP, nthreads=nthreads, progress=False)
+        refined = []
+        for group, reachable in (([m for m in ms if m.name not in short], False),
+                                 ([m for m in ms if m.name in short], True)):
+            if group:
+                wseqs, wsites = _windows(seqs, sites, group)
+                refined += refine_motifs(group, wseqs, sites=wsites, min_overlap=_MIN_OVERLAP, nthreads=nthreads,
+                                         reachable=reachable, progress=False)
+        place = {m.name: i for i, m in enumerate(ms)}
+        ms = sorted(refined, key=lambda m: place[m.name])
     hits = _site_hits(ms, seqs, sites, nthreads)
     cwms = _cwms(hits, observed)
-    have = [m for m in ms if m.name in cwms]
-    if not have:
-        return [], hits
+    have = [m for m in ms if m.name in cwms and m.name not in short]
     meta = {f[0].name: f for f in found}
-    wseqs, wsites = _windows(seqs, sites, have)
-    sel = select_motifs(have, wseqs, sites=wsites, min_gain=min_gain, min_overlap=_MIN_OVERLAP,
-                        max_similarity=max_similarity,
-                        compare_as=[cwms[m.name] for m in have] if max_similarity is not None else None,
-                        nthreads=nthreads, progress=False)
     kept = []
-    for r in sel.filter("kept").iter_rows(named=True):
-        m = r["object"]
-        kept.append({"name": m.name, "sign": sg, "source": meta[m.name][1], "consensus": m.consensus or "",
-                     "width": m.width, "seqlets": int(r["targets"]), "gain": r["gain"],
-                     "cumulative": r["cumulative"], "stability": meta[m.name][2], "motif": m, "cwm": cwms[m.name]})
+    if have:
+        wseqs, wsites = _windows(seqs, sites, have)
+        sel = select_motifs(have, wseqs, sites=wsites, min_gain=min_gain, min_overlap=_MIN_OVERLAP,
+                            max_similarity=max_similarity,
+                            compare_as=[cwms[m.name] for m in have] if max_similarity is not None else None,
+                            nthreads=nthreads, progress=False)
+        for r in sel.filter("kept").iter_rows(named=True):
+            m = r["object"]
+            kept.append({"name": m.name, "sign": sg, "source": meta[m.name][1], "consensus": m.consensus or "",
+                         "width": m.width, "seqlets": int(r["targets"]), "gain": r["gain"],
+                         "cumulative": r["cumulative"], "stability": meta[m.name][2], "motif": m,
+                         "cwm": cwms[m.name]})
+    shorts = [m for m in ms if m.name in short and m.name in cwms]
+    if shorts:
+        kept += _choose_short(shorts, hits, cwms, kept, meta, sites.height, sg, min_gain, max_similarity, nthreads)
     return kept, hits
+
+
+def _unreachable(m: Motif, pvalue: float = 1e-4) -> bool:
+    """Whether even the best site of an ungapped motif has a P-value above
+    the cutoff."""
+    from ._analysis import motif_pvalue
+    from ._utils import motif_score
+
+    if m.isgapped:
+        return False
+    best = float(np.ravel(motif_pvalue(m, score=float(motif_score(m, 1.0))))[0])
+    return best > pvalue
+
+
+def _choose_short(shorts, hits, cwms, kept, meta, n, sg, min_gain, max_similarity, nthreads) -> list[dict]:
+    """The short motifs that add enough of the seqlets the motifs kept leave
+    unreached, best first, as rows of the table."""
+    from ._compare import compare_motifs
+
+    reach = _reach(hits)
+    reached = set().union(*(reach.get(r["name"], set()) for r in kept)) if kept else set()
+    kept_cwms = [r["cwm"] for r in kept]
+    out = []
+    left = list(shorts)
+    while left:
+        m = max(left, key=lambda q: len(reach.get(q.name, set()) - reached))
+        left.remove(m)
+        new = reach.get(m.name, set()) - reached
+        if len(new) < min_gain * n:
+            break
+        if max_similarity is not None and kept_cwms:
+            sim = np.asarray(compare_motifs([*kept_cwms, cwms[m.name]], nthreads=nthreads), dtype=float)
+            if sim[-1, :-1].max() >= max_similarity:
+                continue
+        reached |= new
+        out.append({"name": m.name, "sign": sg, "source": meta[m.name][1], "consensus": m.consensus or "",
+                    "width": m.width, "seqlets": len(reach[m.name]), "gain": len(new) / n,
+                    "cumulative": len(reached) / n, "stability": meta[m.name][2], "motif": m,
+                    "cwm": cwms[m.name]})
+        kept_cwms.append(cwms[m.name])
+    return out
 
 
 # Sequences matched at a time in the final scan, which holds their scores
@@ -815,8 +892,10 @@ def _scan(table: pl.DataFrame, observed: np.ndarray, seqs: list[str], names: lis
     cwms = ok["cwm"].to_list()
     thresholds = ok.select(motif="name", min_similarity="min_similarity", min_importance="min_importance")
     if not cwms:
-        return pl.DataFrame(schema={"motif": pl.String, "sequence": pl.String, "sequence_i": pl.Int64,
-                                    "start": pl.Int64, "end": pl.Int64, "strand": pl.String})
+        return pl.DataFrame(schema={"motif": pl.String, "motif_i": pl.UInt32, "sequence": pl.String,
+                                    "sequence_i": pl.Int64, "start": pl.Int64, "end": pl.Int64,
+                                    "strand": pl.String, "score": pl.Float64, "similarity": pl.Float64,
+                                    "importance": pl.Float64, "match": pl.String})
     parts = []
     for lo in range(0, len(seqs), _SCAN_CHUNK):
         hi = min(lo + _SCAN_CHUNK, len(seqs))
@@ -889,7 +968,7 @@ def _gapped_pass(seqs, sub, sites, si, lengths, observed, reached, label, sg, ma
     s, e = _widen(sub["start"].to_numpy(), sub["end"].to_numpy(), lengths[si], _MIN_GAPPED_TARGET)
     targets = [seqs[i][a:b] for i, a, b in zip(si, s, e)]
     bkg = _background(seqs, sub, e - s, np.random.default_rng(rng.integers(2**63)))
-    res = gapped_motif_finder(targets, bkg, max_gap=max_gap, nmotifs=10, seed=int(rng.integers(2**63)),
+    res = gapped_motif_finder(targets, bkg or None, max_gap=max_gap, nmotifs=10, seed=int(rng.integers(2**63)),
                               nthreads=nthreads, progress=False)
     ms = [m.replace(name=f"{label}_g{k + 1}") for k, m in enumerate(res["motif"].to_list())]
     if refine and ms:
@@ -933,6 +1012,10 @@ def _given_idealized(idealized: Any, seqs: list[str], sign: str) -> dict[str, li
         given = {sign: idealized}
     out = {}
     for key, value in given.items():
+        if isinstance(value, np.ndarray) and value.ndim >= 2:
+            from ._deep import from_one_hot
+
+            value = from_one_hot(value)
         values = [value] if isinstance(value, str) else list(value.values() if isinstance(value, Mapping) else value)
         if len(values) != len(seqs) or any(len(a) != len(b) for a, b in zip(values, seqs)):
             raise ValueError(f"the {key} idealized sequences must match the sequences in number and length")
@@ -940,7 +1023,8 @@ def _given_idealized(idealized: Any, seqs: list[str], sign: str) -> dict[str, li
     return out
 
 
-def _given_seqlets(seqlets: pl.DataFrame, names: list[str] | None, n: int) -> pl.DataFrame:
+def _given_seqlets(seqlets: pl.DataFrame, names: list[str] | None, lengths: np.ndarray) -> pl.DataFrame:
+    n = len(lengths)
     for col in ("start", "end"):
         if col not in seqlets.columns:
             raise ValueError(f"seqlets need a {col!r} column")
@@ -954,8 +1038,17 @@ def _given_seqlets(seqlets: pl.DataFrame, names: list[str] | None, n: int) -> pl
         seqlets = seqlets.with_columns(sequence_i=pl.col("sequence").cast(pl.String).replace_strict(index))
     if ((seqlets["sequence_i"] < 0) | (seqlets["sequence_i"] >= n)).any():
         raise ValueError(f"seqlets refer to sequences beyond the {n} given")
-    return seqlets.with_columns(pl.col("sequence_i").cast(pl.Int64), pl.col("start").cast(pl.Int64),
-                                pl.col("end").cast(pl.Int64))
+    seqlets = seqlets.with_columns(pl.col("sequence_i").cast(pl.Int64), pl.col("start").cast(pl.Int64),
+                                   pl.col("end").cast(pl.Int64))
+    # Positions count from the start of each sequence, not along a chromosome.
+    size = lengths[seqlets["sequence_i"].to_numpy()]
+    start, end = seqlets["start"].to_numpy(), seqlets["end"].to_numpy()
+    bad = (start < 0) | (end <= start) | (end > size)
+    if bad.any():
+        k = int(np.flatnonzero(bad)[0])
+        raise ValueError(f"a seqlet runs from {start[k]} to {end[k]} in a sequence of {size[k]} letters; "
+                         "seqlet positions count from 0 at the start of each sequence")
+    return seqlets
 
 
 __all__ = ["ContributionMotifs", "contribution_motifs"]

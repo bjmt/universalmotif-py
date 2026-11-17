@@ -109,7 +109,9 @@ A few conventions hold across the commands.
   or a bigWig track of observed scores read over ranges given with `-g` and
   `-r`. Large HDF5 and `.npy` files are read a part at a time, and
   `--centre` keeps only the middle of each sequence, such as 500 of a
-  model's 2,114 bases. CWMs are written as plain matrices, the one motif
+  model's 2,114 bases. Sequences named by their ranges, as
+  `chrom:start-end`, are renamed to the ranges of their middles, so hit
+  positions added to the start give genomic coordinates. CWMs are written as plain matrices, the one motif
   format that keeps their values, and read back from those or from
   TF-MoDISco results files.
 - **Ranges**, such as peaks, are given with `-r`. They can be BED files,
@@ -434,7 +436,7 @@ hit thresholds and an HTML report named by a database. `scan-contrib` then
 finds where the model used them, in the same scores or another model's:
 
 ```sh
-umotif contrib-motifs seq_contrib.counts.fold_mean.h5 --centre 500 -p 8 \
+umotif contrib-motifs seq_contrib.counts.fold_mean.h5 --centre 500 -p 8 --seed 1 \
     -o motifs.meme --cwms cwms.txt --thresholds thresholds.tsv \
     --html motifs.html --db JASPAR2024_CORE_vertebrates.meme
 umotif scan-contrib -m cwms.txt seq_contrib.counts.fold_mean.h5 --centre 500 \

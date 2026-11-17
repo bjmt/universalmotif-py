@@ -525,6 +525,17 @@ def scan_sequences(
     return pl.DataFrame(hits).cast(_HIT_SCHEMA)
 
 
+def _scan_strings(ms: list[Motif], seqs: list[str], pvalue: float, nthreads: int,
+                  reachable: bool = False) -> pl.DataFrame:
+    """scan_sequences() on a list of sequences, on both strands, with
+    ``reachable`` letting motifs that cannot reach ``pvalue`` hit at their
+    best score."""
+    names, seqs = _sequence_pairs(seqs)
+    hits = _core._scan_sequences(ms, seqs, pvalue, True, None, nthreads, True, True, False,
+                                 _make_unique([m.name for m in ms]), names, reachable)
+    return pl.DataFrame(hits).cast(_HIT_SCHEMA)
+
+
 def _first_codes(values: pl.Series) -> tuple[np.ndarray, list]:
     """Each value's number in order of first appearance, missing values
     included, and the distinct values in that order."""

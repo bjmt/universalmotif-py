@@ -140,6 +140,7 @@ fn scan_options(
         use_gaps,
         correct_gaps,
         first_hit,
+        reachable: false,
     })
 }
 
@@ -183,7 +184,7 @@ fn hit_table(
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, sequences, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, first_hit, motif_names, sequence_names))]
+#[pyo3(signature = (motifs, sequences, pvalue, rc, no_overlaps, nthreads, use_gaps, correct_gaps, first_hit, motif_names, sequence_names, reachable=false))]
 #[allow(clippy::too_many_arguments)]
 fn _scan_sequences<'py>(
     py: Python<'py>,
@@ -198,9 +199,10 @@ fn _scan_sequences<'py>(
     first_hit: bool,
     motif_names: Vec<String>,
     sequence_names: Vec<String>,
+    reachable: bool,
 ) -> PyResult<PyTable> {
     let motifs = unwrap(&motifs);
-    let opts = scan_options(
+    let mut opts = scan_options(
         pvalue,
         rc,
         no_overlaps,
@@ -209,6 +211,7 @@ fn _scan_sequences<'py>(
         correct_gaps,
         first_hit,
     )?;
+    opts.reachable = reachable;
     let t = py
         .detach(|| scan_table(&motifs, &sequences, &opts))
         .map_err(err)?;

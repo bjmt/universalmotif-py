@@ -611,7 +611,8 @@ def cmd_variants(a):
     if a.variants != "-" and not Path(a.variants).exists():
         raise CliError(f"no such file: {a.variants}")
     raw = _read_bytes(a.variants)
-    if raw.lstrip().startswith((b"##fileformat=VCF", b"#CHROM")):
+    header = next((ln for ln in raw.lstrip().splitlines() if not ln.startswith(b"##")), b"")
+    if raw.lstrip().startswith(b"##fileformat=VCF") or header.upper().startswith(b"#CHROM\tPOS\tID\tREF\tALT"):
         from ._variants import _vcf_frame
 
         try:
@@ -619,8 +620,12 @@ def cmd_variants(a):
         except ValueError as e:
             raise CliError(str(e)) from None
     else:
-        variants = pl.read_csv(io.BytesIO(raw), separator="\t", null_values="NA", infer_schema_length=10000,
-                               comment_prefix="#")
+        # A header line may start with #, as in "#chrom position ref alt", while ## lines are comments.
+        lines = [ln for ln in raw.splitlines(keepends=True) if not ln.startswith(b"##")]
+        if lines and lines[0].startswith(b"#"):
+            lines[0] = lines[0][1:]
+        variants = pl.read_csv(io.BytesIO(b"".join(lines)), separator="\t", null_values="NA",
+                               infer_schema_length=10000, comment_prefix="#")
     hits = read_table(a.hits) if a.hits else None
     table = um.variant_motif_effects(variants, open_genome(a.genome), motifs, pvalue=a.pvalue, hits=hits,
                                      rc=a.rc, nthreads=a.threads, progress=a.progress)
@@ -867,7 +872,10 @@ def cmd_proximity(a):
         # columns tells them apart.
         sizes_like = (_stem_suffix(u) in (".fai", ".sizes") or u.endswith("chrom.sizes")
                       or (_stem_suffix(u) == ".txt" and _two_columns(u)))
-        universe = _chrom_sizes(u) if sizes_like or _is_genome(u) else read_ranges(u)
+        if _stem_suffix(u) in _BED_SUFFIXES:
+            universe = read_ranges(u)
+        else:
+            universe = _chrom_sizes(u) if sizes_like or _is_genome(u) else read_ranges(u)
     if a.hits:
         if a.motifs:
             raise CliError("give either motifs to scan for or --hits, not both")
@@ -894,11 +902,17 @@ def cmd_proximity(a):
 
 
 def _is_genome(path: str) -> bool:
+    """Whether a file is a FASTA or 2bit genome, looking inside gzip."""
     try:
-        raw = Path(path).read_bytes()[:4]
+        with open(path, "rb") as fh:
+            raw = fh.read(4)
+            if raw[:2] == b"\x1f\x8b":
+                fh.seek(0)
+                with gzip.open(fh) as gz:
+                    return gz.read(1) == b">"
     except OSError:
         return False
-    return raw[:1] == b">" or raw[:2] == b"\x1f\x8b" or raw in (b"\x43\x27\x41\x1a", b"\x1a\x41\x27\x43")
+    return raw[:1] == b">" or raw in (b"\x43\x27\x41\x1a", b"\x1a\x41\x27\x43")
 
 
 def cmd_coocc(a):
@@ -983,29 +997,61 @@ def _read_scores(a, path: str, sequences: str | None = None) -> _Scores:
         values = [um.signal_values(path, c, s, e) for c, s, e in rows]
         if len({len(v) for v in values}) != 1:
             raise CliError("the ranges differ in width; resize them to one width first")
+        # Ranges on the - strand are read as their reverse complements, so their scores run backwards too.
+        if "strand" in ranges.columns:
+            for i, st in enumerate(ranges["strand"].cast(pl.String).to_list()):
+                if st == "-":
+                    values[i] = values[i][::-1]
         observed = np.asarray(values, dtype=np.float32)
         return _Scores(_centre(a, observed), None, _centre_seqs(a, seqs))
-    seq_arg = None
+    seq_arg, fasta_names = None, None
     if sequences:
         if not Path(sequences).exists():
             raise CliError(f"no such file: {sequences}")
-        seq_arg = (list(read_sequences(sequences).values())
-                   if _stem_suffix(sequences) in (".fa", ".fasta", ".fna") else sequences)
+        if _stem_suffix(sequences) in (".fa", ".fasta", ".fna"):
+            fasta = read_sequences(sequences)
+            seq_arg, fasta_names = list(fasta.values()), list(fasta)
+        else:
+            seq_arg = sequences
     # Large files are read a chunk of sequences at a time, each cut to
     # --centre before the next is read, so that the whole file is never held.
     n = _n_regions(path)
     chunks = [None] if n is None else [range(lo, min(lo + _READ_CHUNK, n)) for lo in range(0, n, _READ_CHUNK)]
-    hyps, seqs = [], {}
+    hyps, names, letters = [], [], []
     for idx in chunks:
-        c = um.read_contributions(path, sequences=seq_arg, regions=getattr(a, "regions", None), indices=idx)
+        try:
+            c = um.read_contributions(path, sequences=seq_arg, regions=getattr(a, "regions", None), indices=idx)
+        except IndexError as e:
+            raise CliError(f"the scores in {path} and the sequences do not match: {e}") from None
         hyp = np.asarray(c.scores, dtype=np.float32)
+        if hyp.ndim != 3:
+            raise CliError(f"the scores in {path} must have one per letter at each position, with shape "
+                           f"(sequences, 4, length) or (sequences, length, 4), not {hyp.shape}")
         if hyp.shape[1] != 4:
             hyp = hyp.transpose(0, 2, 1)
         hyps.append(_centre(a, hyp))
-        seqs.update(_centre_seqs(a, dict(zip(c.names, c.sequences))))
+        names += list(c.names)
+        letters += list(c.sequences)
+    if fasta_names is not None:
+        if len(fasta_names) != len(letters):
+            raise CliError(f"{len(fasta_names)} sequences in {sequences} for the scores of {len(letters)}")
+        if not _stem_suffix(path) in (".h5", ".hdf5"):
+            names = fasta_names
+    # Regions repeated in a file, such as duplicate peaks, keep apart.
+    seqs = _centre_seqs(a, dict(zip(_unique_names(names), letters)))
     hyp = np.concatenate(hyps) if len(hyps) > 1 else hyps[0]
     observed = (hyp * um.one_hot(list(seqs.values()))).sum(axis=1)
     return _Scores(observed, hyp, seqs)
+
+
+def _unique_names(names: list[str]) -> list[str]:
+    seen: dict[str, int] = {}
+    out = []
+    for n in names:
+        k = seen.get(n, 0)
+        seen[n] = k + 1
+        out.append(n if k == 0 else f"{n}_{k + 1}")
+    return out
 
 
 _READ_CHUNK = 20000
@@ -1042,12 +1088,21 @@ def _centre(a, x):
 
 
 def _centre_seqs(a, seqs: dict[str, str]) -> dict[str, str]:
+    """The middles of the sequences, as _centre() cuts their scores. A
+    sequence named by its range, as chrom:start-end, is renamed to the range
+    of its middle, so that positions counted along it stay right."""
     width = getattr(a, "centre", None)
     if not width:
         return seqs
     out = {}
     for name, s in seqs.items():
-        lo = max((len(s) - width) // 2, 0)
+        if width >= len(s):
+            out[name] = s
+            continue
+        lo = (len(s) - width) // 2
+        m = re.match(r"^(.+):(\d+)-(\d+)$", name)
+        if m and int(m[3]) - int(m[2]) == len(s):
+            name = f"{m[1]}:{int(m[2]) + lo}-{int(m[2]) + lo + width}"
         out[name] = s[lo:lo + width]
     return out
 
@@ -1118,10 +1173,26 @@ def cmd_contrib_motifs(a):
         max_gap=a.max_gap, hits=a.hits_out is not None, hit_quantile=a.hit_quantile,
         pattern_similarity=a.pattern_similarity, seed=a.seed, nthreads=a.threads)
     if not found.motifs.height:
-        print("no motifs were found", file=sys.stderr)
+        signs = found.seqlets["sign"].value_counts() if "sign" in found.seqlets.columns else None
+        hint = ""
+        if a.sign == "positive" and signs is not None and (signs["sign"] == "-").any():
+            hint = "; the scores also hold negative seqlets, searched with --sign negative or both"
+        print(f"no motifs were found in {found.seqlets.height} seqlets{hint}", file=sys.stderr)
+        # Empty outputs, so that pipelines expecting them still run.
+        for path in (a.table, a.patterns, a.seqlets_out, a.hits_out, a.thresholds, a.cwms, a.html,
+                     a.output if a.output not in (None, "-") else None):
+            if path:
+                Path(path).write_text("")
         return
+    # Composites lose their gaps in motif files, so the table records them.
+    gaps = [f"{','.join(map(str, m.gaploc))}:{','.join(map(str, m.mingap))}-{','.join(map(str, m.maxgap))}"
+            if m.isgapped else None for m in found.ppms]
+    if any(gaps):
+        names = [m.name for m, g in zip(found.ppms, gaps) if g]
+        print(f"composite motifs {', '.join(names)} are written without their gaps; the gaps column of "
+              "--table gives them as positions:smallest-largest", file=sys.stderr)
     if a.table:
-        write_table(found.motifs, a.table)
+        write_table(found.motifs.with_columns(pl.Series("gaps", gaps, dtype=pl.String)), a.table)
     if a.patterns:
         write_table(found.patterns, a.patterns)
     if a.seqlets_out:
@@ -1163,10 +1234,15 @@ def cmd_modisco(a):
 
     if not Path(a.modisco).exists():
         raise CliError(f"no such file: {a.modisco}")
+    if _stem_suffix(a.modisco) not in _MODISCO_SUFFIXES:
+        raise CliError(f"{a.modisco} is not a TF-MoDISco results file (.h5); 'modisco' draws those, and "
+                       "'contrib-motifs --html' draws the motifs it finds")
     if not (a.output or a.html):
         raise CliError("give a file for the figure with -o, or for the HTML page with --html")
     patterns = None
     if a.patterns:
+        if len(a.patterns) > 2:
+            raise CliError("--patterns takes one number, or two for positive and negative patterns")
         patterns = a.patterns[0] if len(a.patterns) == 1 else (a.patterns[0], a.patterns[1])
     fig = um.plot_modisco(a.modisco, database=_database(a), patterns=patterns, n_matches=a.n_matches,
                           qvalue=a.qvalue, trim_threshold=a.trim_threshold, html=a.html, title=a.title,
@@ -1179,6 +1255,10 @@ def cmd_combine(a):
     import universalmotif as um
 
     sources = _named_paths(a.sources, "source")
+    for path in sources.values():
+        if _stem_suffix(path) not in _MODISCO_SUFFIXES:
+            raise CliError(f"{path} is not a TF-MoDISco results file (.h5); 'combine' takes those, and "
+                           "in Python, combine_patterns() also takes contribution_motifs() results")
     combined = um.combine_patterns(sources, similarity=a.similarity, linkage=a.linkage,
                                    trim_threshold=a.trim_threshold, database=_database(a), qvalue=a.qvalue,
                                    nthreads=a.threads)
@@ -1201,6 +1281,10 @@ def cmd_name(a):
 
     if not a.db:
         raise CliError("give the database motifs to name the motifs by with --db")
+    for path in a.motifs if isinstance(a.motifs, list) else [a.motifs]:
+        if _stem_suffix(path) in _MODISCO_SUFFIXES:
+            raise CliError(f"{path} is a TF-MoDISco results file; name its patterns with "
+                           "'umotif modisco FILE --db ... --html report.html'")
     motifs = read_motifs(a.motifs, a.format)
     db = read_motifs(a.db, a.db_format)
     res = um.name_motifs(motifs, db, top=a.top, qvalue=a.qvalue, nthreads=a.threads)
@@ -1802,7 +1886,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                                          "it has no interpreted_regions.bed beside it")
         p.add_argument("--centre", type=int,
                        help="keep only this many positions in the middle of each sequence, such as 500 "
-                            "of a model's 2,114")
+                            "of a model's 2,114; sequences named chrom:start-end are renamed to their "
+                            "middles, so positions stay genomic once added to the start")
 
     def null_args(p):
         p.add_argument("--null-scores",
@@ -1811,7 +1896,9 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
         p.add_argument("--null-sequences", help="the one-hot sequences of numpy --null-scores")
 
     def db_args(p, why):
-        p.add_argument("--db", nargs="+", help=f"motif files, such as JASPAR's, {why}")
+        # One file per --db, so that the option cannot swallow the input file after it.
+        p.add_argument("--db", action="append", metavar="FILE",
+                       help=f"a motif file, such as JASPAR's, {why}; repeat for several")
         p.add_argument("--db-format", choices=_MOTIF_FORMATS, metavar="FORMAT", help="format of the --db files")
 
     p = command("seqlets", cmd_seqlets, "call seqlets in a model's contribution scores",
@@ -2004,7 +2091,11 @@ def main(argv: list[str] | None = None) -> int:
         setting = (_progress, _progress._setting)
         choice = args.progress
         if choice is None:
-            choice = _progress.get_progress() or sys.stderr.isatty()
+            # UNIVERSALMOTIF_PROGRESS, when set, decides; otherwise bars show on a terminal.
+            if os.environ.get("UNIVERSALMOTIF_PROGRESS") is not None:
+                choice = _progress.get_progress()
+            else:
+                choice = _progress.get_progress() or sys.stderr.isatty()
         _progress.set_progress(choice)
     try:
         args.fn(args)

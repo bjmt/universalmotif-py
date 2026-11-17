@@ -286,6 +286,14 @@ def _gather_scores(contributions: Any, sequences: Any, ranges: Any) -> _Scores:
         values = values.astype(np.float32)
     n, length = values.shape[0], values.shape[-1]
     codes = None
+    if sequences is not None and names is not None and isinstance(sequences, Mapping):
+        # Scores and sequences given by name are paired by name, not by order.
+        by_name = {str(k): v for k, v in sequences.items()}
+        missing = [k for k in names if k not in by_name]
+        if missing or len(by_name) != len(names):
+            raise ValueError("the scores and sequences are named differently, as for "
+                             f"{(missing or sorted(set(by_name) - set(names)))[0]!r}")
+        sequences = {k: by_name[k] for k in names}
     if sequences is not None:
         codes, seq_names = _sequence_codes(sequences, n, length)
         names = names or seq_names

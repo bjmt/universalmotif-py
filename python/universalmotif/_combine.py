@@ -104,10 +104,14 @@ def _source_patterns(source: str, given: Any, trim_threshold: float | None) -> l
 
     out = []
     if isinstance(given, ContributionMotifs):
-        # Motifs found by search have no window to run off.
+        # Motifs found by search have no window to run off. A composite's PPM keeps its gap, while its CWM
+        # is laid out at its commonest spacing, so the two do not share a frame and only the CWM is used.
         for r in given.patterns.iter_rows(named=True):
+            ppm = r["motif"]
+            if ppm.isgapped or ppm.width != r["cwm"].width:
+                ppm = None
             out.append({"label": r["pattern"], "sign": r["sign"], "seqlets": int(r["seqlets"]),
-                        "cwm": r["cwm"], "ppm": r["motif"], "truncated": False})
+                        "cwm": r["cwm"], "ppm": ppm, "truncated": False})
         return out
     is_file = isinstance(given, (str, os.PathLike))
     motifs = _pattern_motifs(given, ["CWM", "PPM"] if is_file else [], trim_threshold)
