@@ -102,7 +102,7 @@ from ._gapped_finder import gapped_motif_finder
 from ._genome import Genome, extract_ranges, signal_stats, signal_values
 from ._genomic import match_bkg, motif_proximity
 from ._interactions import interaction_effects, pair_mutagenesis, plot_interactions
-from ._intervals import genomic_hits, read_bed, resize_ranges, to_polars_bio, to_pyranges, write_bed
+from ._intervals import drop_overlaps, genomic_hits, read_bed, resize_ranges, to_polars_bio, to_pyranges, write_bed
 from ._plot_comparison import plot_comparison
 from ._plot_hits import plot_hits
 from ._plot_modisco import plot_modisco
@@ -189,6 +189,7 @@ __all__ = [
     "dedup_hits",
     "delete_region",
     "draw_logo",
+    "drop_overlaps",
     "enrich_motifs",
     "example_file",
     "example_motifs",

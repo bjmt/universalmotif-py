@@ -10,6 +10,7 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 
 from ._genomic import _CHROM_COLUMNS, _range_table, _ranges_frame
@@ -271,6 +272,79 @@ def resize_ranges(
                 out = out.with_columns(pl.col("peak") - (trimmed - pl.col("start")))
             out = out.with_columns(trimmed.alias("start"), pl.min_horizontal(pl.col("end"), size).alias("end"))
     return out
+
+
+def drop_overlaps(ranges, by: str | None = None, reverse: bool = False) -> pl.DataFrame:
+    """Keep only ranges that do not overlap one kept before them.
+
+    Ranges are taken from the start of each chromosome when ``by`` is not
+    given, so that each kept range is the first of its overlapping run.
+    With ``by``, they are taken from the highest value of that column, such
+    as a narrowPeak ``signalValue``, so the strongest of overlapping peaks
+    is kept. ``reverse`` takes the lowest first instead, as for P-values.
+    Ranges that only touch, one ending where the next starts, do not
+    overlap. Strands are ignored. This gives windows in which no base is
+    counted twice, for instance after
+    [`resize_ranges()`][universalmotif.resize_ranges].
+
+    Parameters
+    ----------
+    ranges
+        Ranges as a DataFrame with a chromosome column, ``start`` and
+        ``end``, such as [`read_bed()`][universalmotif.read_bed] returns, or
+        any of the forms the functions taking ranges accept.
+    by
+        A column to rank overlapping ranges by, highest first.
+    reverse
+        Rank by ``by`` from the lowest instead.
+
+    Returns
+    -------
+    polars.DataFrame
+        The ranges kept, in their original order and with all their
+        columns.
+
+    Examples
+    --------
+    >>> import polars as pl
+    >>> import universalmotif as um
+    >>> peaks = pl.DataFrame({"chrom": ["chr1", "chr1", "chr1", "chr2"], "start": [100, 300, 150, 100],
+    ...                       "end": [200, 400, 250, 200], "signalValue": [2.0, 1.0, 5.0, 1.0]})
+    >>> um.drop_overlaps(peaks)["start"].to_list()
+    [100, 300, 100]
+    >>> um.drop_overlaps(peaks, by="signalValue")["start"].to_list()
+    [300, 150, 100]
+    """
+    from . import _core
+    from ._analysis import _first_codes
+
+    df = _ranges_frame(ranges)
+    if not isinstance(df, pl.DataFrame):
+        df = _range_table(df, "ranges")
+    chrom = next((c for c in _CHROM_COLUMNS if c in df.columns), None)
+    if chrom is None or "start" not in df.columns or "end" not in df.columns:
+        raise ValueError(f"ranges need a chromosome column ({', '.join(_CHROM_COLUMNS)}), start and end")
+    if by is not None and by not in df.columns:
+        raise ValueError(f"ranges have no column {by!r}")
+    if df.height == 0:
+        return df
+    start = df["start"].cast(pl.Int64)
+    end = df["end"].cast(pl.Int64)
+    if start.null_count() or end.null_count() or (start > end).any():
+        raise ValueError("every range needs a start and an end, with the start not after the end")
+    if by is None:
+        priority = -start.cast(pl.Float64)
+    else:
+        priority = df[by].cast(pl.Float64)
+        if priority.null_count() or priority.is_nan().any():
+            raise ValueError(f"the column {by!r} cannot contain missing values")
+        if reverse:
+            priority = -priority
+    n = df.height
+    keep = _core._dedup(_first_codes(df[chrom].cast(pl.String))[0], np.zeros(n, dtype=np.int64),
+                        np.full(n, 2, dtype=np.int32), start.to_numpy(), end.to_numpy(), priority.to_numpy(),
+                        True, True)
+    return df.filter(pl.Series(keep))
 
 
 def write_bed(

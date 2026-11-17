@@ -379,3 +379,16 @@ def test_scan_sequences_in_ranges(tmp_path):
     assert um.scan_sequences(ap1, genome, ranges=[("chr2", 10, 12)]).height == 0
     with pytest.raises(TypeError, match="needs a Genome"):
         um.scan_sequences(ap1, ["ACGT"], ranges=ranges)
+
+
+def test_drop_overlaps():
+    ranges = pl.DataFrame({"chrom": ["chr1", "chr1", "chr1", "chr1", "chr2"], "start": [100, 150, 200, 300, 120],
+                           "end": [200, 250, 300, 310, 220], "signalValue": [1.0, 9.0, 2.0, 3.0, 1.0]})
+    # From the start of each chromosome, touching ranges are both kept.
+    assert um.drop_overlaps(ranges)["start"].to_list() == [100, 200, 300, 120]
+    # The strongest of overlapping ranges wins, and the original order is kept.
+    assert um.drop_overlaps(ranges, by="signalValue")["start"].to_list() == [150, 300, 120]
+    assert um.drop_overlaps(ranges, by="signalValue", reverse=True)["start"].to_list() == [100, 200, 300, 120]
+    assert um.drop_overlaps(ranges.head(0)).height == 0
+    with pytest.raises(ValueError, match="no column"):
+        um.drop_overlaps(ranges, by="score")

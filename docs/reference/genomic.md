@@ -3,7 +3,7 @@
 Functions for genomic ranges:
 
 - reading and writing BED and peak files, and reading VCF files;
-- resizing ranges;
+- resizing ranges and dropping overlapping ones;
 - composition-matched backgrounds;
 - motif proximity to genomic anchors;
 - hits in genomic coordinates;
@@ -22,6 +22,8 @@ that count from 1, as polars-bio makes them by default, are converted.
 ::: universalmotif.read_vcf
 
 ::: universalmotif.resize_ranges
+
+::: universalmotif.drop_overlaps
 
 ::: universalmotif.match_bkg
 
