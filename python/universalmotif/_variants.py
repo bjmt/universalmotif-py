@@ -791,7 +791,7 @@ def variant_batches(
 
     ``genome`` is a [`Genome`][universalmotif.Genome], packed sequences,
     sequences by name or the path of a FASTA or 2bit file. Each variant gets
-    a window of ``width`` letters of it. The variant's first reference
+    a window of ``width`` letters around it. The variant's first reference
     letter sits at ``width // 2``, the middle or the letter after it.
 
     The alternative sequence has the same letters before that point. Then

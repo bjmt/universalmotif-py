@@ -359,7 +359,7 @@ def modisco_thresholds(
       the CWM's.
 
     The thresholds are the ``quantile`` of each, so that with the default
-    of 0.05 about 95% of a pattern's seqlets would pass either one.
+    of 0.05 about 95% of a pattern's seqlets would pass each one on its own.
     Patterns differ a great deal in how alike their seqlets are. These
     thresholds follow each pattern, where a single cutoff would be too
     strict for some and too loose for others.

@@ -129,9 +129,9 @@ class ContributionMotifs:
 
         Each pattern's row shows the following.
 
-        - Its leading motif's consensus, and the seqlets it reaches with
-          their share of all seqlets.
-        - The logos of its leading motif's CWM, and of its PPM as
+        - Its representative's consensus, and the seqlets given to its
+          members with their share of all seqlets.
+        - The logos of its representative's CWM, and of its PPM as
           information content.
         - With a ``database`` such as JASPAR, the ``n_matches`` database
           motifs it resembles most by
@@ -437,11 +437,12 @@ def contribution_motifs(
 
     Finally, motifs are gathered into patterns, as TF-MoDISco gathers
     seqlets. In order of the seqlets their sequence matches reach, each motif
-    joins the first pattern whose leading motif's CWM is at least
+    joins the first pattern whose first motif's CWM is at least
     ``pattern_similarity`` like its own. A factor's site found in several
     spellings thus becomes one pattern, with those spellings as its members.
-    Composites lead patterns of their own. Every motif is kept and scanned for, whatever
-    its pattern, as the patterns only arrange them.
+    Composites start patterns of their own. Each pattern's representative is
+    its member given the most seqlets. Every motif is kept and scanned for,
+    whatever its pattern, as the patterns only arrange them.
 
     Each sign of ``sign`` is searched on its own. The defaults aim at
     finding the patterns a model has learned, much as TF-MoDISco does.
@@ -452,39 +453,30 @@ def contribution_motifs(
     half-sized reruns. Setting ``stability`` therefore trades them for
     motifs that other samples of regions would give too.
 
-    One test used the contribution scores of a chromBPNet model of
-    chromatin accessibility in K562 cells, over 21,000 regions. With
-    hypothetical scores, the defaults closely recovered 28 of the model's
-    published TF-MoDISco patterns, against 25 for TF-MoDISco on the same
-    regions. Closely here means a CWM cosine of 0.8 or more. The call took
-    10 seconds, against 41 minutes for TF-MoDISco. The patterns found
-    included the NFI palindrome, held by about 1% of the seqlets. They also
-    included the TAL1–GATA composite, which is CTG then WGATAA 7 or 8
-    letters on. Without hypothetical scores, NFI was found in only some of
-    the runs. The hits were about as many as those of the published CWMs
-    at the thresholds of ``modisco_thresholds()``, and fewer of them fell
-    outside the published seqlets. Over all 187,000 of the model's regions,
-    the call took 72 seconds on two threads. Its memory peaked at 2.6 GB,
-    half of it the scores and sequences themselves.
+    On a chromBPNet model of chromatin accessibility in K562 cells, over
+    21,000 windows of 500 bases, the defaults with hypothetical scores
+    recovered 28 of the model's 44 published TF-MoDISco patterns at a CWM
+    cosine of 0.8, against 25 for TF-MoDISco on the same windows. The call
+    took 10 seconds, against 41 minutes for TF-MoDISco, and the patterns
+    found included the NFI palindrome and the TAL1–GATA composite. Over all
+    187,000 of the model's windows it took 72 seconds on two threads, with
+    memory peaking at 2.6 GB. The
+    [motifs from contribution scores](../guides/contribution-motifs.ipynb)
+    guide gives the full comparison.
 
     Scores from a model's profile head are spikier than those of its counts
     head, with a few strong positions and weak ones between. In the default
     seqlets, every stretch of 4 or more positions must stand out, so they
-    miss many of these sites. Seqlets called with
+    miss some of these sites. Seqlets called with
     ``call_seqlets(scores, sequences, min_len=2, threshold=0.05)`` and given
-    as ``seqlets`` suit them better. On the profile head of the K562 model,
-    over 30,000 regions, these recovered 23 of its 73 published patterns at
-    a cosine of 0.8, against 12 with the defaults. TF-MoDISco's
-    profile-head patterns are wide, with much of their weight in the
-    flanks. Our motifs match many of them only in their cores.
+    as ``seqlets`` often suit them better. TF-MoDISco's profile-head
+    patterns are wide, with much of their weight in the flanks, so our
+    motifs match many of them only in their cores.
 
     The motifs found in different samples of regions differ mostly in the
-    rarer ones. In three random 70% samples of the 30,000 regions, the same
-    25 published patterns were recovered every time. Up to four others
-    were recovered only some of the time. TF-MoDISco recovered the same 25
-    each time and no others. A lower ``max_similarity`` keeps fewer
-    near-identical motifs. This made the motifs themselves match more often
-    across samples, but lost some of those patterns.
+    rarer ones, while the common patterns are found every time. A lower
+    ``max_similarity`` keeps fewer near-identical motifs, which makes the
+    motifs match more often across samples but loses some rarer patterns.
 
     Parameters
     ----------

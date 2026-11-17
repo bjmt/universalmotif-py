@@ -435,7 +435,7 @@ def name_motifs(
         - ``consensus`` and ``match_consensus``, the two consensus
           sequences.
 
-        Motifs with no match pass have no rows.
+        Motifs with no match that passes have no rows.
 
     References
     ----------

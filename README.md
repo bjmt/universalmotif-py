@@ -84,7 +84,8 @@ found = um.motif_finder(targets, controls, seed=1)
   a local cache, and conversion to and from Biopython.
 - **Scanning:** exact P-value thresholds, both strands, any alphabet and
   gapped motifs. Whole genomes are scanned from a FASTA file in a few
-  hundred MB.
+  hundred MB, and variants from VCF files, insertions and deletions
+  included, are scored by how they change motif sites.
 - **Comparison:** similarity with P-values, scored on the overlap or on the
   whole query, merging of similar motifs, and trees.
 - **Statistics:** enrichment, co-occurrence, positional enrichment,
@@ -100,7 +101,7 @@ found = um.motif_finder(targets, controls, seed=1)
     - TF-MoDISco results, and seqlets and motifs found directly in a
       model's contribution scores
     - plots of attribution scores along sequences
-    - batches for in-silico mutagenesis and motif insertion experiments
+    - batches for in silico mutagenesis and motif insertion experiments
 - **Sequences:** shuffling that keeps k-mer counts, random sequences, k-mer
   backgrounds, complexity, masking and sliding windows.
 - **Plots:** sequence logos, motif trees and plots of the results above.
@@ -122,7 +123,7 @@ umotif bkg -g genome.fa.gz -r peaks.narrowPeak --seed 1 -o bkg.fa
 umotif enrich jaspar.meme -s peaks.fa -b bkg.fa -p 4 -o enriched.tsv
 ```
 
-`umotif --help` lists all 23 commands.
+`umotif --help` lists all 29 commands, in groups.
 
 ## Differences from the R package
 

@@ -422,7 +422,8 @@ def plot_modisco(
     CWMs or PPMs. A dict of lists keyed by ``"CWM"``, ``"hCWM"`` and
     ``"PPM"`` also works, each with one motif per pattern in the same
     order. Finally, it can be the result of ``contribution_motifs()``,
-    whose patterns are drawn by their leading motifs.
+    whose patterns are drawn by their representatives, the members given
+    the most seqlets.
 
     Patterns are labelled by their group and number, so
     ``pos_patterns.pattern_3`` becomes ``pos_3``. ``names`` can give labels

@@ -129,9 +129,9 @@ A few conventions hold across the commands.
   `UNIVERSALMOTIF_NTHREADS` environment variable if it is set.
 - **Random numbers** drawn by a command are made reproducible with
   `--seed`.
-- **Progress** of `scan`, `enrich`, `find`, `find-gapped` and `shuffle` is
-  shown as a bar on standard error once they have run for a second, if
-  standard error is a terminal. `--no-progress` turns it off, and
+- **Progress** of `scan`, `enrich`, `variants`, `find`, `find-gapped` and
+  `shuffle` is shown as a bar on standard error once they have run for a
+  second, if standard error is a terminal. `--no-progress` turns it off, and
   `--progress` turns it on when writing to a log. Ctrl-C stops the command.
 
 Warnings, such as for motifs that cannot reach a P-value cutoff, are

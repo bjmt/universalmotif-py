@@ -9,10 +9,8 @@ Changes in behaviour:
 - Logos draw every letter by default (`min_height=0`), so weak columns no
   longer show as blank gaps.
 - `plot_modisco()` shows three matches per pattern, stacked in one column.
-- `motif_finder()` and `gapped_motif_finder()` build their default
-  background from three shuffles of the sequences rather than one
-  (`bkg_shuffles`), so motifs in a few percent of the sequences are found
-  whatever the seed.
+- `motif_finder()` and `gapped_motif_finder()` shuffle the sequences three
+  times for their default background (`bkg_shuffles`).
 - Gapped motifs are compared, merged and aligned with their gaps in
   `compare_motifs()`, `merge_motifs()`, `merge_similar()`, `motif_tree()`
   and `view_motifs()`; `use_gaps=False` ignores them as before.
@@ -34,25 +32,24 @@ New:
 - `idealize_sequences()` rewrites sequences in the letters a model
   prefers, and `HitContributions.to_cwms()` gives the CWMs of hits.
 - `name_motifs()` names motifs by the database motifs they resemble most.
-- `plot_modisco()` draws the results of `contribution_motifs()` and
-  `combine_patterns()`, takes the matches of `name_motifs()` or a
-  `database`, and with `html` writes the report as a page with sortable
-  columns, each pattern's CWMs and a reverse-complement button per row.
+- `plot_modisco()` draws `contribution_motifs()` and `combine_patterns()`
+  results, takes `name_motifs()` tables, and writes an HTML report with
+  `html`.
 - `scan_contributions(hypothetical=True)` matches a model's hypothetical
   scores, so database motifs can be matched against them directly.
 - `motif_finder(stability=4)` gives the share of searches on half the
   sequences that find each motif again.
-- `variant_motif_effects()` takes a genome and variants by position,
-  `read_vcf()` reads VCF files, and `variant_batches()` makes one-hot
-  batches of reference and alternative sequences for a model.
+- `variant_motif_effects()` takes a genome and variants by position.
+- `read_vcf()` reads VCF files, and `variant_batches()` makes one-hot
+  batches of both alleles for a model.
+- `drop_overlaps()` keeps only ranges that do not overlap one kept before.
 - `progress` shows a progress bar for long calls such as `scan_sequences()`
   and `motif_finder()`, with `set_progress()` to set the default.
 - `view_motifs()` marks the gaps of gapped motifs.
 - `read_contributions()` reads ENCODE's Blosc-compressed scores, with
   `hdf5plugin` now part of the `h5py` extra.
-- New commands: `seqlets`, `contrib-motifs`, `scan-contrib`, `modisco`,
-  `combine`, `name` and `variants`, and `find --stability`. `umotif --help`
-  lists the commands by group.
+- New commands `seqlets`, `contrib-motifs`, `scan-contrib`, `modisco`,
+  `combine`, `name` and `variants`, and `find --stability`.
 - New guides on motifs from contribution scores and on variant analysis,
   and the deep-learning guides are reorganized.
 

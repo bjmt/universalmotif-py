@@ -228,7 +228,7 @@ def combine_patterns(
     patterns. These can be a TF-MoDISco results file, read with
     [`read_modisco()`][universalmotif.read_modisco] using
     ``trim_threshold``, or the result of ``contribution_motifs()``, whose
-    patterns are taken by their leading motifs. They can also be a list of
+    patterns are taken by their representatives. They can also be a list of
     CWMs, or a dict of lists keyed by ``"CWM"`` and ``"PPM"`` with one motif
     per pattern in the same order. A pattern's group, and so its sign,
     comes from the start of its name, ``pos`` or ``neg``, and its seqlets

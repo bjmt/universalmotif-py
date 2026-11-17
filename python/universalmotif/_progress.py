@@ -32,10 +32,9 @@ def set_progress(enabled: bool | None) -> None:
 
     Functions that can take a while take a ``progress`` argument, and this
     setting decides when it is left out. Such functions include
-
-    - [`scan_sequences()`][universalmotif.scan_sequences] on a genome,
-    - [`motif_finder()`][universalmotif.motif_finder],
-    - [`enrich_motifs()`][universalmotif.enrich_motifs].
+    [`scan_sequences()`][universalmotif.scan_sequences] on a genome,
+    [`motif_finder()`][universalmotif.motif_finder] and
+    [`enrich_motifs()`][universalmotif.enrich_motifs].
 
     A bar appears on stderr once a call has run for a second, so quick calls
     show nothing. Pressing Ctrl-C stops the call. Setting the

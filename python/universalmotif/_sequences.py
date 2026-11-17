@@ -959,9 +959,7 @@ def motif_finder(
     bkg_shuffles
         How many shuffles of the sequences make up the background, without
         ``bkg_sequences``. Several steady the background, so motifs in only
-        a few percent of the sequences are found whatever the seed. With
-        one shuffle, a motif in a tenth of 400 sequences was missed with
-        three seeds in eight. With three, it was found with all of them.
+        a few percent of the sequences are found whatever the seed.
     seed
         Seed for shuffling the background; a fresh one by default.
     pseudocount
