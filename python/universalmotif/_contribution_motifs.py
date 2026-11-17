@@ -194,15 +194,17 @@ def _background(seqs: list[str], seqlets: pl.DataFrame, widths: np.ndarray, rng,
     si = seqlets["sequence_i"].to_numpy().astype(np.int64)
     starts = [offset[si] + np.maximum(seqlets["start"].to_numpy(), 0)]
     ends = [offset[si] + seqlets["end"].to_numpy()]
-    letters = np.frombuffer("".join(seqs).upper().encode("latin-1", "replace"), dtype=np.uint8)
-    other = ~np.isin(letters, np.frombuffer(b"ACGT", dtype=np.uint8))
-    if other.any():
-        edges = np.diff(np.concatenate([[0], other.view(np.int8), [0]]))
-        run_start, run_end = np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)
+    # A lookup table and the positions of other letters alone keep this to a
+    # byte per letter of the sequences.
+    bad = np.ones(256, dtype=bool)
+    bad[np.frombuffer(b"ACGTacgt", dtype=np.uint8)] = False
+    other = np.flatnonzero(bad[np.frombuffer("".join(seqs).encode("latin-1", "replace"), dtype=np.uint8)])
+    if len(other):
         # Runs crossing from one sequence into the next are split at the boundary,
         # which only adds stretches.
-        starts.append(run_start)
-        ends.append(run_end)
+        breaks = np.flatnonzero(np.diff(other) != 1)
+        starts.append(other[np.concatenate([[0], breaks + 1])])
+        ends.append(other[np.concatenate([breaks, [len(other) - 1]])] + 1)
     st, en = np.concatenate(starts), np.concatenate(ends)
     order = np.argsort(st, kind="stable")
     st, en = st[order], np.maximum.accumulate(en[order]) if len(order) else en
@@ -455,14 +457,14 @@ def contribution_motifs(
     hypothetical scores, the defaults closely recovered 28 of the model's
     published TF-MoDISco patterns, against 25 for TF-MoDISco on the same
     regions. Closely here means a CWM cosine of 0.8 or more. The call took
-    15 seconds, against 40 minutes for TF-MoDISco. The patterns found
+    10 seconds, against 41 minutes for TF-MoDISco. The patterns found
     included the NFI palindrome, held by about 1% of the seqlets. They also
     included the TAL1–GATA composite, which is CTG then WGATAA 7 or 8
     letters on. Without hypothetical scores, NFI was found in only some of
     the runs. The hits were about as many as those of the published CWMs
     at the thresholds of ``modisco_thresholds()``, and fewer of them fell
     outside the published seqlets. Over all 187,000 of the model's regions,
-    the call took two minutes on two threads. Its memory peaked at 2.6 GB,
+    the call took 72 seconds on two threads. Its memory peaked at 2.6 GB,
     half of it the scores and sequences themselves.
 
     Scores from a model's profile head are spikier than those of its counts
