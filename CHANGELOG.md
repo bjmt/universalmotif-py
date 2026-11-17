@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-11-17)
 
 Changes in behaviour:
 
@@ -27,9 +27,10 @@ Changes in behaviour:
 
 New:
 
-- `contribution_motifs()` finds the motifs a sequence model relies on from
-  its contribution scores in one call, from seqlets to patterns and hits,
-  and `ContributionMotifs.report()` writes them as an HTML page.
+- `contribution_motifs()`, experimental for now, finds the motifs a
+  sequence model relies on from its contribution scores in one call, from
+  seqlets to patterns and hits, and `ContributionMotifs.report()` writes
+  them as an HTML page.
 - `call_seqlets()` calls seqlets in contribution scores, and `seqlet_fdr()`
   applies one false discovery rate to seqlets called in batches.
 - `combine_patterns()` combines the patterns of several TF-MoDISco runs or

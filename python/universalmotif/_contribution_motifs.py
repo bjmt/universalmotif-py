@@ -417,6 +417,9 @@ def contribution_motifs(
     """Find the motifs a sequence model relies on, from its contribution
     scores.
 
+    The workflow is experimental, so its options, its results and the
+    motifs it finds may change in later releases.
+
     Each step uses one of the functions named below, with options suited
     to attributions.
 

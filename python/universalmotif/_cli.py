@@ -1924,12 +1924,12 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     _seed_arg(p)
     _threads_arg(p)
 
-    p = command("contrib-motifs", cmd_contrib_motifs, "find the motifs a model relies on",
+    p = command("contrib-motifs", cmd_contrib_motifs, "find the motifs a model relies on (experimental)",
                 "Find the motifs a sequence model relies on from its contribution scores: call seqlets, "
                 "search them for motifs, refine and choose the motifs, and match their CWMs against the "
                 "scores. The motifs are written as PPMs with -o, and the other results with the options "
                 "naming files for them. CWMs are written as plain matrices, the one format that keeps "
-                "their values.")
+                "their values. The command is experimental and may change in later releases.")
     score_args(p)
     null_args(p)
     _motif_out_args(p)

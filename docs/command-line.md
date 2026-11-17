@@ -81,7 +81,7 @@ Finding the motifs a sequence model relies on, from its contribution scores or i
 | Command | What it does | Python function |
 | --- | --- | --- |
 | `seqlets` | Call seqlets, the short stretches of high contribution, in a model's contribution scores. | [`call_seqlets()`][universalmotif.call_seqlets] |
-| `contrib-motifs` | Find the motifs a model relies on, with their CWMs, hits and an HTML report. | [`contribution_motifs()`][universalmotif.contribution_motifs] |
+| `contrib-motifs` | Find the motifs a model relies on, with their CWMs, hits and an HTML report (experimental). | [`contribution_motifs()`][universalmotif.contribution_motifs] |
 | `scan-contrib` | Find where a model used each motif, by matching CWMs against its contribution scores. | [`scan_contributions()`][universalmotif.scan_contributions], [`modisco_thresholds()`][universalmotif.modisco_thresholds] |
 | `modisco` | Draw TF-MoDISco results as a report, as a figure, an HTML page or both. | [`plot_modisco()`][universalmotif.plot_modisco] |
 | `combine` | Combine the patterns of several TF-MoDISco runs into one set of clusters. | [`combine_patterns()`][universalmotif.combine_patterns] |
@@ -431,8 +431,9 @@ umotif matrix motifs.meme -g genome.fa.gz -r peaks.bed -o peak_by_motif.tsv
 
 These commands work on a sequence model's contribution scores, such as the
 files ENCODE publishes for its chromBPNet models, and on TF-MoDISco results.
-`contrib-motifs` finds the model's motifs and writes them with their CWMs,
-hit thresholds and an HTML report named by a database. `scan-contrib` then
+`contrib-motifs`, which is experimental for now, finds the model's motifs
+and writes them with their CWMs, hit thresholds and an HTML report named by
+a database. `scan-contrib` then
 finds where the model used them, in the same scores or another model's:
 
 ```sh
