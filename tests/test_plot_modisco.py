@@ -343,5 +343,7 @@ def test_html_page(modisco, known, tmp_path):
         if t.startswith("q = ") or "· q = " in t:
             assert t in page
     # The same logos as the figure: the two pattern columns and each match.
-    # Each logo is drawn both ways, for the row's reverse-complement button.
-    assert page.count("<svg") == 2 * len(_logos(fig)) > 4 * 3
+    # Each logo is drawn both ways, for the row's reverse-complement button, and the letters' outlines are
+    # defined once, in a hidden image of their own.
+    assert page.count("<svg") - 1 == 2 * len(_logos(fig)) > 4 * 3
+    assert page.count("<defs>") == 1 and "<use href=" in page

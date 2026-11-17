@@ -50,6 +50,7 @@ def logo_svg(
     relative_entropy: bool = False,
     sort_positions: bool | None = None,
     flip_neg: bool = True,
+    _shared: dict[str, str] | None = None,
 ) -> str:
     """A sequence logo of a motif as an SVG image, without matplotlib.
 
@@ -112,8 +113,16 @@ def logo_svg(
                      f'text-anchor="middle" fill="#7F7F7F" font-family="sans-serif">{label}</text>')
     for g in glyphs:
         xs, ys = px(g.x, g.y)
-        d = "M" + "L".join(f"{a:.2f},{b:.2f}" for a, b in zip(xs, ys)) + "Z"
         fill = colours.get(g.group, _MISSING_COLOUR)
+        # A page of many logos can define each letter's outline once, with _shared collecting them, and
+        # place it at each letter by a transform, which is a fraction of the size of the outline.
+        use = _shared_letter(g.group, xs, ys) if _shared is not None else None
+        if use is not None:
+            key, transform = use
+            _shared[g.group] = key
+            paths.append(f'<use href="#{key}" transform="{transform}" fill="{html.escape(fill)}"/>')
+            continue
+        d = "M" + "L".join(f"{a:.2f},{b:.2f}" for a, b in zip(xs, ys)) + "Z"
         paths.append(f'<path d="{d}" fill="{html.escape(fill)}"/>')
     if use_type in ("PWM", "CWM") and lo < 0 < hi:
         _, y0 = px(0.5, 0.0)
@@ -124,6 +133,41 @@ def logo_svg(
         f'viewBox="0 0 {width:.2f} {height:.2f}" role="img" '
         f'aria-label="Sequence logo of {html.escape(motif.name)}">{"".join(paths)}</svg>'
     )
+
+
+def _shared_letter(letter: str, xs: np.ndarray, ys: np.ndarray) -> tuple[str, str] | None:
+    """The id of a letter's outline and the transform that places it where
+    a glyph drawn from it lies, or None if the glyph is not that outline
+    stretched and shifted."""
+    from ._logo import _font
+
+    font = _font()
+    if letter not in font or len(font[letter][0]) != len(xs):
+        return None
+    gx, gy = font[letter]
+    fits = []
+    for u, v in ((gx, xs), (gy, ys)):
+        if np.ptp(u) == 0:
+            return None
+        a, b = np.polyfit(u, v, 1)
+        if np.abs(a * u + b - v).max() > 0.01:
+            return None
+        fits.append((a, b))
+    (a, b), (c, d) = fits
+    return f"umletter-{ord(letter):x}", f"matrix({a:.4f} 0 0 {c:.4f} {b:.2f} {d:.2f})"
+
+
+def shared_letters(shared: dict[str, str]) -> str:
+    """The outlines that logos drawn with _shared refer to, as a hidden SVG
+    to put once in the page."""
+    from ._logo import _font
+
+    font = _font()
+    paths = "".join(
+        f'<path id="{key}" d="M' + "L".join(f"{x:.4f},{y:.4f}" for x, y in zip(*font[letter])) + 'Z"/>'
+        for letter, key in sorted(shared.items()))
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" '
+            f'aria-hidden="true"><defs>{paths}</defs></svg>')
 
 
 def _fmt(x: float) -> str:

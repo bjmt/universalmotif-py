@@ -808,10 +808,13 @@ def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[st
     esc = _html.escape
     head = _headings(use_type, n_cols)
 
+    # Each letter's outline is defined once for the whole page.
+    shared: dict[str, str] = {}
+
     def both(m, **kw) -> str:
         # A logo as drawn and as its reverse complement, of which a row shows one.
-        return (f'<span class="fw">{logo_svg(m, **kw)}</span>'
-                f'<span class="rv">{logo_svg(motif_rc(m), **kw)}</span>')
+        return (f'<span class="fw">{logo_svg(m, _shared=shared, **kw)}</span>'
+                f'<span class="rv">{logo_svg(motif_rc(m), _shared=shared, **kw)}</span>')
 
     def both_text(text: str) -> str:
         return (f'<code class="fw">{esc(text)}</code>'
@@ -877,7 +880,9 @@ def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[st
             flags = p.flags or []
             cells.append(f'<td data-v="{len(flags)}">{esc(", ".join(flags))}</td>')
         out.append("<tr>" + "".join(cells) + "</tr>")
-    out.append("</tbody></table></div></main>" + _SORT_SCRIPT + "</body></html>")
+    from ._display import shared_letters
+
+    out.append("</tbody></table></div>" + shared_letters(shared) + "</main>" + _SORT_SCRIPT + "</body></html>")
     return "\n".join(out)
 
 

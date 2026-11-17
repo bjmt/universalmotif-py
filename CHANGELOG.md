@@ -11,6 +11,8 @@ Changes in behaviour:
 - `plot_modisco()` shows three matches per pattern, stacked in one column.
 - `plot_modisco()` names TF-MoDISco patterns from PPMs trimmed at 0.2 at
   most, so that short cores such as GATAA are named.
+- HTML reports define each letter's outline once and place it by a
+  transform, making them about six times smaller.
 - `motif_finder()` and `gapped_motif_finder()` shuffle the sequences three
   times for their default background (`bkg_shuffles`).
 - Gapped motifs are compared, merged and aligned with their gaps in
