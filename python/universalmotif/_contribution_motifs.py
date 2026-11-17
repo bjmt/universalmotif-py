@@ -61,13 +61,13 @@ class ContributionMotifs:
     - ``thresholds`` gives their hit thresholds.
     - ``hits`` holds the hits of the CWMs in the scores.
     - ``patterns`` gathers motifs with similar CWMs, such as spellings of
-      one factor's site, under the one that reaches the most seqlets.
+      one factor's site, under the one given the most seqlets.
     """
 
     motifs: pl.DataFrame
     seqlets: pl.DataFrame
     hits: pl.DataFrame | None = None
-    #: For each motif, the rows of ``seqlets`` that its sequence matches reach.
+    #: For each motif, the rows of ``seqlets`` given to it.
     reach: dict[str, np.ndarray] | None = field(default=None, repr=False)
 
     @property
@@ -94,9 +94,9 @@ class ContributionMotifs:
         The columns are these.
 
         - ``pattern``, its name, and ``sign``.
-        - ``representative``, the member reaching the most seqlets, and
-          that motif's ``consensus``.
-        - ``seqlets``, the seqlets that any member's sequence matches reach.
+        - ``representative``, the member given the most seqlets, and that
+          motif's ``consensus``.
+        - ``seqlets``, the seqlets given to its members.
         - ``share``, those seqlets as a share of the seqlets of its sign.
         - ``members``, the names of its members, the representative first.
         - ``motif`` and ``cwm``, the representative's PPM and CWM.
@@ -253,6 +253,42 @@ def _site_hits(motifs: list[Motif], seqs: list[str], sites: pl.DataFrame, nthrea
             .drop("s", "e"))
 
 
+def _score_reach(kept: list[dict], seqs: list[str], sites: pl.DataFrame, observed: np.ndarray,
+                 nthreads: int) -> dict[str, set[int]]:
+    """The sites each kept motif's CWM reaches best, matched against the
+    scores around them at the motif's thresholds. A hit reaches a site when
+    it shares at least _MIN_OVERLAP positions with it, or all of its own
+    when narrower. Each site goes to the motif whose hit there is most like
+    its CWM, as TF-MoDISco gives each seqlet to one pattern."""
+    cwms = [r["cwm"].replace(name=r["name"]) for r in kept]
+    thresholds = pl.DataFrame({"motif": [r["name"] for r in kept],
+                               "min_similarity": [r["min_similarity"] for r in kept],
+                               "min_importance": [r["min_importance"] for r in kept]})
+    pad = max(c.width for c in cwms)
+    si = sites["sequence_i"].to_numpy()
+    lengths = np.array([len(seqs[i]) for i in si], dtype=np.int64)
+    lo = np.maximum(sites["start"].to_numpy() - pad, 0)
+    hi = np.minimum(sites["end"].to_numpy() + pad, lengths)
+    s_start, s_end = sites["start"].to_numpy(), sites["end"].to_numpy()
+    out: dict[str, set[int]] = {}
+    # A chunk at a time, as motifs whose thresholds are loose can hit almost everywhere.
+    for c0 in range(0, len(si), _SCAN_CHUNK):
+        k = np.arange(c0, min(c0 + _SCAN_CHUNK, len(si)))
+        hits = scan_contributions(cwms, [observed[si[j], lo[j]:hi[j]] for j in k],
+                                  sequences=[seqs[si[j]][lo[j]:hi[j]] for j in k], thresholds=thresholds,
+                                  nthreads=nthreads)
+        w = k[hits["sequence_i"].to_numpy()]
+        start, end = hits["start"].to_numpy() + lo[w], hits["end"].to_numpy() + lo[w]
+        overlap = np.minimum(end, s_end[w]) - np.maximum(start, s_start[w])
+        ok = overlap >= np.minimum(end - start, _MIN_OVERLAP)
+        best = (pl.DataFrame({"motif": hits["motif"].cast(pl.String), "site": w,
+                              "similarity": hits["similarity"]}).filter(pl.Series(ok))
+                .sort(["site", "similarity"], descending=[False, True]).unique("site", keep="first"))
+        for name, j in best.select("motif", "site").iter_rows():
+            out.setdefault(name, set()).add(int(j))
+    return out
+
+
 def _cwms(hits: pl.DataFrame, observed: Any) -> dict:
     """The CWM of each motif's hits, from those at its commonest spacing for
     a gapped motif."""
@@ -390,8 +426,15 @@ def contribution_motifs(
        site in the seqlets has a similarity under 0.5 are left out, since
        their sites share no shape of contribution.
 
+    Each seqlet is then given to one motif, as TF-MoDISco gives it to one
+    pattern. It goes to the motif whose CWM matches its scores most closely,
+    by cosine, among those with a hit there at their thresholds. These
+    counts include the sites of short, degenerate motifs such as the
+    initiator, whose letters alone rarely reach the P-value cutoff of the
+    sequence matches used to choose motifs.
+
     Finally, motifs are gathered into patterns, as TF-MoDISco gathers
-    seqlets. In order of the seqlets they reach, each motif joins the first
+    seqlets. In order of the seqlets given to them, each motif joins the first
     pattern whose leading motif's CWM is at least ``pattern_similarity``
     like its own. A factor's site found in several spellings thus becomes
     one pattern, with those spellings as its members. Composites lead
@@ -520,9 +563,10 @@ def contribution_motifs(
         - ``sign``.
         - ``source``, one of ``seqlets``, ``idealized`` or ``gapped``.
         - ``consensus`` and ``width``.
-        - ``seqlets``, the seqlets its hits reach.
+        - ``seqlets``, the seqlets given to it.
         - ``gain`` and ``cumulative``, the shares of the seqlets of its sign
-          that it adds and that the motifs up to it reach.
+          that its sequence matches added when it was chosen, and that those
+          of the motifs up to it reach.
         - ``stability``, with reruns.
         - ``min_similarity`` and ``min_importance``, its hit thresholds.
         - ``motif``, the motif as a PPM.
@@ -569,7 +613,7 @@ def contribution_motifs(
     >>> scores[::2, 50:57] += 0.1
     >>> found = um.contribution_motifs(scores, seqs, seed=1)
     >>> found.motifs.select("name", "consensus", "seqlets").rows()
-    [('pos_1', 'TGACTCA', 150)]
+    [('pos_1', 'TGACTCA', 134)]
     """
     if _progress.wanted(progress):
         args = {**locals(), "progress": False}
@@ -642,8 +686,13 @@ def contribution_motifs(
                 sim, imp = th[r["name"]][:2] if r["name"] in th else _DEFAULT_THRESHOLDS
                 r["min_similarity"], r["min_importance"] = max(sim, _MIN_SIMILARITY), imp
         if kept:
+            # Seqlets go to motifs by their CWMs' hits, as in the final scan. Few sites of a short,
+            # degenerate motif such as the initiator reach the P-value cutoff of the sequence matches,
+            # though the model weighs them alike.
+            reach = _score_reach(kept, seqs, sites, observed, nthreads)
+            for r in kept:
+                r["seqlets"] = len(reach.get(r["name"], ()))
             _group(kept, label, pattern_similarity, nthreads)
-            reach = _reach(_site_hits([r["motif"] for r in kept], seqs, sites, nthreads))
             for r in kept:
                 reach_by_motif[r["name"]] = sub_ids[np.sort(np.fromiter(reach.get(r["name"], ()), dtype=np.int64))]
             # Number the patterns by the seqlets their members reach between them.

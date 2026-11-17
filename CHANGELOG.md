@@ -4,6 +4,14 @@
 
 Changes in behaviour:
 
+- `contribution_motifs()` gives each seqlet to the one motif whose CWM
+  matches its scores most closely, among those with a hit there at their
+  thresholds, as TF-MoDISco gives each seqlet to one pattern. The
+  `seqlets` counts of motifs and patterns, and the order of the patterns,
+  come from this. They used to count the seqlets each motif's sequence
+  matches reached, which missed most sites of short, degenerate motifs:
+  the initiator of a ProCapNet model reached 549 seqlets that way, and
+  about 13,000 now, against 10,414 in its TF-MoDISco pattern.
 - The `importance` column of `scan_contributions()` hits is on the scale
   of `min_importance`, a fraction of the CWM's absolute sum, rather than
   the raw sum of the window's absolute scores, so filtering hits by their
