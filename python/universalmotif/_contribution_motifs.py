@@ -517,8 +517,14 @@ def contribution_motifs(
     patterns are wide, with much of their weight in the flanks, so our
     motifs match many of them only in their cores.
 
-    The motifs found in different samples of regions differ mostly in the
-    rarer ones, while the common patterns are found every time. A lower
+    The motifs found in different samples of regions, or with different
+    seeds, differ mostly in the rarer ones, while the common patterns are
+    found every time. On a BPNet model of GATA1, three seeds all gave the
+    GATA motif and the TAL1–GATA composite, but between none and three
+    rarer spellings of the GATA site. Give ``seed`` for results that can be
+    repeated, and use ``stability``, or
+    [`combine_patterns()`][universalmotif.combine_patterns] over runs with
+    several seeds, to keep only the motifs found again. A lower
     ``max_similarity`` keeps fewer near-identical motifs, which makes the
     motifs match more often across samples but loses some rarer patterns.
 
