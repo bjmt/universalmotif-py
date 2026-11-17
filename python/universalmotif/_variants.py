@@ -56,9 +56,9 @@ def read_vcf(file: str | os.PathLike) -> pl.DataFrame:
     References
     ----------
     - Danecek P, Auton A, Abecasis G, Albers CA, Banks E, DePristo MA,
-      Handsaker RE, Lunter G, Marth GT, Sherry ST, McVean G, Durbin R, 1000
-      Genomes Project Analysis Group (2011). "The variant call format and
-      VCFtools." *Bioinformatics*, **27**, 2156-2158.
+      Handsaker RE, Lunter G, et al. (2011). The variant call format and
+      VCFtools. *Bioinformatics* 27(15):2156–2158.
+      <https://doi.org/10.1093/bioinformatics/btr330>
 
     Examples
     --------

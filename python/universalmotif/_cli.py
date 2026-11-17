@@ -1054,7 +1054,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--type", choices=("PCM", "PPM", "PWM", "ICM"),
                    help="type of the motifs (default: PPM)")
     p.add_argument("--nsites", type=int,
-                   help="number of sites a consensus motif stands for (default: 100)")
+                   help="number of sites a consensus motif stands for (default: unset, and counted "
+                        "as 100 where counts are needed)")
     p.add_argument("--pseudocount", type=float, default=0.0,
                    help="pseudocount for the conversion to --type (default: 0)")
     p.add_argument("--family", help="family of the motifs")

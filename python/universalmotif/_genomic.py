@@ -210,8 +210,10 @@ def motif_proximity(
     ----------
     hits
         Hits from [`scan_sequences()`][universalmotif.scan_sequences], with
-        ``motif``, ``score``, ``start``, ``end`` and ``strand`` columns and
-        the chromosome names in ``sequence``. Instead of hits, give
+        ``motif``, ``score``, ``start`` and ``end`` columns and the
+        chromosome names in ``sequence``. A ``strand`` column is optional,
+        and is only used to tell hits on opposite strands apart for
+        ``across_strands``. Instead of hits, give
         ``motifs`` and ``sequences``, a mapping from chromosome names to
         sequences. These are then scanned with ``scan_pvalue`` and ``rc`` as
         ``scan_sequences()`` does, where ``rc`` is on by default for DNA and
@@ -495,11 +497,13 @@ def match_bkg(
     - By length, into ``n_bins_length`` quantile bins.
     - By any ``covariates``.
 
-    Each target draws ``n_per_target`` sequences from its own bin. When the
-    bin runs short, neighbouring bins are searched ring by ring, up to two
-    rings or one per axis. After that, the remaining draws repeat sequences
-    from the bins searched, with a warning. Otherwise, with ``unique``, each
-    universe sequence is drawn at most once.
+    Each target draws ``n_per_target`` sequences from its own bin. When that
+    bin runs short, the search widens to nearby bins: first those one step
+    away along a single axis, then those two steps away in all. It goes up
+    to two steps, or one per axis if there are more than two axes. If the
+    draws still fall short, the rest repeat sequences from the bins
+    searched, with a warning. With ``unique``, the default, no other
+    sequence is drawn twice.
 
     Parameters
     ----------
@@ -525,6 +529,10 @@ def match_bkg(
         kept, so millions of candidates take little memory. To draw
         negatives for each fold of a model, call this once per fold with
         that fold's ``chromosomes``.
+    n_per_target
+        How many background sequences to draw for each target.
+    n_bins_gc, n_bins_length
+        How many bins to divide GC fraction and length into.
     covariates, universe_covariates
         Extra values to match on, one row per target and per universe
         sequence. They are DataFrames or mappings with the same columns, or
@@ -543,6 +551,12 @@ def match_bkg(
         covariate binned as above, computed with
         [`signal_stats()`][universalmotif.signal_stats]. Needs the
         ``bigwig`` extra.
+    unique
+        Draw each universe sequence at most once, apart from the repeats a
+        short bin forces. When the universe holds fewer sequences than are
+        drawn, some must repeat, and a warning says so.
+    seed
+        Seed for the random draws.
     max_n_fraction
         With ``genome``, leave out candidate windows in which more than this
         fraction of the letters are not A, C, G, T or U, such as N in gaps
