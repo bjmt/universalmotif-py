@@ -9,6 +9,8 @@ Changes in behaviour:
 - Logos draw every letter by default (`min_height=0`), so weak columns no
   longer show as blank gaps.
 - `plot_modisco()` shows three matches per pattern, stacked in one column.
+- `plot_modisco()` names TF-MoDISco patterns from PPMs trimmed at 0.2 at
+  most, so that short cores such as GATAA are named.
 - `motif_finder()` and `gapped_motif_finder()` shuffle the sequences three
   times for their default background (`bkg_shuffles`).
 - Gapped motifs are compared, merged and aligned with their gaps in

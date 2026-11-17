@@ -297,6 +297,10 @@ def _subpatterns(path, trim_threshold) -> dict[str, dict[str, Any]]:
     return out
 
 
+# The most a TF-MoDISco file's PPMs are trimmed before naming their patterns.
+_NAME_TRIM = 0.2
+
+
 def _prepare(modisco, matches, database, names, patterns, columns, n_matches, qvalue, use_type, trim_threshold,
              align, nthreads):
     """The patterns to report, with their matches, and the columns shown."""
@@ -370,6 +374,12 @@ def _prepare(modisco, matches, database, names, patterns, columns, n_matches, qv
         db = [database] if isinstance(database, Motif) else list(
             database.values() if isinstance(database, Mapping) else database)
         query = [p.motifs.get("PPM") or p.motifs.get("CWM") or p.motifs["hCWM"] for p in every]
+        if isinstance(modisco, (str, os.PathLike)) and trim_threshold is not None and trim_threshold > _NAME_TRIM:
+            # Patterns are named from PPMs trimmed less than those drawn, so that a short core such as
+            # GATAA keeps the flanks that tell its factor apart.
+            loose = _pattern_motifs(modisco, ["PPM"], _NAME_TRIM).get("PPM")
+            if loose is not None and len(loose) == len(query):
+                query = loose
         matches = name_motifs([q.replace(name=p.name) for q, p in zip(query, every)], db, top=n_matches,
                               qvalue=qvalue, nthreads=nthreads)
     if matches is not None:
@@ -495,7 +505,9 @@ def plot_modisco(
         How the PPMs and matches are drawn, as ``"ICM"`` for information
         content or ``"PPM"`` for probabilities. It also heads their column.
     trim_threshold
-        Passed to ``read_modisco()`` when reading a file.
+        Passed to ``read_modisco()`` when reading a file. Its patterns are
+        named from PPMs trimmed at 0.2 at most, so that short cores keep the
+        flanks that tell their factors apart.
     text_size
         The font size of the labels.
     figsize
