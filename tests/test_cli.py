@@ -910,3 +910,99 @@ def test_guessed_formats_are_named_in_errors(tmp_path, capsys):
     # A format given with -f is not second-guessed.
     err = error("summary", "-f", "jaspar", fasta)
     assert "could not read a count" in err and "give -f" not in err
+
+
+@pytest.fixture
+def contrib_files(tmp_path):
+    """A stand-in model's hypothetical scores for 300 sequences with AP-1
+    sites in the even ones, as numpy files of scores and one-hot sequences."""
+    import numpy as np
+
+    rng = np.random.default_rng(1)
+    seqs = ["".join(rng.choice(list("ACGT"), 120)) for _ in range(300)]
+    seqs = [s[:50] + "TGACTCA" + s[57:] if i % 2 == 0 else s for i, s in enumerate(seqs)]
+    onehot = um.one_hot(seqs)
+    hyp = rng.normal(0, 0.003, onehot.shape).astype(np.float32)
+    hyp[::2, :, 50:57] += 0.1 * onehot[::2, :, 50:57]
+    np.save(tmp_path / "hyp.npy", hyp)
+    np.save(tmp_path / "ohe.npy", onehot)
+    return tmp_path / "hyp.npy", tmp_path / "ohe.npy"
+
+
+def _modisco_h5(path, cores):
+    """A TF-MoDISco results file with a positive pattern for each core."""
+    import numpy as np
+
+    h5py = pytest.importorskip("h5py")
+    with h5py.File(path, "w") as f:
+        pos = f.create_group("pos_patterns")
+        for k, (core, n) in enumerate(cores):
+            g = pos.create_group(f"pattern_{k}")
+            contrib = np.full((len(core) + 6, 4), 0.001)
+            seq = np.full((len(core) + 6, 4), 0.25)
+            for i, c in enumerate(core):
+                contrib[3 + i, "ACGT".index(c)] = 1.0
+                seq[3 + i] = 0.02
+                seq[3 + i, "ACGT".index(c)] = 0.94
+            g.create_dataset("contrib_scores", data=contrib)
+            g.create_dataset("hypothetical_contribs", data=contrib)
+            g.create_dataset("sequence", data=seq)
+            g.create_group("seqlets").create_dataset("n_seqlets", data=np.array([n]))
+    return path
+
+
+def test_contribution_commands(tmp_path, contrib_files):
+    hyp, ohe = contrib_files
+    run("seqlets", hyp, "-s", ohe, "--sign", "positive", "-o", tmp_path / "seqlets.tsv")
+    seqlets = table(tmp_path / "seqlets.tsv")
+    assert seqlets.height >= 140 and set(seqlets["sign"]) == {"+"}
+    assert (seqlets.filter(pl.col("sequence_i") % 2 == 0).height) >= 140
+    run("contrib-motifs", hyp, "-s", ohe, "--seed", "1", "-o", tmp_path / "motifs.meme",
+        "--cwms", tmp_path / "cwms.txt", "--table", tmp_path / "motifs.tsv", "--thresholds",
+        tmp_path / "th.tsv", "--hits", tmp_path / "hits.tsv", "--patterns", tmp_path / "patterns.tsv",
+        "--html", tmp_path / "report.html")
+    motifs = um.read_meme(tmp_path / "motifs.meme")
+    assert [m.consensus for m in motifs] == ["TGACTCA"]
+    assert table(tmp_path / "motifs.tsv")["name"].to_list() == ["pos_1"]
+    assert "pos_1" in (tmp_path / "report.html").read_text()
+    hits = table(tmp_path / "hits.tsv")
+    # Thresholds at the 5% quantile of the sites leave a few of the 150 out.
+    assert hits.height >= 130 and set(hits["sequence_i"] % 2) == {0}
+    # The CWMs and thresholds written find the same hits again.
+    run("scan-contrib", "-m", tmp_path / "cwms.txt", hyp, "-s", ohe, "--thresholds", tmp_path / "th.tsv",
+        "-o", tmp_path / "again.tsv")
+    again = table(tmp_path / "again.tsv")
+    keys = ["motif", "sequence_i", "start", "strand"]
+    assert again.select(keys).sort(keys).equals(hits.select(keys).sort(keys))
+    # Naming against a database holding the site.
+    db = tmp_path / "db.meme"
+    um.write_meme([um.create_motif("TGACTCA", name="MA0099", altname="FOS::JUN")] + um.example_motifs(), db)
+    run("name", tmp_path / "motifs.meme", "--db", db, "--top", "1", "-q", "1", "-o", tmp_path / "names.tsv")
+    assert table(tmp_path / "names.tsv")["match"].to_list() == ["MA0099"]
+    assert run("name", tmp_path / "motifs.meme", ok=False)
+
+
+def test_modisco_and_combine(tmp_path):
+    pytest.importorskip("matplotlib")
+    a = _modisco_h5(tmp_path / "a.h5", [("TGACTCAT", 300), ("GATAAGG", 100)])
+    b = _modisco_h5(tmp_path / "b.h5", [("TGACTCAT", 200), ("CCAATCAG", 80)])
+    db = tmp_path / "db.meme"
+    um.write_meme([um.create_motif("TGACTCAT", name="MA0099", altname="FOS::JUN")], db)
+    run("modisco", a, "--db", db, "-q", "1", "-o", tmp_path / "report.png", "--html", tmp_path / "report.html")
+    assert (tmp_path / "report.png").stat().st_size > 0 and "FOS::JUN" in (tmp_path / "report.html").read_text()
+    assert run("modisco", a, ok=False)
+    run("combine", f"run1={a}", f"run2={b}", "--cwms", tmp_path / "cwms.txt", "--ppms", tmp_path / "ppms.meme",
+        "--patterns", tmp_path / "patterns.tsv", "--html", tmp_path / "comb.html", "-o", tmp_path / "clusters.tsv")
+    clusters = table(tmp_path / "clusters.tsv")
+    assert clusters["patterns"].to_list() == [2, 1, 1] and clusters["sources"][0] == "run1,run2"
+    assert len(um.read_matrix(tmp_path / "cwms.txt", type="CWM")) == 3
+    assert len(um.read_meme(tmp_path / "ppms.meme")) == 3
+    assert table(tmp_path / "patterns.tsv").height == 4
+    assert "run1 pos_0" in (tmp_path / "comb.html").read_text()
+
+
+def test_find_stability(tmp_path):
+    run("find", "-s", TARGETS, "-b", CONTROLS, "--stability", "2", "--nmotifs", "2", "--seed", "1",
+        "--table", tmp_path / "found.tsv", "-o", tmp_path / "found.meme")
+    found = table(tmp_path / "found.tsv")
+    assert "stability" in found.columns and found["stability"].is_between(0, 1).all()

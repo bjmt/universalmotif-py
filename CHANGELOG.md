@@ -74,6 +74,10 @@ New:
   those of TF-MoDISco, and with `html` also writes the report as an HTML
   page whose columns sort and whose rows open to show each pattern's CWMs,
   or a TF-MoDISco pattern's subpatterns.
+- New commands for sequence models: `seqlets`, `contrib-motifs`,
+  `scan-contrib`, `modisco` and `combine`, and `name` to name motifs by a
+  database. `find` takes `--stability`. The command line page lists the
+  commands by group, as `umotif --help` now does.
 - `combine_patterns()` combines the patterns of many TF-MoDISco runs or
   `contribution_motifs()` results into one set. It clusters their CWMs by
   cosine, averages each cluster weighted by seqlets, records the sources

@@ -24,15 +24,18 @@ def _help(parser: argparse.ArgumentParser) -> str:
 def on_page_markdown(markdown, page, config, files):
     if _MARKER not in markdown:
         return markdown
-    from universalmotif._cli import build_parser
+    from universalmotif._cli import COMMAND_GROUPS, build_parser
 
     parser = build_parser("umotif")
     sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
-    parts = []
-    for name, p in sub.choices.items():
-        parts.append(f"### {name}\n\n```text\n{_help(p)}```\n")
-        nested = [a for a in p._actions if isinstance(a, argparse._SubParsersAction)]
-        for action in nested:
-            for inner_name, inner in action.choices.items():
-                parts.append(f"#### {name} {inner_name}\n\n```text\n{_help(inner)}```\n")
+    parts = [f"### umotif\n\n```text\n{_help(parser)}```\n"]
+    for group, names in COMMAND_GROUPS:
+        parts.append(f"### {group}\n")
+        for name in names:
+            p = sub.choices[name]
+            parts.append(f"#### {name}\n\n```text\n{_help(p)}```\n")
+            nested = [a for a in p._actions if isinstance(a, argparse._SubParsersAction)]
+            for action in nested:
+                for inner_name, inner in action.choices.items():
+                    parts.append(f"##### {name} {inner_name}\n\n```text\n{_help(inner)}```\n")
     return markdown.replace(_MARKER, "\n".join(parts))

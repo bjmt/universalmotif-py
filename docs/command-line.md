@@ -13,6 +13,12 @@ umotif scan --help
 
 ## Commands
 
+The commands fall into six groups.
+
+### Motifs
+
+Reading, curating and comparing motifs.
+
 | Command | What it does | Python function |
 | --- | --- | --- |
 | `convert` | Convert motifs between formats and types, or reverse complement them. | [`convert_type()`][universalmotif.convert_type], [`motif_rc()`][universalmotif.motif_rc], [`switch_alph()`][universalmotif.switch_alph] |
@@ -23,21 +29,62 @@ umotif scan --help
 | `trim` | Trim low-information positions from motif edges. | [`trim_motifs()`][universalmotif.trim_motifs] |
 | `merge` | Merge similar motifs, or all of them into one. | [`merge_similar()`][universalmotif.merge_similar], [`merge_motifs()`][universalmotif.merge_motifs] |
 | `tree` | Cluster motifs into a tree, written as Newick, or cut it into clusters. | [`motif_tree()`][universalmotif.motif_tree] |
+| `compare` | Compare motifs with each other or with a database. | [`compare_motifs()`][universalmotif.compare_motifs] |
+| `name` | Name motifs by the database motifs they resemble most, scored over the whole of each motif as TOMTOM does. | [`name_motifs()`][universalmotif.name_motifs] |
+
+### Drawing
+
+Figures of motifs.
+
+| Command | What it does | Python function |
+| --- | --- | --- |
 | `logo` | Draw logos, in one aligned figure or one file per motif. | [`view_motifs()`][universalmotif.view_motifs], [`logo_svg()`][universalmotif.logo_svg] |
 | `heatmap` | Draw motif similarities as a clustered heatmap, optionally with the tree cut at a score. | [`plot_comparison()`][universalmotif.plot_comparison] |
+
+### Sequences
+
+Getting sequences and backgrounds ready.
+
+| Command | What it does | Python function |
+| --- | --- | --- |
+| `extract` | Write the sequences of genomic ranges as FASTA. | [`extract_ranges()`][universalmotif.extract_ranges] |
+| `shuffle` | Shuffle sequences, keeping their k-mer counts. | [`shuffle_sequences()`][universalmotif.shuffle_sequences] |
+| `bkg` | Draw background sequences matched to targets on GC content, length and bigWig signal. | [`match_bkg()`][universalmotif.match_bkg] |
+
+### Scanning and testing
+
+Finding motif sites in sequences and testing them.
+
+| Command | What it does | Python function |
+| --- | --- | --- |
 | `scan` | Scan sequences, whole genomes or genomic ranges for motif hits. | [`scan_sequences()`][universalmotif.scan_sequences] |
-| `variants` | Score how the variants of a VCF file change motif sites in a genome. | [`variant_motif_effects()`][universalmotif.variant_motif_effects] |
-| `compare` | Compare motifs with each other or with a database. | [`compare_motifs()`][universalmotif.compare_motifs] |
 | `enrich` | Test motifs for enrichment in target sequences. | [`enrich_motifs()`][universalmotif.enrich_motifs] |
+| `posenr` | Test motifs for positional enrichment within sequences. | [`motif_peaks()`][universalmotif.motif_peaks] |
+| `coocc` | Test pairs of motifs for co-occurrence. | [`motif_coocc()`][universalmotif.motif_coocc] |
+| `proximity` | Test whether motif hits sit closer to genomic anchors than chance. | [`motif_proximity()`][universalmotif.motif_proximity] |
+| `matrix` | Make a peak by motif matrix of matches for single-cell ATAC analyses. | [`match_motifs()`][universalmotif.match_motifs] |
+| `variants` | Score how the variants of a VCF file change motif sites in a genome. | [`variant_motif_effects()`][universalmotif.variant_motif_effects] |
+
+### Discovery
+
+Finding new motifs in sequences.
+
+| Command | What it does | Python function |
+| --- | --- | --- |
 | `find` | Discover motifs *de novo*. | [`motif_finder()`][universalmotif.motif_finder] |
 | `find-gapped` | Discover gapped motifs *de novo*: two parts with a spacer of varying length (experimental). | [`gapped_motif_finder()`][universalmotif.gapped_motif_finder] |
-| `shuffle` | Shuffle sequences, keeping their k-mer counts. | [`shuffle_sequences()`][universalmotif.shuffle_sequences] |
-| `extract` | Write the sequences of genomic ranges as FASTA. | [`extract_ranges()`][universalmotif.extract_ranges] |
-| `bkg` | Draw background sequences matched to targets on GC content, length and bigWig signal. | [`match_bkg()`][universalmotif.match_bkg] |
-| `matrix` | Make a peak by motif matrix of matches for single-cell ATAC analyses. | [`match_motifs()`][universalmotif.match_motifs] |
-| `proximity` | Test whether motif hits sit closer to genomic anchors than chance. | [`motif_proximity()`][universalmotif.motif_proximity] |
-| `coocc` | Test pairs of motifs for co-occurrence. | [`motif_coocc()`][universalmotif.motif_coocc] |
-| `posenr` | Test motifs for positional enrichment within sequences. | [`motif_peaks()`][universalmotif.motif_peaks] |
+
+### Contribution scores
+
+Finding the motifs a sequence model relies on, from its contribution scores or its TF-MoDISco results.
+
+| Command | What it does | Python function |
+| --- | --- | --- |
+| `seqlets` | Call seqlets, the short stretches of high contribution, in a model's contribution scores. | [`call_seqlets()`][universalmotif.call_seqlets] |
+| `contrib-motifs` | Find the motifs a model relies on, with their CWMs, hits and an HTML report. | [`contribution_motifs()`][universalmotif.contribution_motifs] |
+| `scan-contrib` | Find where a model used each motif, by matching CWMs against its contribution scores. | [`scan_contributions()`][universalmotif.scan_contributions], [`modisco_thresholds()`][universalmotif.modisco_thresholds] |
+| `modisco` | Draw TF-MoDISco results as a report, as a figure, an HTML page or both. | [`plot_modisco()`][universalmotif.plot_modisco] |
+| `combine` | Combine the patterns of several TF-MoDISco runs into one set of clusters. | [`combine_patterns()`][universalmotif.combine_patterns] |
 
 ## Inputs and outputs
 
@@ -57,6 +104,14 @@ A few conventions hold across the commands.
   compression cannot be read in pieces, so a gzipped genome must first be
   recompressed with `bgzip`, as described in [Scanning large
   genomes](guides/large-genomes.ipynb#leaving-the-genome-on-disk).
+- **Contribution scores** are the HDF5 files chromBPNet and ENCODE write,
+  numpy `.npy` or `.npz` files with their one-hot sequences given with `-s`,
+  or a bigWig track of observed scores read over ranges given with `-g` and
+  `-r`. Large HDF5 and `.npy` files are read a part at a time, and
+  `--centre` keeps only the middle of each sequence, such as 500 of a
+  model's 2,114 bases. CWMs are written as plain matrices, the one motif
+  format that keeps their values, and read back from those or from
+  TF-MoDISco results files.
 - **Ranges**, such as peaks, are given with `-r`. They can be BED files,
   including narrowPeak and broadPeak, or tab-separated tables with a header
   naming `chrom`, `start` and `end` or `width` columns. Positions count from
@@ -369,6 +424,32 @@ umotif matrix motifs.meme -g genome.fa.gz -r peaks.bed -o peak_by_motif.tsv
 <!-- output: positions.tsv 4 8 -->
 
 <!-- output: peak_by_motif.tsv 5 -->
+
+### Models' contribution scores
+
+These commands work on a sequence model's contribution scores, such as the
+files ENCODE publishes for its chromBPNet models, and on TF-MoDISco results.
+`contrib-motifs` finds the model's motifs and writes them with their CWMs,
+hit thresholds and an HTML report named by a database. `scan-contrib` then
+finds where the model used them, in the same scores or another model's:
+
+```sh
+umotif contrib-motifs seq_contrib.counts.fold_mean.h5 --centre 500 -p 8 \
+    -o motifs.meme --cwms cwms.txt --thresholds thresholds.tsv \
+    --html motifs.html --db JASPAR2024_CORE_vertebrates.meme
+umotif scan-contrib -m cwms.txt seq_contrib.counts.fold_mean.h5 --centre 500 \
+    --thresholds thresholds.tsv -p 8 -o hits.tsv
+```
+
+`modisco` draws a TF-MoDISco results file as a report, and `combine`
+gathers the patterns of several runs into one set:
+
+```sh
+umotif modisco modisco_results.h5 --db JASPAR2024_CORE_vertebrates.meme \
+    -o modisco.png --html modisco.html
+umotif combine K562=k562_modisco.h5 HepG2=hepg2_modisco.h5 \
+    --db JASPAR2024_CORE_vertebrates.meme --html combined.html -o clusters.tsv
+```
 
 ## Reference
 

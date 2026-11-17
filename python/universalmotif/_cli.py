@@ -729,7 +729,8 @@ def cmd_find(a):
     res = um.motif_finder(targets, bkg, min_width=a.min_width, max_width=a.max_width,
                           nmotifs=a.nmotifs, hit_pvalue=a.hit_pvalue, stop_pvalue=a.stop_pvalue,
                           qvalue=a.qvalue, rc=a.rc, shuffle_k=a.shuffle_k, bkg_shuffles=a.bkg_shuffles,
-                          seed=a.seed, nthreads=a.threads)
+                          stability=a.stability, stability_fraction=a.stability_fraction, seed=a.seed,
+                          nthreads=a.threads)
     if a.table:
         write_table(res, a.table)
     if res.height == 0:
@@ -947,6 +948,265 @@ def cmd_posenr(a):
     write_table(res, a.output)
 
 
+# Contribution scores ---------------------------------------------------------
+
+_MODISCO_SUFFIXES = (".h5", ".hdf5", ".hd5")
+_BIGWIG_SUFFIXES = (".bw", ".bigwig")
+
+
+class _Scores:
+    """Contribution scores read for a command: the observed score of each
+    letter present, the hypothetical scores of every letter when the file
+    has them, and the sequences by name."""
+
+    def __init__(self, observed, hypothetical, sequences):
+        self.observed = observed
+        self.hypothetical = hypothetical
+        self.sequences = sequences
+
+
+def _read_scores(a, path: str, sequences: str | None = None) -> _Scores:
+    """Scores from a chromBPNet or ENCODE HDF5 file, numpy files, or a
+    bigWig track read over ranges of a genome."""
+    import numpy as np
+
+    import universalmotif as um
+
+    if not Path(path).exists():
+        raise CliError(f"no such file: {path}")
+    if _stem_suffix(path) in _BIGWIG_SUFFIXES:
+        if not (a.genome and a.ranges):
+            raise CliError("scores from a bigWig track need the genome and ranges to read, with -g and -r")
+        ranges = read_ranges(a.ranges)
+        seqs = um.extract_ranges(open_genome(a.genome), ranges, nthreads=a.threads)
+        rows = list(ranges.select("chrom", "start", "end").iter_rows())
+        values = [um.signal_values(path, c, s, e) for c, s, e in rows]
+        if len({len(v) for v in values}) != 1:
+            raise CliError("the ranges differ in width; resize them to one width first")
+        observed = np.asarray(values, dtype=np.float32)
+        return _Scores(_centre(a, observed), None, _centre_seqs(a, seqs))
+    seq_arg = None
+    if sequences:
+        if not Path(sequences).exists():
+            raise CliError(f"no such file: {sequences}")
+        seq_arg = (list(read_sequences(sequences).values())
+                   if _stem_suffix(sequences) in (".fa", ".fasta", ".fna") else sequences)
+    # Large files are read a chunk of sequences at a time, each cut to
+    # --centre before the next is read, so that the whole file is never held.
+    n = _n_regions(path)
+    chunks = [None] if n is None else [range(lo, min(lo + _READ_CHUNK, n)) for lo in range(0, n, _READ_CHUNK)]
+    hyps, seqs = [], {}
+    for idx in chunks:
+        c = um.read_contributions(path, sequences=seq_arg, regions=getattr(a, "regions", None), indices=idx)
+        hyp = np.asarray(c.scores, dtype=np.float32)
+        if hyp.shape[1] != 4:
+            hyp = hyp.transpose(0, 2, 1)
+        hyps.append(_centre(a, hyp))
+        seqs.update(_centre_seqs(a, dict(zip(c.names, c.sequences))))
+    hyp = np.concatenate(hyps) if len(hyps) > 1 else hyps[0]
+    observed = (hyp * um.one_hot(list(seqs.values()))).sum(axis=1)
+    return _Scores(observed, hyp, seqs)
+
+
+_READ_CHUNK = 20000
+
+
+def _n_regions(path: str) -> int | None:
+    """The number of sequences in an HDF5 or .npy scores file, read a chunk
+    at a time, or None for a file read whole."""
+    import numpy as np
+
+    if _stem_suffix(path) in (".h5", ".hdf5"):
+        import h5py
+
+        try:
+            import hdf5plugin  # noqa: F401
+        except ImportError:
+            pass
+        with h5py.File(path, "r") as f:
+            for key in ("hyp_scores", "shap/seq"):
+                if key in f:
+                    return int(f[key].shape[0])
+        return None
+    if _stem_suffix(path) == ".npy":
+        return int(np.load(path, mmap_mode="r").shape[0])
+    return None
+
+
+def _centre(a, x):
+    width = getattr(a, "centre", None)
+    if not width or width >= x.shape[-1]:
+        return x
+    lo = (x.shape[-1] - width) // 2
+    return x[..., lo:lo + width]
+
+
+def _centre_seqs(a, seqs: dict[str, str]) -> dict[str, str]:
+    width = getattr(a, "centre", None)
+    if not width:
+        return seqs
+    out = {}
+    for name, s in seqs.items():
+        lo = max((len(s) - width) // 2, 0)
+        out[name] = s[lo:lo + width]
+    return out
+
+
+def _named_paths(values: list[str], what: str) -> dict[str, str]:
+    """NAME=PATH arguments, or paths named by their file names."""
+    out = {}
+    for i, v in enumerate(values):
+        name, sep, path = v.partition("=")
+        if not sep:
+            name, path = (Path(v).name.split(".")[0] or f"{what}{i + 1}"), v
+        if name in out:
+            raise CliError(f"the {what} name {name!r} is used twice; name them with NAME=PATH")
+        if not Path(path).exists():
+            raise CliError(f"no such file: {path}")
+        out[name] = path
+    return out
+
+
+def read_cwms(paths: list[str], trim_threshold: float | None = 0.3) -> list:
+    """CWMs from TF-MoDISco results files or plain matrix files."""
+    import universalmotif as um
+
+    out = []
+    for path in paths:
+        if not Path(path).exists():
+            raise CliError(f"no such file: {path}")
+        if _stem_suffix(path) in _MODISCO_SUFFIXES:
+            out += um.read_modisco(path, type="CWM", trim_threshold=trim_threshold)
+        else:
+            out += um.read_matrix(path, type="CWM")
+    if not out:
+        raise CliError("no CWMs were read")
+    return out
+
+
+def write_cwms(cwms: list, path: str) -> None:
+    """CWMs as plain matrices, the one format that keeps their values."""
+    write_motifs(cwms, path, "matrix")
+
+
+def _database(a) -> list | None:
+    return read_motifs(a.db, a.db_format) if getattr(a, "db", None) else None
+
+
+def cmd_seqlets(a):
+    import universalmotif as um
+
+    sc = _read_scores(a, a.scores, a.sequences)
+    null = _read_scores(a, a.null_scores, a.null_sequences).observed if a.null_scores else None
+    res = um.call_seqlets(sc.observed, sc.sequences, null_scores=null, threshold=a.threshold,
+                          min_len=a.min_len, max_len=a.max_len, flank=a.flank, fdr=a.fdr, sign=a.sign,
+                          seed=a.seed, nthreads=a.threads)
+    write_table(res, a.output)
+
+
+def cmd_contrib_motifs(a):
+    import universalmotif as um
+
+    sc = _read_scores(a, a.scores, a.sequences)
+    null = _read_scores(a, a.null_scores, a.null_sequences).observed if a.null_scores else None
+    seqlets = read_table(a.seqlets) if a.seqlets else None
+    hyp = sc.hypothetical if a.idealize else None
+    found = um.contribution_motifs(
+        sc.observed, sc.sequences, hypothetical=hyp, seqlets=seqlets, null_scores=null, sign=a.sign,
+        min_width=a.min_width, max_width=a.max_width, nmotifs=a.nmotifs, refine=a.refine, min_gain=a.min_gain,
+        max_similarity=a.max_similarity, stability=a.stability, rounds=a.rounds, gapped=a.gapped,
+        max_gap=a.max_gap, hits=a.hits_out is not None, hit_quantile=a.hit_quantile,
+        pattern_similarity=a.pattern_similarity, seed=a.seed, nthreads=a.threads)
+    if not found.motifs.height:
+        print("no motifs were found", file=sys.stderr)
+        return
+    if a.table:
+        write_table(found.motifs, a.table)
+    if a.patterns:
+        write_table(found.patterns, a.patterns)
+    if a.seqlets_out:
+        write_table(found.seqlets, a.seqlets_out)
+    if a.hits_out:
+        write_table(found.hits, a.hits_out)
+    if a.thresholds:
+        write_table(found.thresholds, a.thresholds)
+    if a.cwms:
+        write_cwms(found.cwms, a.cwms)
+    if a.html:
+        found.report(a.html, database=_database(a), nthreads=a.threads)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", ".* format cannot preserve gap definitions")
+        write_motifs(found.ppms, a.output, a.to)
+
+
+def cmd_scan_contrib(a):
+    import universalmotif as um
+
+    cwms = read_cwms(a.cwms, a.trim_threshold)
+    sc = _read_scores(a, a.scores, a.sequences)
+    kw = {}
+    if a.thresholds:
+        if _stem_suffix(a.thresholds) in _MODISCO_SUFFIXES:
+            kw["thresholds"] = um.modisco_thresholds(a.thresholds, trim_threshold=a.trim_threshold)
+        else:
+            kw["thresholds"] = read_table(a.thresholds)
+    else:
+        kw.update(min_similarity=a.min_similarity, min_importance=a.min_importance)
+    hits = um.scan_contributions(cwms, sc.observed, sequences=sc.sequences, rc=a.rc, normalize=a.normalize,
+                                 no_overlaps=a.no_overlaps, no_overlaps_across_motifs=a.across_motifs,
+                                 nthreads=a.threads, **kw)
+    write_table(hits, a.output)
+
+
+def cmd_modisco(a):
+    import universalmotif as um
+
+    if not Path(a.modisco).exists():
+        raise CliError(f"no such file: {a.modisco}")
+    if not (a.output or a.html):
+        raise CliError("give a file for the figure with -o, or for the HTML page with --html")
+    patterns = None
+    if a.patterns:
+        patterns = a.patterns[0] if len(a.patterns) == 1 else (a.patterns[0], a.patterns[1])
+    fig = um.plot_modisco(a.modisco, database=_database(a), patterns=patterns, n_matches=a.n_matches,
+                          qvalue=a.qvalue, trim_threshold=a.trim_threshold, html=a.html, title=a.title,
+                          nthreads=a.threads)
+    if a.output:
+        fig.savefig(a.output, dpi=a.dpi, bbox_inches="tight")
+
+
+def cmd_combine(a):
+    import universalmotif as um
+
+    sources = _named_paths(a.sources, "source")
+    combined = um.combine_patterns(sources, similarity=a.similarity, linkage=a.linkage,
+                                   trim_threshold=a.trim_threshold, database=_database(a), qvalue=a.qvalue,
+                                   nthreads=a.threads)
+    write_table(combined.clusters, a.output)
+    if a.patterns:
+        write_table(combined.patterns, a.patterns)
+    if a.cwms:
+        write_cwms(combined.cwms, a.cwms)
+    if a.ppms:
+        ppms = [m for m in combined.ppms if m is not None]
+        if len(ppms) < len(combined.ppms):
+            print("warning: some clusters have no PPM, as their patterns came without one", file=sys.stderr)
+        write_motifs(ppms, a.ppms, None)
+    if a.html:
+        combined.report(a.html, database=_database(a), qvalue=a.qvalue, nthreads=a.threads)
+
+
+def cmd_name(a):
+    import universalmotif as um
+
+    if not a.db:
+        raise CliError("give the database motifs to name the motifs by with --db")
+    motifs = read_motifs(a.motifs, a.format)
+    db = read_motifs(a.db, a.db_format)
+    res = um.name_motifs(motifs, db, top=a.top, qvalue=a.qvalue, nthreads=a.threads)
+    write_table(res, a.output)
+
+
 # The parser -----------------------------------------------------------------
 
 
@@ -958,12 +1218,24 @@ def _add_target_args(p: argparse.ArgumentParser, what: str, genome_help: str | N
                                           "with -g")
 
 
+# The commands by what they work on, in the order --help and the
+# documentation list them.
+COMMAND_GROUPS = (
+    ("Motifs", ("convert", "fetch", "create", "summary", "filter", "trim", "merge", "tree", "compare", "name")),
+    ("Drawing", ("logo", "heatmap")),
+    ("Sequences", ("extract", "shuffle", "bkg")),
+    ("Scanning and testing", ("scan", "enrich", "posenr", "coocc", "proximity", "matrix", "variants")),
+    ("Discovery", ("find", "find-gapped")),
+    ("Contribution scores", ("seqlets", "contrib-motifs", "scan-contrib", "modisco", "combine")),
+)
+
+
 class _formatter(argparse.HelpFormatter):
     def __init__(self, prog: str) -> None:
         super().__init__(prog, max_help_position=32)
         # Leave room for the longest subcommand name. It is not measured
         # when the subcommands are added.
-        self._action_max_length = 15
+        self._action_max_length = 19
 
 
 def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
@@ -973,7 +1245,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
         prog=prog,
         formatter_class=_formatter,
         description="Work with sequence motifs from the command line: convert, fetch and curate "
-                    "motifs, scan and test sequences, and draw logos.",
+                    "motifs, scan and test sequences, discover motifs, find the motifs of sequence "
+                    "models, and draw logos.",
     )
     parser.add_argument("--version", action="version", version=f"universalmotif {__version__}")
     parser.add_argument("--debug", action="store_true",
@@ -1318,6 +1591,11 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="k-mer size kept when shuffling targets for a background (default: 2)")
     p.add_argument("--bkg-shuffles", type=int, default=3,
                    help="shuffles of the targets making up the background, without --bkg (default: 3)")
+    p.add_argument("--stability", type=int, default=0,
+                   help="rerun the search this many times on random subsets of the targets, and report "
+                        "in the table how often each motif is found again (default: 0, no reruns)")
+    p.add_argument("--stability-fraction", type=float, default=0.5,
+                   help="share of the targets in each rerun (default: 0.5)")
     _seed_arg(p)
     _progress_arg(p)
     _threads_arg(p)
@@ -1510,6 +1788,190 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="include the centres of the hits used for each motif")
     _threads_arg(p)
 
+    # Contribution scores
+    def score_args(p, what="scores"):
+        p.add_argument("scores", help="contribution scores: an HDF5 file from chromBPNet or ENCODE, numpy "
+                                      ".npy or .npz files, or a bigWig track of observed scores read over "
+                                      "the ranges given with -g and -r")
+        p.add_argument("-s", "--sequences",
+                       help="the one-hot sequences of numpy scores (.npy or .npz), or a FASTA file of them")
+        p.add_argument("-g", "--genome", help="genome to read the ranges of a bigWig track from, with -r")
+        p.add_argument("-r", "--ranges", help="BED file or table of ranges, all of one width, for a "
+                                              "bigWig track")
+        p.add_argument("--regions", help="narrowPeak file of the regions of a chromBPNet scores file, if "
+                                         "it has no interpreted_regions.bed beside it")
+        p.add_argument("--centre", type=int,
+                       help="keep only this many positions in the middle of each sequence, such as 500 "
+                            "of a model's 2,114")
+
+    def null_args(p):
+        p.add_argument("--null-scores",
+                       help="scores of sequences with nothing to find, such as the model's for shuffled "
+                            "sequences, in the same form as the scores (default: the scores shuffled)")
+        p.add_argument("--null-sequences", help="the one-hot sequences of numpy --null-scores")
+
+    def db_args(p, why):
+        p.add_argument("--db", nargs="+", help=f"motif files, such as JASPAR's, {why}")
+        p.add_argument("--db-format", choices=_MOTIF_FORMATS, metavar="FORMAT", help="format of the --db files")
+
+    p = command("seqlets", cmd_seqlets, "call seqlets in a model's contribution scores",
+                "Call seqlets, the short stretches of high contribution, in a sequence model's contribution "
+                "scores, and write them as a table.")
+    score_args(p)
+    null_args(p)
+    _out_arg(p, "the seqlets")
+    p.add_argument("--sign", choices=("both", "positive", "negative"), default="both",
+                   help="seqlets of positive or negative contribution, or both (default: both)")
+    p.add_argument("--threshold", type=float, default=0.01,
+                   help="P-value every stretch inside a seqlet must reach (default: 0.01)")
+    p.add_argument("--min-len", type=int, default=4, help="shortest seqlet, before flanks (default: 4)")
+    p.add_argument("--max-len", type=int, default=25, help="longest seqlet, before flanks (default: 25)")
+    p.add_argument("--flank", type=int, default=3, help="positions added on either side (default: 3)")
+    p.add_argument("--fdr", type=float, default=0.2,
+                   help="largest share of the null scores' seqlets among those kept (default: 0.2)")
+    _seed_arg(p)
+    _threads_arg(p)
+
+    p = command("contrib-motifs", cmd_contrib_motifs, "find the motifs a model relies on",
+                "Find the motifs a sequence model relies on from its contribution scores: call seqlets, "
+                "search them for motifs, refine and choose the motifs, and match their CWMs against the "
+                "scores. The motifs are written as PPMs with -o, and the other results with the options "
+                "naming files for them. CWMs are written as plain matrices, the one format that keeps "
+                "their values.")
+    score_args(p)
+    null_args(p)
+    _motif_out_args(p)
+    p.add_argument("--cwms", help="also write the motifs' CWMs, as plain matrices")
+    p.add_argument("--table", help="also write a table of the motifs")
+    p.add_argument("--patterns", help="also write a table of the patterns")
+    p.add_argument("--seqlets-out", metavar="FILE", help="also write the seqlets")
+    p.add_argument("--hits", dest="hits_out", metavar="FILE",
+                   help="also scan all the scores for hits of the CWMs, and write them")
+    p.add_argument("--thresholds", help="also write each motif's hit thresholds")
+    p.add_argument("--html", help="also write the patterns as an HTML report")
+    db_args(p, "to name the patterns by in the report")
+    p.add_argument("--seqlets", help="table of seqlets to use instead of calling them, as from the "
+                                     "seqlets command")
+    p.add_argument("--sign", choices=("positive", "negative", "both"), default="positive",
+                   help="seqlets to search (default: positive)")
+    p.add_argument("--no-idealize", dest="idealize", action="store_false",
+                   help="leave out the search on seqlets rewritten in the letters the model prefers, "
+                        "which needs hypothetical scores")
+    p.add_argument("--min-width", type=int, default=6, help="smallest motif width (default: 6)")
+    p.add_argument("--max-width", type=int, default=15, help="largest motif width (default: 15)")
+    p.add_argument("--nmotifs", type=int, default=60, help="most motifs per search (default: 60)")
+    p.add_argument("--no-refine", dest="refine", action="store_false",
+                   help="keep the motifs as found, without rebuilding them from their hits")
+    p.add_argument("--min-gain", type=float, default=0.0025,
+                   help="least share of the seqlets a motif must add to be kept (default: 0.0025)")
+    p.add_argument("--max-similarity", type=float, default=0.9,
+                   help="most a motif's CWM may resemble one kept before it, by cosine (default: 0.9)")
+    p.add_argument("--stability", type=int, default=0,
+                   help="rerun each search this many times on halves of the seqlets, keeping motifs "
+                        "found in most (default: 0, no reruns)")
+    p.add_argument("--rounds", type=int, default=2,
+                   help="searches, each of the seqlets the motifs so far leave unreached (default: 2)")
+    p.add_argument("--no-gapped", dest="gapped", action="store_false",
+                   help="leave out the search for composite motifs of two parts")
+    p.add_argument("--max-gap", type=int, default=12, help="longest spacer of a composite (default: 12)")
+    p.add_argument("--hit-quantile", type=float, default=0.05,
+                   help="quantile of each motif's hits in the seqlets that sets its hit thresholds "
+                        "(default: 0.05)")
+    p.add_argument("--pattern-similarity", type=float, default=0.8,
+                   help="CWM cosine at which motifs are gathered into one pattern (default: 0.8)")
+    _seed_arg(p)
+    _threads_arg(p)
+
+    p = command("scan-contrib", cmd_scan_contrib, "find where a model used each motif",
+                "Match CWMs against a model's contribution scores, and write the windows that pass "
+                "the thresholds as hits. CWMs come from TF-MoDISco results files or plain matrix "
+                "files, such as those of contrib-motifs --cwms, each given with -m.")
+    p.add_argument("-m", "--cwms", action="append", required=True, metavar="FILE",
+                   help="a TF-MoDISco results file (.h5) or plain matrix file of CWMs; give it once "
+                        "for each file")
+    score_args(p)
+    _out_arg(p, "the hits")
+    p.add_argument("--thresholds",
+                   help="a TF-MoDISco results file to set each pattern's thresholds from its seqlets, or "
+                        "a table with motif, min_similarity and min_importance columns, as from "
+                        "contrib-motifs --thresholds")
+    p.add_argument("--min-similarity", type=float, default=0.7,
+                   help="least cosine between a window's scores and the CWM, without --thresholds "
+                        "(default: 0.7)")
+    p.add_argument("--min-importance", type=float, default=0.5,
+                   help="least importance of a window, as a share of the CWM's, without --thresholds "
+                        "(default: 0.5)")
+    p.add_argument("--trim-threshold", type=float, default=0.3,
+                   help="trim TF-MoDISco patterns to the columns holding this share of the largest "
+                        "(default: 0.3)")
+    p.add_argument("--normalize", action="store_true",
+                   help="scale up the scores of weakly scored sequences to the median before matching")
+    p.add_argument("--keep-overlaps", dest="no_overlaps", action="store_false",
+                   help="keep overlapping hits of each motif, rather than only the best of them")
+    p.add_argument("--across-motifs", action="store_true",
+                   help="keep only the best of overlapping hits of different motifs too")
+    p.add_argument("--no-rc", dest="rc", action="store_false", help="match only the forward strand")
+    _threads_arg(p)
+
+    p = command("modisco", cmd_modisco, "draw TF-MoDISco results as a report",
+                "Draw the patterns of a TF-MoDISco results file as a report, one row per pattern, with "
+                "their seqlets, CWM, letters and closest database motifs. It is written as a figure "
+                "with -o, as an HTML page with --html, or both.")
+    p.add_argument("modisco", help="TF-MoDISco results file (.h5)")
+    p.add_argument("-o", "--output", help="file for the figure (PNG, PDF or SVG)")
+    p.add_argument("--html", help="file for the report as an HTML page")
+    db_args(p, "to name the patterns by")
+    p.add_argument("--patterns", type=int, nargs="+", metavar="N",
+                   help="draw only the first N patterns of each sign, or N_POS N_NEG")
+    p.add_argument("--n-matches", type=int, default=3, help="database matches per pattern (default: 3)")
+    p.add_argument("-q", "--qvalue", type=float, default=0.05,
+                   help="largest q-value of a database match (default: 0.05)")
+    p.add_argument("--trim-threshold", type=float, default=0.3,
+                   help="trim patterns to the columns holding this share of the largest (default: 0.3)")
+    p.add_argument("--title", help="title of the HTML page")
+    p.add_argument("--dpi", type=int, default=150, help="resolution of PNG files (default: 150)")
+    _threads_arg(p)
+
+    p = command("combine", cmd_combine, "combine the patterns of many TF-MoDISco runs",
+                "Combine the patterns of several TF-MoDISco results files into one set, clustering "
+                "their CWMs and averaging each cluster. A table of the clusters is written with -o, "
+                "and their motifs, patterns and report with the options naming files for them.")
+    p.add_argument("sources", nargs="+", metavar="SOURCE",
+                   help="TF-MoDISco results files, each as NAME=PATH or a path named by its file name")
+    _out_arg(p, "the table of clusters")
+    p.add_argument("--patterns", help="also write a table of the patterns and their clusters")
+    p.add_argument("--cwms", help="also write the clusters' CWMs, as plain matrices")
+    p.add_argument("--ppms", help="also write the clusters' PPMs, in the format of the file's extension")
+    p.add_argument("--html", help="also write the clusters as an HTML report")
+    db_args(p, "to name the clusters by")
+    p.add_argument("--similarity", type=float, default=0.9,
+                   help="least CWM cosine for two patterns to share a cluster (default: 0.9)")
+    p.add_argument("--linkage", choices=("complete", "single"), default="complete",
+                   help="cluster linkage (default: complete)")
+    p.add_argument("--trim-threshold", type=float, default=0.2,
+                   help="trim patterns and averages to the columns holding this share of the largest "
+                        "(default: 0.2)")
+    p.add_argument("-q", "--qvalue", type=float, default=0.05,
+                   help="largest q-value of a database match (default: 0.05)")
+    _threads_arg(p)
+
+    p = command("name", cmd_name, "name motifs by the database motifs they resemble most",
+                "Name motifs by the database motifs they resemble most, scored over the whole of each "
+                "motif as TOMTOM does, with q-values corrected for the size of the database.")
+    _motif_args(p)
+    db_args(p, "to name the motifs by")
+    _out_arg(p)
+    p.add_argument("--top", type=int, default=3, help="matches per motif (default: 3)")
+    p.add_argument("-q", "--qvalue", type=float, default=0.05,
+                   help="largest q-value of a match (default: 0.05)")
+    _threads_arg(p)
+
+    # List the commands by group.
+    order = [name for _, names in COMMAND_GROUPS for name in names]
+    if set(order) != set(sub.choices) or len(order) != len(sub.choices):
+        raise RuntimeError("COMMAND_GROUPS must list every command once")
+    sub._choices_actions.sort(key=lambda action: order.index(action.dest))
+    sub.choices = {name: sub.choices[name] for name in order}
     return parser
 
 
