@@ -480,6 +480,13 @@ def variant_motif_effects(
         shifted by the change in length. The site's missing scores and
         P-values, and its ``delta``, are null.
 
+    References
+    ----------
+    - Coetzee SG, Coetzee GA, Hazelett DJ (2015). motifbreakR: an
+      R/Bioconductor package for predicting variant effects at transcription
+      factor binding sites. *Bioinformatics* 31(23):3847–3849.
+      <https://doi.org/10.1093/bioinformatics/btv470>
+
     Examples
     --------
     >>> import polars as pl

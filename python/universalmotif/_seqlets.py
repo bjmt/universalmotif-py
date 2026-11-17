@@ -145,6 +145,9 @@ def call_seqlets(
       S, Kundaje A (2018). Technical note on transcription factor motif
       discovery from importance scores (TF-MoDISco) version 0.5.6.5.
       arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
+    - Schreiber J (2026). Tangermeme: a toolkit for understanding
+      cis-regulatory logic using deep learning models. *Nature Methods*
+      23(11):2136–2140. <https://doi.org/10.1038/s41592-026-03254-z>
 
     Examples
     --------
