@@ -150,6 +150,9 @@ def test_report_and_names(model, tmp_path):
     assert "FOS::JUN" in page and "<svg" in page and ">Matches</th>" in page
     # Each pattern's motifs can be expanded to their CWMs.
     assert page.count("<details>") == found.patterns.height and "CWM" in page
+    # Each row has a button for its reverse complement, with every logo drawn both ways.
+    assert page.count('<button class="rc"') == found.patterns.height
+    assert page.count('<span class="fw">') == page.count('<span class="rv">') > 0
     # Without a database the report still lists the patterns, with no match columns.
     bare = found.report()
     assert bare.count("<tr>") == found.patterns.height + 1 and "Matches" not in bare

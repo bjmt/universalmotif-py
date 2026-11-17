@@ -47,6 +47,9 @@ Changes in behaviour:
 
 New:
 
+- Each row of the HTML report of `plot_modisco()` and
+  `ContributionMotifs.report()` has a button that shows its logos and
+  consensus as their reverse complements.
 - `variant_motif_effects()` takes a genome in place of a sequence, with
   variants given by chromosome and position, and reads only the letters
   around each one, so that a whole VCF file can be scored at once.

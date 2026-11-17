@@ -412,7 +412,8 @@ def plot_modisco(
     Positive and negative patterns are drawn under their own headings.
     With ``html``, the same report is also written as an HTML page, which
     [`ContributionMotifs.report()`][universalmotif.ContributionMotifs.report]
-    writes on its own.
+    writes on its own. Each row of the page has a button that shows its
+    logos and consensus as their reverse complements.
 
     ``modisco`` is the path of a TF-MoDISco results file. It is read with
     [`read_modisco()`][universalmotif.read_modisco] using
@@ -706,6 +707,8 @@ def _headings(use_type: str, n_cols: int) -> dict[str, str]:
     return head
 
 
+_IUPAC_COMPLEMENT = str.maketrans("ACGTURYKMSWBDHVNacgturykmswbdhvn", "TGCAAYRMKSWVHDBNtgcaayrmkswvhdbn")
+
 # How a motif of contribution_motifs() was found, when not in the seqlets as
 # they are.
 _SOURCES = {"idealized": "found in idealized seqlets", "gapped": "gapped composite"}
@@ -730,6 +733,13 @@ document.querySelectorAll("th.sort").forEach((th) => {
       return dir === "asc" ? x - y : y - x;
     });
     rows.forEach((r) => body.appendChild(r));
+  });
+});
+// Each row's button shows its logos and consensus as reverse complements.
+document.querySelectorAll("button.rc").forEach((b) => {
+  b.addEventListener("click", () => {
+    const on = b.closest("tr").classList.toggle("flip");
+    b.setAttribute("aria-pressed", on);
   });
 });
 </script>"""
@@ -760,6 +770,12 @@ th.sort[data-dir="desc"]::after { content: " \\2193"; color: var(--fg); }
 code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
 details summary { cursor: pointer; color: var(--muted); }
 .mem { display: flex; align-items: center; gap: 8px; white-space: nowrap; margin: 2px 0; }
+.rv { display: none; }
+tr.flip .fw { display: none; }
+tr.flip .rv { display: inline-block; }
+button.rc { font: inherit; font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--rule);
+            border-radius: 4px; padding: 0 5px; margin-left: 6px; cursor: pointer; vertical-align: 1px; }
+button.rc[aria-pressed="true"] { color: var(--fg); border-color: var(--fg); }
 </style></head><body><main>
 """
 
@@ -778,6 +794,16 @@ def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[st
                  else "TF-MoDISco patterns" if isinstance(modisco, (str, os.PathLike)) else "Patterns")
     esc = _html.escape
     head = _headings(use_type, n_cols)
+
+    def both(m, **kw) -> str:
+        # A logo as drawn and as its reverse complement, of which a row shows one.
+        return (f'<span class="fw">{logo_svg(m, **kw)}</span>'
+                f'<span class="rv">{logo_svg(motif_rc(m), **kw)}</span>')
+
+    def both_text(text: str) -> str:
+        return (f'<code class="fw">{esc(text)}</code>'
+                f'<code class="rv">{esc(text.translate(_IUPAC_COMPLEMENT)[::-1])}</code>')
+
     counted = [c for c in _COUNTS if c in columns]
     with_parts = any(p.members for p in pats)
     with_flags = any(p.flags is not None for p in pats)
@@ -797,7 +823,8 @@ def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[st
     for i, p in enumerate(pats):
         sign = {"pos": "positive", "neg": "negative"}.get(p.group, "")
         cells = [f'<td data-v="{i}"><b>{esc(p.label)}</b>'
-                 + (f"<br><code>{esc(p.consensus)}</code>" if p.consensus else "") + "</td>",
+                 + '<button class="rc" type="button" aria-pressed="false" title="Reverse complement">RC</button>'
+                 + (f"<br>{both_text(p.consensus)}" if p.consensus else "") + "</td>",
                  f'<td data-v="{"pos neg".find(p.group or "x")}">{sign}</td>']
         for c in counted:
             v = _count(p, c)
@@ -806,7 +833,7 @@ def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[st
                 text += f'<br><span class="m">{100 * p.share:.1f}%</span>'
             cells.append(f'<td class="n" data-v="{"" if v is None else v}">{text}</td>')
         for t in shown:
-            logo = logo_svg(p.motifs[t], use_type="CWM" if t != "PPM" else use_type, height=34, position_width=8)
+            logo = both(p.motifs[t], use_type="CWM" if t != "PPM" else use_type, height=34, position_width=8)
             cells.append(f"<td>{logo}</td>")
         if n_cols:
             if p.matches:
@@ -814,7 +841,7 @@ def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[st
                 for target, m, _, q, _ in p.matches:
                     ls = _match_lines(target, m, q)
                     label = f"<span><b>{esc(ls[0])}</b>" + "".join(f' <span class="m">{esc(x)}</span>' for x in ls[1:])
-                    logo = "" if m is None else logo_svg(m, use_type=use_type, height=18, position_width=6)
+                    logo = "" if m is None else both(m, use_type=use_type, height=18, position_width=6)
                     lines.append(label + "</span>" + (logo or "<span></span>"))
                 best = min((q for *_, q, _ in p.matches if q is not None), default="")
                 cells.append(f'<td data-v="{best}"><div class="mg">{"".join(lines)}</div></td>')
@@ -824,10 +851,10 @@ def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[st
             if p.members:
                 inner = "".join(
                     f'<div class="mem"><span><b>{esc(r["name"])}</b>'
-                    + (f' <code>{esc(r["consensus"])}</code>' if r.get("consensus") else "")
+                    + (f" {both_text(r['consensus'])}" if r.get("consensus") else "")
                     + f' <span class="m">{r["seqlets"]:,} seqlets'
                     + (f", {_SOURCES[r['source']]}" if r.get("source") in _SOURCES else "") + "</span></span>"
-                    + f'{logo_svg(r["cwm"], height=24, position_width=6)}</div>' for r in p.members)
+                    + f'{both(r["cwm"], height=24, position_width=6)}</div>' for r in p.members)
                 n = len(p.members)
                 cells.append(f'<td data-v="{n}"><details><summary>{n} CWM{"s" if n != 1 else ""}</summary>'
                              f"{inner}</details></td>")
