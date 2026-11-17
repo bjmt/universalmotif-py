@@ -452,7 +452,7 @@ def test_view_logo_sorting_and_min_height():
     stacks = {}
     for key, kw in (("input", {}), ("decreasing", {"sort_positions": True}),
                     ("increasing", {"sort_positions": True, "sort_positions_decreasing": False})):
-        ax = um.view_logo(m, letters=list("ACGT"), colour_scheme=_RGB, **kw)
+        ax = um.view_logo(m, letters=list("ACGT"), colour_scheme=_RGB, min_height=0.01, **kw)
         glyphs = _glyph_extents(ax, _RGB)
         # T is below min_height, so it is left out.
         assert {g[0] for g in glyphs} == {"A", "C", "G"}
@@ -460,6 +460,9 @@ def test_view_logo_sorting_and_min_height():
     assert stacks["input"] == ["A", "C", "G"]
     assert stacks["decreasing"] == ["C", "G", "A"]
     assert stacks["increasing"] == ["A", "G", "C"]
+    # By default every letter with any height is drawn.
+    ax = um.view_logo(m, letters=list("ACGT"), colour_scheme=_RGB)
+    assert {g[0] for g in _glyph_extents(ax, _RGB)} == {"A", "C", "G", "T"}
 
 
 def test_view_logo_multi_character_letters():

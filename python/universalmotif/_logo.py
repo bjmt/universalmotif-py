@@ -91,7 +91,7 @@ def position_glyphs(
     names: list[str],
     values: np.ndarray,
     position_id: int,
-    min_height: float = 0.01,
+    min_height: float = 0.0,
     x_spacer: float = 0.04,
     y_spacer: float = 0.01,
     sort_positions: bool = False,
@@ -125,7 +125,8 @@ def position_glyphs(
 
     if fit_to_height is None:
         fit_to_height = float(values.sum())
-    keep = values >= min_height
+    # Letters of no height are never drawn.
+    keep = (values >= min_height) & (values > 0)
     names = [n for n, b in zip(names, keep) if b]
     values = values[keep]
     if np.all(values == 0):
@@ -160,7 +161,7 @@ def position_glyphs(
 def matrix_glyphs(
     matrix: np.ndarray,
     rows: list[str],
-    min_height: float = 0.01,
+    min_height: float = 0.0,
     x_spacer: float = 0.04,
     y_spacer: float = 0.01,
     sort_positions: bool = False,
@@ -187,7 +188,7 @@ def motif_glyphs(
     matrix: np.ndarray,
     rows: list[str],
     use_type: str,
-    min_height: float = 0.01,
+    min_height: float = 0.0,
     x_spacer: float = 0.04,
     y_spacer: float = 0.01,
     sort_positions: bool = False,

@@ -82,7 +82,7 @@ def view_logo(
     letters: Sequence[str] | None = None,
     colour_scheme: Mapping[str, str] | None = None,
     fill: str = "black",
-    min_height: float = 0.01,
+    min_height: float = 0.0,
     x_spacer: float = 0.04,
     y_spacer: float = 0.01,
     sort_positions: bool = False,
@@ -111,7 +111,8 @@ def view_logo(
 
     The other options set the layout, and the axes are left bare.
 
-    - ``min_height``: letters shorter than this are left out.
+    - ``min_height``: letters shorter than this are left out. By default
+      every letter with any height is drawn.
     - ``x_spacer``, ``y_spacer``: the gaps between letters.
     - ``sort_positions``: stack each position's letters by height.
     - ``fit_to_height``: scale every position to this height.
@@ -485,7 +486,7 @@ def view_motifs(
     show_positions: bool = True,
     show_positions_once: bool = True,
     colour_scheme: Mapping[str, str] | None = None,
-    min_height: float = 0.01,
+    min_height: float = 0.0,
     x_spacer: float = 0.04,
     y_spacer: float = 0.01,
     sort_positions: bool | None = None,
