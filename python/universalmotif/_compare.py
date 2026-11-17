@@ -437,6 +437,16 @@ def name_motifs(
 
         Motifs with no match pass have no rows.
 
+    References
+    ----------
+    - Gupta S, Stamatoyannopoulos JA, Bailey TL, Noble WS (2007). Quantifying
+      similarity between motifs. *Genome Biology* 8(2):R24.
+      <https://doi.org/10.1186/gb-2007-8-2-r24>
+    - Benjamini Y, Hochberg Y (1995). Controlling the false discovery rate: a
+      practical and powerful approach to multiple testing. *Journal of the
+      Royal Statistical Society: Series B* 57(1):289–300.
+      <https://doi.org/10.1111/j.2517-6161.1995.tb02031.x>
+
     Examples
     --------
     >>> import universalmotif as um

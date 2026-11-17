@@ -813,6 +813,14 @@ def variant_batches(
     model's average over both strands, ``x[:, ::-1, ::-1]`` is the reverse
     complement of a batch ``x`` with the letters in ACGT order.
 
+    References
+    ----------
+    - Pampari A, Shcherbina A, Kvon EZ, Kosicki M, Nair S, Kundu S, Kathiria
+      AS, Risca VI, et al. (2024). ChromBPNet: bias factorized, base-resolution
+      deep learning models of chromatin accessibility reveal cis-regulatory
+      sequence syntax, transcription factor footprints and regulatory variants.
+      *bioRxiv* 2024.12.25.630221. <https://doi.org/10.1101/2024.12.25.630221>
+
     Examples
     --------
     >>> import polars as pl

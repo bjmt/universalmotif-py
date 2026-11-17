@@ -110,6 +110,13 @@ def plot_seqlets(
     matplotlib.figure.Figure
         A matplotlib figure.
 
+    References
+    ----------
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
+
     Examples
     --------
     >>> import matplotlib

@@ -207,6 +207,13 @@ def plot_spacing(
     matplotlib.figure.Figure | matplotlib.axes.Axes
         A matplotlib figure, or the axes drawn on when ``ax`` is given.
 
+    References
+    ----------
+    - Avsec Ž, Weilert M, Shrikumar A, Krueger S, Alexandari A, Dalal K, Fropf
+      R, McAnany C, et al. (2021). Base-resolution models of
+      transcription-factor binding reveal soft motif syntax. *Nature Genetics*
+      53(3):354–366. <https://doi.org/10.1038/s41588-021-00782-6>
+
     Examples
     --------
     A stand-in for a model scores the GC content of a sequence. It rewards
@@ -475,6 +482,13 @@ def plot_marginalization(
     -------
     matplotlib.figure.Figure | matplotlib.axes.Axes
         A matplotlib figure, or the axes drawn on when ``ax`` is given.
+
+    References
+    ----------
+    - Koo PK, Majdandzic A, Ploenzke M, Anand P, Paul SB (2021). Global
+      importance analysis: an interpretability method to quantify importance of
+      genomic features in deep neural networks. *PLOS Computational Biology*
+      17(5):e1008925. <https://doi.org/10.1371/journal.pcbi.1008925>
 
     Examples
     --------

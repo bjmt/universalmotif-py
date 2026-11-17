@@ -557,6 +557,17 @@ def shuffle_region(
     ``nthreads``, which defaults to the package setting from
     [`set_nthreads()`][universalmotif.set_nthreads].
 
+    References
+    ----------
+    - Altschul SF, Erickson BW (1985). Significance of nucleotide sequence
+      alignments: a method for random sequence permutation that preserves
+      dinucleotide and codon usage. *Molecular Biology and Evolution*
+      2(6):526–538. <https://doi.org/10.1093/oxfordjournals.molbev.a040370>
+    - Koo PK, Majdandzic A, Ploenzke M, Anand P, Paul SB (2021). Global
+      importance analysis: an interpretability method to quantify importance of
+      genomic features in deep neural networks. *PLOS Computational Biology*
+      17(5):e1008925. <https://doi.org/10.1371/journal.pcbi.1008925>
+
     Examples
     --------
     >>> import universalmotif as um

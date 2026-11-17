@@ -113,6 +113,12 @@ def from_filters(
     all-zero columns at either end are removed, such as the padding of
     [`to_filters()`][universalmotif.to_filters].
 
+    References
+    ----------
+    - Koo PK, Eddy SR (2019). Representation learning of genomic sequence
+      motifs with convolutional neural networks. *PLOS Computational Biology*
+      15(12):e1007560. <https://doi.org/10.1371/journal.pcbi.1007560>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -1055,6 +1061,17 @@ def idealize_sequences(
     Returns the sequences in the form given: a string, a list of strings or
     a mapping from names to strings.
 
+    References
+    ----------
+    - Shrikumar A, Greenside P, Kundaje A (2017). Learning important features
+      through propagating activation differences. *Proceedings of the 34th
+      International Conference on Machine Learning*, PMLR 70:3145–3153.
+      <https://proceedings.mlr.press/v70/shrikumar17a.html>
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
+
     Examples
     --------
     >>> import numpy as np
@@ -1124,6 +1141,12 @@ def mutagenesis(
     DNA sequence, so for long sequences ``region`` keeps it to the part of
     interest.
 
+    References
+    ----------
+    - Alipanahi B, Delong A, Weirauch MT, Frey BJ (2015). Predicting the
+      sequence specificities of DNA- and RNA-binding proteins by deep learning.
+      *Nature Biotechnology* 33(8):831–838. <https://doi.org/10.1038/nbt.3300>
+
     Examples
     --------
     >>> import universalmotif as um
@@ -1166,6 +1189,12 @@ def mutagenesis_effects(
     ``centre``, the mean effect at each position is subtracted. This is
     common before drawing the effects as attributions with
     [`view_attributions()`][universalmotif.view_attributions].
+
+    References
+    ----------
+    - Alipanahi B, Delong A, Weirauch MT, Frey BJ (2015). Predicting the
+      sequence specificities of DNA- and RNA-binding proteins by deep learning.
+      *Nature Biotechnology* 33(8):831–838. <https://doi.org/10.1038/nbt.3300>
 
     Examples
     --------
@@ -1277,6 +1306,17 @@ def insert_sites(
     tensor comes back as a tensor. A letter of a site outside
     ``alphabet``, such as N, leaves its column empty, as it would be after
     encoding the sequence.
+
+    References
+    ----------
+    - Koo PK, Majdandzic A, Ploenzke M, Anand P, Paul SB (2021). Global
+      importance analysis: an interpretability method to quantify importance of
+      genomic features in deep neural networks. *PLOS Computational Biology*
+      17(5):e1008925. <https://doi.org/10.1371/journal.pcbi.1008925>
+    - Avsec Ž, Weilert M, Shrikumar A, Krueger S, Alexandari A, Dalal K, Fropf
+      R, McAnany C, et al. (2021). Base-resolution models of
+      transcription-factor binding reveal soft motif syntax. *Nature Genetics*
+      53(3):354–366. <https://doi.org/10.1038/s41588-021-00782-6>
 
     Examples
     --------
@@ -1479,6 +1519,13 @@ def site_spacings(
     spacing's sequences are as large as the input. For many spacings of
     many one-hot sequences, it is best to predict one spacing at a time
     rather than to stack them.
+
+    References
+    ----------
+    - Avsec Ž, Weilert M, Shrikumar A, Krueger S, Alexandari A, Dalal K, Fropf
+      R, McAnany C, et al. (2021). Base-resolution models of
+      transcription-factor binding reveal soft motif syntax. *Nature Genetics*
+      53(3):354–366. <https://doi.org/10.1038/s41588-021-00782-6>
 
     Examples
     --------
@@ -1770,6 +1817,15 @@ def one_hot_batches(
     - Kent WJ, Zweig AS, Barber G, Hinrichs AS, Karolchik D (2010). BigWig and
       BigBed: enabling browsing of large distributed datasets. *Bioinformatics*
       26(17):2204–2207. <https://doi.org/10.1093/bioinformatics/btq351>
+    - Avsec Ž, Weilert M, Shrikumar A, Krueger S, Alexandari A, Dalal K, Fropf
+      R, McAnany C, et al. (2021). Base-resolution models of
+      transcription-factor binding reveal soft motif syntax. *Nature Genetics*
+      53(3):354–366. <https://doi.org/10.1038/s41588-021-00782-6>
+    - Pampari A, Shcherbina A, Kvon EZ, Kosicki M, Nair S, Kundu S, Kathiria
+      AS, Risca VI, et al. (2024). ChromBPNet: bias factorized, base-resolution
+      deep learning models of chromatin accessibility reveal cis-regulatory
+      sequence syntax, transcription factor footprints and regulatory variants.
+      *bioRxiv* 2024.12.25.630221. <https://doi.org/10.1101/2024.12.25.630221>
 
     Examples
     --------

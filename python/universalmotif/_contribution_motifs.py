@@ -629,6 +629,30 @@ def contribution_motifs(
         Its ``seqlets`` table holds the seqlets searched, and ``hits`` the
         hits of the CWMs as ``scan_contributions()`` gives them.
 
+    References
+    ----------
+    - Shrikumar A, Tian K, Avsec Ž, Shcherbina A, Banerjee A, Sharmin M, Nair
+      S, Kundaje A (2018). Technical note on transcription factor motif
+      discovery from importance scores (TF-MoDISco) version 0.5.6.5.
+      arXiv:1811.00416. <https://doi.org/10.48550/arXiv.1811.00416>
+    - Avsec Ž, Weilert M, Shrikumar A, Krueger S, Alexandari A, Dalal K, Fropf
+      R, McAnany C, et al. (2021). Base-resolution models of
+      transcription-factor binding reveal soft motif syntax. *Nature Genetics*
+      53(3):354–366. <https://doi.org/10.1038/s41588-021-00782-6>
+    - Bailey TL (2021). STREME: accurate and versatile sequence motif
+      discovery. *Bioinformatics* 37(18):2834–2840.
+      <https://doi.org/10.1093/bioinformatics/btab203>
+    - Pampari A, Shcherbina A, Kvon EZ, Kosicki M, Nair S, Kundu S, Kathiria
+      AS, Risca VI, et al. (2024). ChromBPNet: bias factorized, base-resolution
+      deep learning models of chromatin accessibility reveal cis-regulatory
+      sequence syntax, transcription factor footprints and regulatory variants.
+      *bioRxiv* 2024.12.25.630221. <https://doi.org/10.1101/2024.12.25.630221>
+    - Wadman IA, Osada H, Grütz GG, Agulnick AD, Westphal H, Forster A,
+      Rabbitts TH (1997). The LIM-only protein Lmo2 is a bridging molecule
+      assembling an erythroid, DNA-binding complex which includes the TAL1,
+      E47, GATA-1 and Ldb1/NLI proteins. *The EMBO Journal* 16(11):3145–3157.
+      <https://doi.org/10.1093/emboj/16.11.3145>
+
     Examples
     --------
     A model that relies on AP-1 sites, planted in half of 300 sequences:
