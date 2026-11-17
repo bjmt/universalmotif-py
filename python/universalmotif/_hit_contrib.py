@@ -412,8 +412,8 @@ def scan_contributions(
 
     - Its similarity, the cosine between its scores and the CWM, says
       whether the scores have the shape of the pattern.
-    - Its importance, the sum of its absolute scores, says whether the
-      model gave the window much weight at all.
+    - Its importance, the sum of its absolute scores as a fraction of the
+      CWM's, says whether the model gave the window much weight at all.
 
     Every motif is matched on its own, so motifs that share a site all have
     hits there.
@@ -553,7 +553,8 @@ def scan_contributions(
         columns ``motif``, ``motif_i``, ``sequence``, ``sequence_i``,
         ``start``, ``end``, ``strand``, ``score``, ``similarity``,
         ``importance`` and ``match``. Positions are counted from 0 with the
-        end left out. ``score`` is the dot product of the window's scores
+        end left out. ``importance`` is on the scale of ``min_importance``,
+        so hits can be compared with their thresholds. ``score`` is the dot product of the window's scores
         with the CWM scaled to unit norm. This is the similarity times the
         size of the scores, so it ranks first the hits that are both well
         shaped and strong. ``match`` holds the window's letters along its

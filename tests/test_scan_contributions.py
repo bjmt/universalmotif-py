@@ -32,7 +32,9 @@ def _slow(motifs, projected, rc=True):
                     continue
                 for strand, f in filters:
                     dot = float((win * f).sum())
-                    rows.append((mi, si, p, strand, dot, dot / norm, float(np.abs(win).sum())))
+                    # Importance as a fraction of the CWM's absolute sum, the scale of min_importance.
+                    rows.append((mi, si, p, strand, dot, dot / norm,
+                                 float(np.abs(win).sum()) / float(np.abs(m.matrix).sum())))
     return pl.DataFrame(rows, schema=["motif_i", "sequence_i", "start", "strand", "score", "similarity",
                                       "importance"], orient="row")
 
@@ -63,11 +65,10 @@ def test_thresholds_filter_the_slow_reading():
     seqs, weights, motifs = _data(seed=2)
     projected = um.one_hot(seqs) * weights[:, None, :]
     want = _slow(motifs, projected, rc=False)
-    l1 = {i: float(np.abs(m.matrix).sum()) for i, m in enumerate(motifs)}
     smin, imin = [0.3, 0.5], [0.06, 0.08]
     keep = want.filter(
         (pl.col("similarity") >= pl.col("motif_i").replace_strict({0: smin[0], 1: smin[1]}))
-        & (pl.col("importance") >= pl.col("motif_i").replace_strict({0: imin[0] * l1[0], 1: imin[1] * l1[1]})))
+        & (pl.col("importance") >= pl.col("motif_i").replace_strict({0: imin[0], 1: imin[1]})))
     got = um.scan_contributions(motifs, projected, min_similarity=smin, min_importance=imin, rc=False,
                                 no_overlaps=False)
     assert got.height == keep.height > 0
@@ -215,6 +216,7 @@ def test_gapped_cwms():
     assert hits.select("sequence_i", "start", "end", "strand", "match").rows() == [
         (0, 2, 16, "+", "GATA....CACGTG"), (1, 2, 16, "-", "GATA....CACGTG")]
     np.testing.assert_allclose(hits["similarity"], 1.0, atol=1e-6)
-    # The gap's letters count towards neither measure.
-    np.testing.assert_allclose(hits["importance"], 5.0, atol=1e-5)
+    # The gap's letters count towards neither measure: ten positions of 0.5,
+    # as a fraction of the ten columns of 1.
+    np.testing.assert_allclose(hits["importance"], 0.5, atol=1e-5)
     assert um.scan_contributions(gapped, x, min_similarity=0.99, min_importance=0, use_gaps=False).height == 0

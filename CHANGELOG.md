@@ -4,6 +4,10 @@
 
 Changes in behaviour:
 
+- The `importance` column of `scan_contributions()` hits is on the scale
+  of `min_importance`, a fraction of the CWM's absolute sum, rather than
+  the raw sum of the window's absolute scores, so filtering hits by their
+  thresholds gives the hits the scan itself called.
 - Logos draw every letter with any height by default (`min_height=0` in
   `view_motifs()` and `view_logo()`), rather than leaving out those under
   1% of the logo's full height, or 3% in `draw_logo()`, `logo_svg()` and
