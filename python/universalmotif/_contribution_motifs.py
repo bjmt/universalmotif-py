@@ -253,6 +253,44 @@ def _site_hits(motifs: list[Motif], seqs: list[str], sites: pl.DataFrame, nthrea
             .drop("s", "e"))
 
 
+def _composite_parts(rows) -> dict[str, tuple[int, int, float, float, float]]:
+    """For each composite of two parts, as (name, PPM, CWM, min_importance)
+    rows: the widths of its parts, their weights in its CWM, and the share of
+    them a hit must carry."""
+    out = {}
+    for name, m, cwm, imp in rows:
+        if m is None or cwm is None or not m.isgapped or len(m.gaploc) != 1:
+            continue
+        x = np.abs(np.asarray(cwm.matrix, dtype=float))
+        w1 = int(m.gaploc[0])
+        w2 = m.width - w1
+        if w1 <= 0 or w2 <= 0 or w1 + w2 > x.shape[1]:
+            continue
+        out[name] = (w1, w2, float(x[:, :w1].sum()), float(x[:, x.shape[1] - w2:].sum()), float(imp))
+    return out
+
+
+def _parts_kept(names: np.ndarray, seq_i: np.ndarray, start: np.ndarray, end: np.ndarray, minus: np.ndarray,
+                observed: np.ndarray, parts: dict) -> np.ndarray:
+    """Which hits of composites carry at least their share of the weight of
+    each part, as a hit carries it of the whole CWM. A strong first part
+    alone can otherwise give a composite's CWM a close cosine, so that sites
+    of that part alone pass as hits. Hits of other motifs are all kept."""
+    keep = np.ones(len(names), dtype=bool)
+    for name, (w1, w2, c1, c2, imp) in parts.items():
+        k = np.flatnonzero(names == name)
+        if not len(k):
+            continue
+        first = np.where(minus[k], end[k] - w1, start[k])
+        second = np.where(minus[k], start[k], end[k] - w2)
+
+        rows = seq_i[k][:, None]
+        weight1 = np.abs(np.nan_to_num(observed[rows, first[:, None] + np.arange(w1)])).sum(axis=1)
+        weight2 = np.abs(np.nan_to_num(observed[rows, second[:, None] + np.arange(w2)])).sum(axis=1)
+        keep[k] = (weight1 >= imp * c1) & (weight2 >= imp * c2)
+    return keep
+
+
 def _score_reach(kept: list[dict], seqs: list[str], sites: pl.DataFrame, observed: np.ndarray,
                  nthreads: int) -> dict[str, set[int]]:
     """The sites each kept motif's CWM reaches best, matched against the
@@ -270,6 +308,7 @@ def _score_reach(kept: list[dict], seqs: list[str], sites: pl.DataFrame, observe
     lo = np.maximum(sites["start"].to_numpy() - pad, 0)
     hi = np.minimum(sites["end"].to_numpy() + pad, lengths)
     s_start, s_end = sites["start"].to_numpy(), sites["end"].to_numpy()
+    parts = _composite_parts([(r["name"], r["motif"], r["cwm"], r["min_importance"]) for r in kept])
     out: dict[str, set[int]] = {}
     # A chunk at a time, as motifs whose thresholds are loose can hit almost everywhere.
     for c0 in range(0, len(si), _SCAN_CHUNK):
@@ -281,6 +320,9 @@ def _score_reach(kept: list[dict], seqs: list[str], sites: pl.DataFrame, observe
         start, end = hits["start"].to_numpy() + lo[w], hits["end"].to_numpy() + lo[w]
         overlap = np.minimum(end, s_end[w]) - np.maximum(start, s_start[w])
         ok = overlap >= np.minimum(end - start, _MIN_OVERLAP)
+        if parts:
+            ok &= _parts_kept(hits["motif"].cast(pl.String).to_numpy(), si[w], start, end,
+                              hits["strand"].to_numpy() == "-", observed, parts)
         best = (pl.DataFrame({"motif": hits["motif"].cast(pl.String), "site": w,
                               "similarity": hits["similarity"]}).filter(pl.Series(ok))
                 .sort(["site", "similarity"], descending=[False, True]).unique("site", keep="first"))
@@ -423,9 +465,12 @@ def contribution_motifs(
        hits' similarity and of their importance, with a similarity of at
        least 0.5. Motifs with no hit within a seqlet take the defaults of
        ``scan_contributions()`` instead. Composites are typical of these,
-       as their parts are often seqlets of their own. Motifs whose median
-       site in the seqlets has a similarity under 0.5 are left out, since
-       their sites share no shape of contribution.
+       as their parts are often seqlets of their own. A composite's hit
+       must also carry at least ``min_importance`` of the weight of each of
+       its parts in the CWM, as a site of its stronger part alone could
+       otherwise pass. Motifs whose median site in the seqlets has a
+       similarity under 0.5 are left out, since their sites share no shape
+       of contribution.
 
     Each seqlet is then given to one motif, as TF-MoDISco gives it to one
     pattern. It goes to the motif whose CWM matches its scores most closely,
@@ -903,6 +948,11 @@ def _scan(table: pl.DataFrame, observed: np.ndarray, seqs: list[str], names: lis
                                nthreads=nthreads)
         parts.append(h.with_columns(pl.col("sequence_i").cast(pl.Int64) + lo))
     hits = pl.concat(parts)
+    composites = _composite_parts(ok.select("name", "motif", "cwm", "min_importance").iter_rows())
+    if composites and hits.height:
+        hits = hits.filter(pl.Series(_parts_kept(
+            hits["motif"].cast(pl.String).to_numpy(), hits["sequence_i"].to_numpy(), hits["start"].to_numpy(),
+            hits["end"].to_numpy(), hits["strand"].to_numpy() == "-", observed, composites)))
     i = hits["sequence_i"].to_numpy()
     label = np.asarray(names, dtype=object)[i] if names else np.char.add("seq", (i + 1).astype(str))
     return hits.with_columns(pl.Series("sequence", label, dtype=pl.String))

@@ -65,6 +65,8 @@ Fixes:
   keeps the sequences' names in its seqlets, pairs scores and sequences
   given by name, and checks given seqlets.
 - `combine_patterns()` no longer misaligns the PPMs of composite motifs.
+- Hits of composite motifs from `contribution_motifs()` must carry weight
+  on both parts, where sites of the stronger part alone passed.
 - `variant_motif_effects()` uses hits moved to the genome by
   `genomic_hits()`, which it dropped.
 - `plot_comparison()` places gapped logos as it draws them.
