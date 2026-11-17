@@ -4,155 +4,57 @@
 
 Changes in behaviour:
 
-- `contribution_motifs()` gives each seqlet to the one motif whose CWM
-  matches its scores most closely, among those with a hit there at their
-  thresholds, as TF-MoDISco gives each seqlet to one pattern. The
-  `seqlets` counts of motifs and patterns, and the order of the patterns,
-  come from this. They used to count the seqlets each motif's sequence
-  matches reached, which missed most sites of short, degenerate motifs:
-  the initiator of a ProCapNet model reached 549 seqlets that way, and
-  about 13,000 now, against 10,414 in its TF-MoDISco pattern.
-- The `importance` column of `scan_contributions()` hits is on the scale
-  of `min_importance`, a fraction of the CWM's absolute sum, rather than
-  the raw sum of the window's absolute scores, so filtering hits by their
-  thresholds gives the hits the scan itself called.
-- Logos draw every letter with any height by default (`min_height=0` in
-  `view_motifs()` and `view_logo()`), rather than leaving out those under
-  1% of the logo's full height, or 3% in `draw_logo()`, `logo_svg()` and
-  the reports, so weak columns no longer show as blank gaps.
-- `plot_modisco()` shows three matches per pattern by default, stacked in
-  one column, each with its name, ID and q-value but no longer its score.
-- `motif_finder()` and `gapped_motif_finder()` build their background, when
-  none is given, from three shuffles of the sequences rather than one
-  (`bkg_shuffles`, and `--bkg-shuffles` for the `find` and `find-gapped`
-  commands). Motifs in a few percent of the sequences are then found
-  whatever the seed: a motif planted in a tenth of 400 sequences was
-  missed with three seeds in eight with one shuffle, and found with every
-  seed with three. `bkg_shuffles=1` gives the results of earlier versions.
-- polars 1.17 or later is required, the first release with everything the
-  package uses; older ones failed on reading BED and VCF files and on
-  `hit_contributions()`.
+- The `importance` column of `scan_contributions()` hits is a fraction of
+  the CWM's absolute sum, the scale of `min_importance`.
+- Logos draw every letter by default (`min_height=0`), so weak columns no
+  longer show as blank gaps.
+- `plot_modisco()` shows three matches per pattern, stacked in one column.
+- `motif_finder()` and `gapped_motif_finder()` build their default
+  background from three shuffles of the sequences rather than one
+  (`bkg_shuffles`), so motifs in a few percent of the sequences are found
+  whatever the seed.
 - Gapped motifs are compared, merged and aligned with their gaps in
   `compare_motifs()`, `merge_motifs()`, `merge_similar()`, `motif_tree()`
-  and `view_motifs()`: each combination of gap sizes is tried with the
-  gaps filled by blank columns, the best kept and its P-value corrected
-  for the combinations tried. Comparisons gain `subject_gaps` and
-  `target_gaps` columns, merged motifs with the same number of gaps keep
-  gaps spanning all of theirs, and aligned logos leave the gaps blank.
-  `use_gaps=False` ignores the gaps as before.
+  and `view_motifs()`; `use_gaps=False` ignores them as before.
 - `variant_motif_effects()` scores insertions, deletions and longer
-  substitutions, which it left out before. A site starting in letters only
-  one allele has gets a null score in the other sequence. Variants it
-  cannot score are left out with a warning.
+  substitutions.
+- polars 1.17 or later is required.
 
 New:
 
-- Each row of the HTML report of `plot_modisco()` and
-  `ContributionMotifs.report()` has a button that shows its logos and
-  consensus as their reverse complements.
-- `variant_motif_effects()` takes a genome in place of a sequence, with
-  variants given by chromosome and position, and reads only the letters
-  around each one, so that a whole VCF file can be scored at once.
-- `read_vcf()` reads the variants of a VCF file, one row per alternative
-  allele.
-- `variant_batches()` makes one-hot batches of the reference and
-  alternative sequences around each variant, insertions and deletions
-  included, to score variants with a model.
-- The `variants` command scores how the variants of a VCF file or table
-  change motif sites in a genome.
-- A new guide, motifs from contribution scores, finds the motifs of a
-  chromBPNet model with `contribution_motifs()` and sets them beside the
-  model's TF-MoDISco patterns, and the discovery guide shows
-  `motif_finder(stability=…)`.
-- A new guide, variant analysis, scores the ClinVar variants of the
-  β-globin promoters against JASPAR motifs and prepares them for a model.
 - `contribution_motifs()` finds the motifs a sequence model relies on from
-  its contribution scores in one call: seqlets, `motif_finder()` on them
-  and, with hypothetical scores, on their idealized letters, then
-  refinement and selection, a second search of the seqlets left
-  unreached, `gapped_motif_finder()` for composite motifs, and hits of the
-  motifs' CWMs at thresholds set from their own seqlets. On a chromBPNet
-  model of K562 cells it recovers more of the model's published
-  TF-MoDISco patterns than TF-MoDISco does on the same regions, the NFI
-  palindrome and TAL1–GATA composite among them, in 15 seconds against 40
-  minutes, and takes two minutes and 2.6 GB over all 187,000 of its
-  regions.
-- `ContributionMotifs.patterns` gathers motifs with similar CWMs into
-  patterns, each led by the motif reaching the most seqlets, as
-  TF-MoDISco gathers seqlets (`pattern_similarity`, 0.8 by default), and
-  `ContributionMotifs.report()` writes the patterns as one HTML page.
-- `plot_modisco()` draws the patterns of `contribution_motifs()` as it does
-  those of TF-MoDISco, and with `html` also writes the report as an HTML
-  page whose columns sort and whose rows open to show each pattern's CWMs,
-  or a TF-MoDISco pattern's subpatterns.
-- New commands for sequence models: `seqlets`, `contrib-motifs`,
-  `scan-contrib`, `modisco` and `combine`, and `name` to name motifs by a
-  database. `find` takes `--stability`. The command line page lists the
-  commands by group, as `umotif --help` now does.
-- `combine_patterns()` combines the patterns of many TF-MoDISco runs or
-  `contribution_motifs()` results into one set. It clusters their CWMs by
-  cosine, averages each cluster weighted by seqlets, records the sources
-  of each, names them by a database and flags those that may be noise,
-  and `plot_modisco()` draws the clusters as a report.
-- Batches of sequences called by `call_seqlets()` with the same
-  `null_scores` get the seqlets of one call, and `seqlet_fdr()` applies
-  one false discovery rate to seqlets gathered from batches. `contribution_motifs()`
-  takes sequences already idealized as `idealized`, in place of
-  hypothetical scores. Together these let scores be used as a model
-  produces them, keeping only those near seqlets.
-- `name_motifs()` names motifs by the database motifs, such as JASPAR's,
-  they resemble most, scored the TOMTOM way, with q-values corrected for
-  the size of the database.
-- `read_contributions()` reads the contribution scores ENCODE publishes
-  for its chromBPNet and BPNet models, whose Blosc compression needs
-  `hdf5plugin`, now part of the `h5py` extra.
-- `plot_modisco()` takes the matches of `name_motifs()` as well as those of
-  `compare_motifs()`, or names the patterns itself when given only a
-  `database`.
-- The deep-learning guides are reorganized into an introduction to
-  contribution scores and three guides: TF-MoDISco results, motifs from
-  contribution scores, and experiments on a model. The deep-learning
-  reference page is split the same way, and the prose of the guides,
-  reference pages and docstrings is rewritten in shorter sentences.
-- `call_seqlets()` calls seqlets in a sequence model's contribution scores:
-  stretches whose total, and the total of every stretch inside them, is
-  unlikely under a null, kept down to a false discovery rate estimated by
-  calling seqlets in the null scores (`null_scores`): the model's scores
-  for shuffled sequences when given, and otherwise the scores shuffled.
-  On the scores
-  of a chromBPNet model, `motif_finder()` on its seqlets, then
-  `refine_motifs()`, gives motifs that reach more held-out seqlets than
-  TF-MoDISco's patterns, in about 8 seconds where TF-MoDISco takes 40
-  minutes.
-- `motif_finder(stability=4)` reruns the search on random halves of the
-  sequences and gives each motif the share of reruns that find it again,
-  so that motifs other samples would also give can be kept.
-- `idealize_sequences()` rewrites sequences in the letters a model's
-  hypothetical scores prefer, for finding degenerate sites such as spaced
-  palindromes in seqlets, and `HitContributions.to_cwms()` gives the CWMs
-  of motifs' hits.
-- `select_motifs()` ranks motifs greedily by how many new sequences or
-  sites, such as a model's seqlets, each reaches, and keeps those adding
-  enough, optionally leaving out motifs whose CWMs or other stand-ins are
-  too similar to one kept. `refine_motifs()` rebuilds motifs from their
-  hits, widened and trimmed, with each site going to the motif matching it
-  best; gapped motifs are rebuilt part by part. On attribution scores of a
-  chromBPNet model, the two turn the 56 motifs `motif_finder()` finds in
-  seqlets into 17 that reach as many held-out seqlets as TF-MoDISco's 17
-  patterns, in seconds.
-- `view_motifs()` marks the gaps of gapped motifs with a dashed line
-  labelled with the gap sizes.
-- `scan_sequences()`, `match_motifs()`, `enrich_motifs()`,
-  `motif_finder()`, `gapped_motif_finder()` and `shuffle_sequences()` take
-  `progress`, which shows a bar on stderr once a call has run for a second
-  and lets Ctrl-C stop it; `set_progress()`, `get_progress()` and
-  `UNIVERSALMOTIF_PROGRESS` set the default. The `scan`, `enrich`, `find`,
-  `find-gapped` and `shuffle` commands show it on a terminal, with
-  `--progress` and `--no-progress` to choose.
-- `scan_contributions(hypothetical=True)` matches the model's hypothetical
-  scores, the letters it wants at each position, against CWMs or against
-  motifs of any type, so that database motifs can be matched against a
-  model's scores directly.
+  its contribution scores in one call, from seqlets to patterns and hits,
+  and `ContributionMotifs.report()` writes them as an HTML page.
+- `call_seqlets()` calls seqlets in contribution scores, and `seqlet_fdr()`
+  applies one false discovery rate to seqlets called in batches.
+- `combine_patterns()` combines the patterns of several TF-MoDISco runs or
+  `contribution_motifs()` results into one set.
+- `select_motifs()` keeps the motifs that reach enough new sequences or
+  sites, and `refine_motifs()` rebuilds motifs from their hits.
+- `idealize_sequences()` rewrites sequences in the letters a model
+  prefers, and `HitContributions.to_cwms()` gives the CWMs of hits.
+- `name_motifs()` names motifs by the database motifs they resemble most.
+- `plot_modisco()` draws the results of `contribution_motifs()` and
+  `combine_patterns()`, takes the matches of `name_motifs()` or a
+  `database`, and with `html` writes the report as a page with sortable
+  columns, each pattern's CWMs and a reverse-complement button per row.
+- `scan_contributions(hypothetical=True)` matches a model's hypothetical
+  scores, so database motifs can be matched against them directly.
+- `motif_finder(stability=4)` gives the share of searches on half the
+  sequences that find each motif again.
+- `variant_motif_effects()` takes a genome and variants by position,
+  `read_vcf()` reads VCF files, and `variant_batches()` makes one-hot
+  batches of reference and alternative sequences for a model.
+- `progress` shows a progress bar for long calls such as `scan_sequences()`
+  and `motif_finder()`, with `set_progress()` to set the default.
+- `view_motifs()` marks the gaps of gapped motifs.
+- `read_contributions()` reads ENCODE's Blosc-compressed scores, with
+  `hdf5plugin` now part of the `h5py` extra.
+- New commands: `seqlets`, `contrib-motifs`, `scan-contrib`, `modisco`,
+  `combine`, `name` and `variants`, and `find --stability`. `umotif --help`
+  lists the commands by group.
+- New guides on motifs from contribution scores and on variant analysis,
+  and the deep-learning guides are reorganized.
 
 Fixes:
 
