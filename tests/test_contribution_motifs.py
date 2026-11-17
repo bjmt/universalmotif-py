@@ -144,10 +144,34 @@ def test_report_and_names(model, tmp_path):
     path = tmp_path / "report.html"
     page = found.report(path, database=db)
     assert path.read_text() == page and page.startswith("<!doctype html>")
-    # One row per pattern, after the header's.
-    assert page.count("</tr>") == found.patterns.height + 1
-    assert "FOS::JUN" in page and "<svg" in page
-    # Without a database the report still lists the patterns.
-    assert found.report().count("</tr>") == found.patterns.height + 1
+    # One row per pattern, after the header's and the group heading's.
+    assert page.count("<tr>") == found.patterns.height + 1
+    assert page.count(">positive</td>") == found.patterns.height
+    assert "FOS::JUN" in page and "<svg" in page and ">Matches</th>" in page
+    # Each pattern's motifs can be expanded to their CWMs.
+    assert page.count("<details>") == found.patterns.height and "CWM" in page
+    # Without a database the report still lists the patterns, with no match columns.
+    bare = found.report()
+    assert bare.count("<tr>") == found.patterns.height + 1 and "Matches" not in bare
+    # plot_modisco() draws the same report, and writes the same page.
+    pytest.importorskip("matplotlib")
+    import matplotlib
+
+    matplotlib.use("Agg")
+    fig = um.plot_modisco(found, database=db, html=tmp_path / "same.html")
+    texts = [t.get_text() for t in fig.axes[0].texts]
+    assert texts[:5] == ["Pattern", "Seqlets", "CWM", "ICM", "Matches"]
+    assert ">Hits</th>" not in page
+    hits = um.plot_modisco(found, columns=["seqlets", "hits", "CWM"])
+    counts = found.hits.group_by("motif").len()
+    first = found.patterns.row(0, named=True)
+    n = counts.filter(pl.col("motif").is_in(first["members"]))["len"].sum()
+    assert [t.get_text() for t in hits.axes[0].texts][:4] == ["Pattern", "Seqlets", "Hits", "CWM"]
+    assert f"{n:,}" in [t.get_text() for t in hits.axes[0].texts]
+    matplotlib.pyplot.close(hits)
+    assert [t for t in texts if t.startswith("pos_p")] == found.patterns["pattern"].to_list()
+    assert "FOS::JUN" in texts
+    assert (tmp_path / "same.html").read_text() == page
+    matplotlib.pyplot.close(fig)
     with pytest.raises(ValueError, match="top"):
         um.name_motifs(found.ppms, db, top=0)

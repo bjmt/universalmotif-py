@@ -3,9 +3,7 @@ discovery in them, refinement and selection, in one call."""
 
 from __future__ import annotations
 
-import html
 import os
-import pathlib
 import re
 import warnings
 from collections.abc import Iterable
@@ -124,89 +122,30 @@ class ContributionMotifs:
                         "cwm"))
 
     def report(self, path: str | os.PathLike[str] | None = None, database: Iterable[Motif] | None = None,
-               top: int = 3, qvalue: float = 0.05, title: str = "Motifs from contribution scores",
+               n_matches: int = 3, qvalue: float = 0.05, title: str = "Motifs from contribution scores",
                nthreads: int | None = None) -> str:
-        """A report of the patterns as one self-contained HTML page, like
-        TF-MoDISco's.
+        """The report of [`plot_modisco()`][universalmotif.plot_modisco] as
+        one self-contained HTML page, without drawing the figure.
 
         Each pattern's row shows the following.
 
+        - Its leading motif's consensus, and the seqlets it reaches with
+          their share of all seqlets.
         - The logos of its leading motif's CWM, and of its PPM as
           information content.
-        - The seqlets it reaches, and its hits.
-        - With a ``database`` such as JASPAR, the ``top`` database motifs
-          it resembles most by
-          [`name_motifs()`][universalmotif.name_motifs].
+        - With a ``database`` such as JASPAR, the ``n_matches`` database
+          motifs it resembles most by
+          [`name_motifs()`][universalmotif.name_motifs], with a q-value of
+          at most ``qvalue``.
         - Each of its members.
 
-        The page is returned, and written to ``path`` when one is given.
+        ``plot_modisco(found, database=..., html=path)`` draws the same
+        report as a figure and writes this page too. The page is returned,
+        and written to ``path`` when one is given.
         """
-        from ._api import motif_rc
-        from ._compare import name_motifs
-        from ._display import logo_svg
+        from ._plot_modisco import _report
 
-        pats = self.patterns
-        names = None
-        if database is not None and pats.height:
-            db = list(database)
-            names = name_motifs(pats["motif"].to_list(), db, top=top, qvalue=qvalue, nthreads=nthreads)
-            logos = {m.name: m for m in db}
-        counts = {}
-        if self.hits is not None and self.hits.height:
-            counts = dict(self.hits.group_by("motif").len().iter_rows())
-        n_seqlets = self.seqlets.height
-        rows = self.motifs
-        out = [_REPORT_HEAD.replace("__TITLE__", html.escape(title))]
-        out.append(f"<h1>{html.escape(title)}</h1>")
-        n_hits = sum(counts.values())
-        out.append(f'<p class="sum">{pats.height} patterns of {rows.height} motifs, found in {n_seqlets:,} seqlets'
-                   + (f", with {n_hits:,} hits in all the regions" if counts else "") + ".</p>")
-        out.append(_REPORT_KEY)
-        head = [("", ""), ("Pattern", ""), ("Seqlets", "and their share of all seqlets"),
-                *([("Hits", "")] if counts else []), ("CWM", ""), ("ICM", ""),
-                *([("Database matches", "closest database motifs, with q-values")] if names is not None else []),
-                ("Motifs", "")]
-        out.append('<div class="wrap"><table class="pats"><thead><tr>'
-                   + "".join(f'<th title="{html.escape(t)}">{h}</th>' if t else f"<th>{h}</th>" for h, t in head) + "</tr></thead><tbody>")
-        for k, pat in enumerate(pats.iter_rows(named=True)):
-            members = rows.filter(pl.col("pattern") == pat["pattern"])
-            cells = [f'<td class="n">{k + 1}</td>',
-                     (f'<td><b>{html.escape(pat["pattern"])}</b><br><code>{html.escape(pat["consensus"])}</code>'
-                      f'<br><span class="m">{html.escape(pat["representative"])}</span></td>'),
-                     f'<td class="n">{pat["seqlets"]:,}<br><span class="m">{100 * pat["share"]:.1f}%</span></td>']
-            if counts:
-                cells.append(f'<td class="n">{sum(counts.get(m, 0) for m in pat["members"]):,}</td>')
-            cells.append(f'<td class="logo">{logo_svg(pat["cwm"], height=34, position_width=8)}</td>')
-            cells.append(f'<td class="logo">{logo_svg(pat["motif"], height=34, position_width=8)}</td>')
-            if names is not None:
-                found = names.filter(pl.col("motif_i") == k)
-                if found.height:
-                    lines = []
-                    for r in found.iter_rows(named=True):
-                        # Each match is drawn on the strand it matches the pattern on.
-                        m = logos[r["match"]]
-                        m = motif_rc(m) if r["strand"] == "-" else m
-                        lines.append(f'<span><b>{html.escape(r["altname"] or r["match"])}</b> <span class="m">'
-                                     f'{html.escape(r["match"])} · q {r["qvalue"]:.1g}</span></span>'
-                                     + logo_svg(m, height=18, position_width=6))
-                    cells.append(f'<td class="match"><div class="mg">{"".join(lines)}</div></td>')
-                else:
-                    cells.append('<td class="m">none</td>')
-            if members.height > 1:
-                inner = "".join(
-                    f'<div class="mem"><span><b>{html.escape(r["name"])}</b> <code>{html.escape(r["consensus"])}</code>'
-                    f' <span class="m">{r["seqlets"]:,} seqlets, {html.escape(r["source"])}</span></span>'
-                    f'{logo_svg(r["cwm"], height=24, position_width=6)}</div>'
-                    for r in members.iter_rows(named=True))
-                cells.append(f"<td><details><summary>{members.height}</summary>{inner}</details></td>")
-            else:
-                cells.append('<td class="m">1</td>')
-            out.append("<tr>" + "".join(cells) + "</tr>")
-        out.append("</tbody></table></div></main>")
-        page = "\n".join(out)
-        if path is not None:
-            pathlib.Path(path).write_text(page)
-        return page
+        return _report(self, path, database, n_matches, qvalue, title, nthreads)
 
     def __len__(self) -> int:
         return self.motifs.height
@@ -215,52 +154,6 @@ class ContributionMotifs:
         n = self.motifs["pattern"].n_unique() if "pattern" in self.motifs.columns else self.motifs.height
         return (f"ContributionMotifs({self.motifs.height} motifs in {n} pattern{'s' if n != 1 else ''} "
                 f"from {self.seqlets.height:,} seqlets)")
-
-
-_REPORT_KEY = """<dl class="key">
-<dt>Seqlets</dt><dd>How many seqlets (short stretches the model scores highly) contain the pattern.</dd>
-<dt>Hits</dt><dd>How many sites in all the regions the model scores like the pattern's CWM.</dd>
-<dt>CWM</dt><dd>What the model weighs at each position.</dd>
-<dt>ICM</dt><dd>Which letters occur at each position, scaled by information content (bits).</dd>
-<dt>Motifs</dt><dd>The spellings of the pattern found separately; click to see them.</dd>
-</dl>
-"""
-
-
-_REPORT_HEAD = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>__TITLE__</title>
-<style>
-:root { --bg: #fbfbfa; --fg: #1f2629; --muted: #5f6b6e; --rule: #dde2e1; --head: #f1f4f3; }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #141a1b; --fg: #e3e8e8; --muted: #9aa6a8; --rule: #2a3436; --head: #1b2325; color-scheme: dark; }
-}
-body { background: var(--bg); color: var(--fg); font: 13px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
-       margin: 0; }
-main { max-width: 1500px; margin: 0 auto; padding: 20px 16px 48px; }
-h1 { font-size: 1.4rem; margin: 0 0 4px; }
-.sum { color: var(--muted); margin: 0 0 12px; max-width: 90ch; }
-.wrap { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; }
-th { position: sticky; top: 0; background: var(--head); font-weight: 600; color: var(--muted); text-align: left;
-     padding: 6px 10px 6px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; z-index: 1; }
-td { padding: 4px 10px 4px 0; border-bottom: 1px solid var(--rule); vertical-align: middle; }
-td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-td.logo svg { display: block; max-width: none; }
-.mg { display: grid; grid-template-columns: max-content max-content; gap: 1px 8px; align-items: center; }
-.mg > span { white-space: nowrap; }
-.mg svg { max-width: none; }
-.m { color: var(--muted); }
-code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
-details summary { cursor: pointer; color: var(--muted); }
-.mem { display: flex; align-items: center; gap: 8px; white-space: nowrap; margin: 2px 0; }
-.mem svg { max-width: none; }
-.key { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0 0 14px; max-width: 110ch; }
-.key dt { font-weight: 600; }
-.key dd { margin: 0; color: var(--muted); }
-th[title] { cursor: help; }
-</style></head><body><main>
-"""
 
 
 def _strings(codes: np.ndarray, lengths: np.ndarray) -> list[str]:

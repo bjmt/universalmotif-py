@@ -1,8 +1,11 @@
-"""A TF-MoDISco report as a single figure."""
+"""A report of motif patterns, from TF-MoDISco or contribution_motifs(), as a
+figure and as an HTML page."""
 
 from __future__ import annotations
 
+import html as _html
 import os
+import pathlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -18,8 +21,10 @@ from ._plot import _pyplot, draw_logo
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
 
+    from ._contribution_motifs import ContributionMotifs
+
 _LOGO_TYPES = ("CWM", "hCWM", "PPM")
-_COLUMNS = ("seqlets", *_LOGO_TYPES)
+_COLUMNS = ("seqlets", "hits", *_LOGO_TYPES)
 _GROUPS = {"pos": "Positive patterns", "neg": "Negative patterns", None: None}
 _MIN_OVERLAP = 5
 _GREY = "#6E6E6E"
@@ -36,6 +41,11 @@ class _Pattern:
     matches: list[tuple[str, Motif | None, float | None, float | None, str]] = field(default_factory=list)
     placements: list[int] = field(default_factory=list)
     span: int = 0
+    # Known only for the patterns of contribution_motifs().
+    share: float | None = None
+    hits: int | None = None
+    consensus: str | None = None
+    members: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _default_label(name: str) -> str:
@@ -212,32 +222,144 @@ def _text_width(fig, texts, size: float, weight: str = "normal") -> float:
         fig.dpi = dpi
 
 
-def _match_lines(target: str, m: Motif | None, score, qvalue) -> list[str]:
-    stats = []
-    if qvalue is not None:
-        stats.append(f"q = {qvalue:.2g}")
-    if score is not None:
-        stats.append(f"score {score:.2f}")
+def _match_lines(target: str, m: Motif | None, qvalue) -> list[str]:
+    """A match's name, then its database ID and q-value."""
+    q = "" if qvalue is None else f"q = {qvalue:.2g}"
     if m is not None and m.altname:
-        return [m.altname, target, ", ".join(stats)]
-    return [target, ", ".join(stats)]
+        return [m.altname, f"{target} · {q}" if q else target]
+    return [target, q] if q else [target]
+
+
+def _found_motifs(found: ContributionMotifs) -> tuple[dict[str, list[Motif]], dict[str, dict[str, Any]]]:
+    """The patterns of contribution_motifs() as CWMs and PPMs named by
+    pattern, and what else is known of each."""
+    pats = found.patterns
+    if not pats.height:
+        raise ValueError("no patterns to draw")
+    counts = {}
+    if found.hits is not None:
+        counts = dict(found.hits.group_by("motif").len().iter_rows())
+    given: dict[str, list[Motif]] = {"CWM": [], "PPM": []}
+    extra = {}
+    for row in pats.iter_rows(named=True):
+        name = row["pattern"]
+        given["CWM"].append(row["cwm"].replace(name=name))
+        given["PPM"].append(row["motif"].replace(name=name))
+        members = found.motifs.filter(pl.col("pattern") == name)
+        extra[name] = {
+            "nsites": row["seqlets"], "share": row["share"], "consensus": row["consensus"],
+            "hits": sum(counts.get(m, 0) for m in row["members"]) if found.hits is not None else None,
+            "members": list(members.select("name", "consensus", "seqlets", "source", "cwm").iter_rows(named=True)),
+        }
+    return given, extra
+
+
+def _subpatterns(path, trim_threshold) -> dict[str, dict[str, Any]]:
+    """The CWMs of each pattern's subpatterns in a TF-MoDISco file."""
+    out: dict[str, dict[str, Any]] = {}
+    for m in read_modisco(path, type="CWM", trim_threshold=trim_threshold, subpatterns=True):
+        parent, _, sub = m.name.rpartition(".")
+        if sub.startswith("subpattern_"):
+            out.setdefault(parent, {"members": []})["members"].append(
+                {"name": f"sub_{sub.rsplit('_', 1)[1]}", "seqlets": int(m.nsites or 0), "cwm": m})
+    return out
+
+
+def _prepare(modisco, matches, database, names, patterns, columns, n_matches, qvalue, use_type, trim_threshold,
+             align, nthreads):
+    """The patterns to report, with their matches, and the columns shown."""
+    from ._contribution_motifs import ContributionMotifs
+
+    if columns is not None:
+        columns = [columns] if isinstance(columns, str) else list(columns)
+        bad = [c for c in columns if c not in _COLUMNS]
+        if bad:
+            raise ValueError(f"columns must be among 'seqlets', 'hits', 'CWM', 'hCWM' and 'PPM', not {bad[0]!r}")
+    if n_matches < 1:
+        raise ValueError("n_matches must be at least 1")
+    if use_type not in ("ICM", "PPM"):
+        raise ValueError("use_type must be 'ICM' or 'PPM'")
+
+    extra: dict[str, dict[str, Any]] = {}
+    if isinstance(modisco, ContributionMotifs):
+        given, extra = _found_motifs(modisco)
+        if columns is None:
+            columns = ["seqlets", "CWM", "PPM"]
+    elif isinstance(modisco, (str, os.PathLike)):
+        if columns is None:
+            columns = ["seqlets", "CWM", "PPM"]
+        types = [t for t in _LOGO_TYPES if t in columns]
+        if "PPM" not in types and (matches is not None or database is not None):
+            # The PPMs are what the matches are aligned to.
+            types.append("PPM")
+        given = _pattern_motifs(modisco, types or ["CWM"], trim_threshold)
+        extra = _subpatterns(modisco, trim_threshold)
+    else:
+        given = _pattern_motifs(modisco, [], trim_threshold)
+        if columns is None:
+            columns = ["seqlets", *[t for t in _LOGO_TYPES if t in given]]
+    missing = [c for c in columns if c in _LOGO_TYPES and c not in given]
+    if missing:
+        raise ValueError(f"no {missing[0]} motifs were given for that column")
+    if "hits" in columns and not any(e.get("hits") is not None for e in extra.values()):
+        raise ValueError("the hits column needs the result of contribution_motifs(), with its hits")
+    shown = [c for c in columns if c in _LOGO_TYPES]
+
+    first = next(iter(given.values()))
+    every = []
+    for i, m in enumerate(first):
+        motifs = {t: given[t][i] for t in given}
+        nsites = next((int(x.nsites) for x in motifs.values() if x.nsites is not None), None)
+        if names is None:
+            label = _default_label(m.name)
+        elif callable(names):
+            label = str(names(m.name))
+        else:
+            label = str(names.get(m.name, _default_label(m.name)))
+        p = _Pattern(m.name, label, _group(m.name), nsites, motifs)
+        for k, v in extra.get(m.name, {}).items():
+            setattr(p, k, v)
+        every.append(p)
+    pats = _select(every, patterns)
+    if not pats:
+        raise ValueError("no patterns to draw")
+    if matches is None and database is not None:
+        # Name the patterns by the database the TOMTOM way.
+        from ._compare import name_motifs
+
+        db = [database] if isinstance(database, Motif) else list(
+            database.values() if isinstance(database, Mapping) else database)
+        query = [p.motifs.get("PPM") or p.motifs.get("CWM") or p.motifs["hCWM"] for p in every]
+        matches = name_motifs([q.replace(name=p.name) for q, p in zip(query, every)], db, top=n_matches,
+                              qvalue=qvalue, nthreads=nthreads)
+    if matches is not None:
+        _find_matches(pats, every, matches, database, n_matches)
+    for p in pats:
+        _place(p, shown, align)
+    n_cols = n_matches if matches is not None else 0
+    return pats, columns, shown, n_cols
 
 
 def plot_modisco(
-    modisco: str | os.PathLike[str] | Sequence[Motif] | Mapping[str, Sequence[Motif]],
+    modisco: str | os.PathLike[str] | Sequence[Motif] | Mapping[str, Sequence[Motif]] | ContributionMotifs,
     matches: pl.DataFrame | None = None,
     database: Sequence[Motif] | Mapping[str, Motif] | None = None,
     names: Mapping[str, str] | Callable[[str], str] | None = None,
     patterns: int | tuple[int, int] | Sequence[str] | None = None,
     columns: Sequence[str] | None = None,
-    n_matches: int = 1,
+    n_matches: int = 3,
+    qvalue: float = 0.05,
     align: bool = False,
     use_type: str = "ICM",
     trim_threshold: float | None = 0.3,
     text_size: float = 10,
     figsize: tuple[float, float] | None = None,
+    html: str | os.PathLike[str] | None = None,
+    title: str | None = None,
+    nthreads: int | None = None,
 ) -> Figure:
-    """Draw a TF-MoDISco report, one row per pattern.
+    """Draw a report of motif patterns, one row per pattern, from TF-MoDISco
+    or from [`contribution_motifs()`][universalmotif.contribution_motifs].
 
     Each row holds, from left to right:
 
@@ -248,6 +370,9 @@ def plot_modisco(
       q-values.
 
     Positive and negative patterns are drawn under their own headings.
+    With ``html``, the same report is also written as an HTML page, which
+    [`ContributionMotifs.report()`][universalmotif.ContributionMotifs.report]
+    writes on its own.
 
     ``modisco`` is the path of a TF-MoDISco results file. It is read with
     [`read_modisco()`][universalmotif.read_modisco] using
@@ -255,7 +380,8 @@ def plot_modisco(
     positions. It can also be the patterns read beforehand, as a list of
     CWMs or PPMs. A dict of lists keyed by ``"CWM"``, ``"hCWM"`` and
     ``"PPM"`` also works, each with one motif per pattern in the same
-    order.
+    order. Finally, it can be the result of ``contribution_motifs()``,
+    whose patterns are drawn by their leading motifs.
 
     Patterns are labelled by their group and number, so
     ``pos_patterns.pattern_3`` becomes ``pos_3``. ``names`` can give labels
@@ -263,37 +389,42 @@ def plot_modisco(
     labels, or as a function of the name. The group of a pattern comes from
     the start of its name, ``pos`` or ``neg``.
 
-    Matches come from ``matches``, a table from
-    [`name_motifs()`][universalmotif.name_motifs] or the DataFrame
+    Given a ``database`` alone, the patterns are named by it with
+    [`name_motifs()`][universalmotif.name_motifs], keeping matches with a
+    q-value of at most ``qvalue``. Matches can also be given as
+    ``matches``, a table from ``name_motifs()`` or the DataFrame
     [`compare_motifs()`][universalmotif.compare_motifs] returns with
     ``compare_to`` set to the patterns. Each match is found by either the
     label or the full name of its pattern, so the comparison can be run on
     renamed motifs. Patterns compared with each other are left out.
 
-    ``database`` gives the motifs compared against. With it, only matches
-    to its motifs are kept, and each is drawn as a logo labelled with its
-    ``altname`` when it has one. A match found on the other strand is drawn
-    as its reverse complement, so it reads the same way as the pattern.
+    With a ``database``, each match is drawn as a logo labelled with its
+    ``altname`` when it has one, and only matches to its motifs are kept.
+    A match found on the other strand is drawn as its reverse complement,
+    so it reads the same way as the pattern.
 
     With ``align``, the logos of each row are also placed in a shared frame
     of positions, found by aligning each match to the pattern as drawn. The
     part of a match lining up with the pattern then sits at the same place
     in its cell as the pattern does in the cells to its left. Long matches
-    widen every logo column, which is why ``align`` is off by default.
+    widen every logo column, which is why ``align`` is off by default. The
+    HTML page leaves logos unaligned.
 
     Needs the ``plot`` extra, and the ``h5py`` extra to read a file.
 
     Parameters
     ----------
     modisco
-        A TF-MoDISco results file, or the patterns as motifs.
+        A TF-MoDISco results file, the patterns as motifs, or the result of
+        ``contribution_motifs()``.
     matches
         Matches of the patterns to known motifs, from
         [`name_motifs()`][universalmotif.name_motifs] or from
         ``compare_motifs()`` with ``compare_to``.
     database
         The known motifs, as a list or a dict keyed by name, to draw the
-        matches with.
+        matches with, and to name the patterns by when no ``matches`` are
+        given.
     names
         Labels for the patterns, as a dict or a function of the full name.
     patterns
@@ -305,12 +436,17 @@ def plot_modisco(
           ``n_neg`` negative patterns.
         - A list of labels or names: the patterns named.
     columns
-        The columns to draw after the label, from ``"seqlets"``, ``"CWM"``,
-        ``"hCWM"`` and ``"PPM"``. For a file they default to ``seqlets``,
+        The columns to draw after the label, from ``"seqlets"``,
+        ``"hits"``, ``"CWM"``, ``"hCWM"`` and ``"PPM"``. For a file or the
+        result of ``contribution_motifs()`` they default to ``seqlets``,
         ``CWM`` and ``PPM``. Otherwise they default to the seqlets and each
-        type given.
+        type given. ``hits`` counts the hits of a pattern's motifs in all
+        the regions, and needs the result of ``contribution_motifs()``.
     n_matches
         The number of matches to draw for each pattern.
+    qvalue
+        The largest q-value of a match, when the patterns are named by
+        ``database``.
     align
         Place the logos of each row in a shared frame of positions.
     use_type
@@ -323,6 +459,14 @@ def plot_modisco(
     figsize
         The figure size, by default worked out from the number of patterns
         and the widest frame of positions.
+    html
+        A path to also write the report to as an HTML page.
+    title
+        The title of the HTML page.
+    nthreads
+        Threads for naming the patterns, with 0 for all available; by
+        default the package setting from
+        [`set_nthreads()`][universalmotif.set_nthreads].
 
     Returns
     -------
@@ -358,106 +502,61 @@ def plot_modisco(
     >>> cmp = um.compare_motifs(ppms + known, compare_to=[0, 1, 2], qvalue=0.5)
     >>> fig = um.plot_modisco({"CWM": cwms, "PPM": ppms}, matches=cmp, database=known)
     >>> [t.get_text() for t in fig.axes[0].texts][:5]
-    ['Pattern', 'Seqlets', 'CWM', 'ICM', 'Best match']
+    ['Pattern', 'Seqlets', 'CWM', 'ICM', 'Matches']
     >>> plt.close(fig)
 
-    A results file is read directly, here keeping the three most common
-    positive patterns and the most common negative one:
+    A results file is read directly and named by a database, here keeping
+    the three most common positive patterns and the most common negative
+    one, and also writing the report as an HTML page:
 
-    >>> fig = um.plot_modisco("modisco_results.h5", matches=cmp, database=known,
-    ...                       patterns=(3, 1))  # doctest: +SKIP
+    >>> fig = um.plot_modisco("modisco_results.h5", database=known, patterns=(3, 1),
+    ...                       html="report.html")  # doctest: +SKIP
     """
-    if columns is not None:
-        columns = [columns] if isinstance(columns, str) else list(columns)
-        bad = [c for c in columns if c not in _COLUMNS]
-        if bad:
-            raise ValueError(f"columns must be among 'seqlets', 'CWM', 'hCWM' and 'PPM', not {bad[0]!r}")
-    if n_matches < 1:
-        raise ValueError("n_matches must be at least 1")
-    if use_type not in ("ICM", "PPM"):
-        raise ValueError("use_type must be 'ICM' or 'PPM'")
-    if database is not None and matches is None:
-        raise ValueError("database needs matches to know which motifs to draw")
-
-    is_file = isinstance(modisco, (str, os.PathLike))
-    if is_file:
-        if columns is None:
-            columns = ["seqlets", "CWM", "PPM"]
-        types = [t for t in _LOGO_TYPES if t in columns]
-        if "PPM" not in types and matches is not None:
-            # The PPMs are what the matches are aligned to.
-            types.append("PPM")
-        given = _pattern_motifs(modisco, types or ["CWM"], trim_threshold)
-    else:
-        given = _pattern_motifs(modisco, [], trim_threshold)
-        if columns is None:
-            columns = ["seqlets", *[t for t in _LOGO_TYPES if t in given]]
-        missing = [c for c in columns if c in _LOGO_TYPES and c not in given]
-        if missing:
-            raise ValueError(f"no {missing[0]} motifs were given for that column")
-    shown = [c for c in columns if c in _LOGO_TYPES]
-
-    first = next(iter(given.values()))
-    every = []
-    for i, m in enumerate(first):
-        motifs = {t: given[t][i] for t in given}
-        nsites = next((int(x.nsites) for x in motifs.values() if x.nsites is not None), None)
-        if names is None:
-            label = _default_label(m.name)
-        elif callable(names):
-            label = str(names(m.name))
-        else:
-            label = str(names.get(m.name, _default_label(m.name)))
-        every.append(_Pattern(m.name, label, _group(m.name), nsites, motifs))
-    pats = _select(every, patterns)
-    if not pats:
-        raise ValueError("no patterns to draw")
-    if matches is not None:
-        _find_matches(pats, every, matches, database, n_matches)
-    for p in pats:
-        _place(p, shown, align)
-    n_cols = n_matches if matches is not None else 0
-
+    pats, columns, shown, n_cols = _prepare(modisco, matches, database, names, patterns, columns, n_matches,
+                                            qvalue, use_type, trim_threshold, align, nthreads)
+    if html is not None:
+        pathlib.Path(html).write_text(_html_page(modisco, pats, columns, shown, n_cols, use_type, title))
     plt = _pyplot()
     fig = plt.figure()
     small = 0.8 * text_size
     labels = [p.label for p in pats]
-    seqlets = ["" if p.nsites is None else f"{p.nsites:,}" for p in pats]
-    # The PPM column is headed by what it shows: information content (ICM) or probabilities (PPM).
-    head = {"label": "Pattern", "seqlets": "Seqlets", "CWM": "CWM", "hCWM": "hCWM", "PPM": use_type}
-    match_head = ["Best match"] if n_cols == 1 else [f"Match {k + 1}" for k in range(n_cols)]
-    lines = [_match_lines(*m[:4]) for p in pats for m in p.matches]
+    counted = [c for c in ("seqlets", "hits") if c in columns]
+    numbers = {c: ["" if v is None else f"{v:,}" for v in (p.nsites if c == "seqlets" else p.hits for p in pats)]
+               for c in counted}
+    head = _headings(use_type, n_cols)
+    lines = [_match_lines(m[0], m[1], m[3]) for p in pats for m in p.matches]
+    has_db = database is not None
 
     gap, pad = 0.15, 0.1
     widths = {
         "label": max(_text_width(fig, labels, text_size, "bold"), _text_width(fig, [head["label"]], small,
                                                                              "bold")),
-        "seqlets": max(_text_width(fig, seqlets, text_size), _text_width(fig, [head["seqlets"]], small,
-                                                                         "bold")),
+        **{c: max(_text_width(fig, numbers[c], text_size), _text_width(fig, [head[c]], small, "bold"))
+           for c in counted},
     }
     match_text = max([_text_width(fig, [ls[0]], small) for ls in lines]
                      + [_text_width(fig, ls[1:], 0.75 * text_size) for ls in lines]
-                     + [_text_width(fig, ["no match"], small)], default=0.0)
+                     + [_text_width(fig, ["no match", head["match"]], small)], default=0.0)
     # With align, every logo column is as wide as the widest row's frame.
     # Otherwise it is as wide as its own widest logo.
     frame = max(p.span for p in pats) or 1
     units = [frame if align else max(p.motifs[t].width for p in pats) for t in shown]
-    match_units = []
-    if database is not None:
-        for k in range(n_cols):
-            ws = [p.matches[k][1].width for p in pats if k < len(p.matches) and p.matches[k][1] is not None]
-            match_units.append(frame if align else max(ws, default=4))
-    total_units = sum(units) + sum(match_units)
+    match_units = 0
+    if has_db and n_cols:
+        ws = [m.width for p in pats for _, m, *_ in p.matches if m is not None]
+        match_units = frame if align else max(ws, default=4)
+    total_units = sum(units) + match_units
     has_logos = total_units > 0
-    texts_w = (2 * pad + widths["label"] + gap
-               + ("seqlets" in columns) * (widths["seqlets"] + gap)
-               + n_cols * (match_text + gap))
-    n_logo_cols = len(shown) + (n_cols if database is not None else 0)
+    texts_w = (2 * pad + widths["label"] + gap + sum(widths[c] + gap for c in counted)
+               + (match_text + gap if n_cols else 0))
+    n_logo_cols = len(shown) + (1 if has_db and n_cols else 0)
     n_heads = sum(1 for g in dict.fromkeys(p.group for p in pats) if _GROUPS[g])
     head_h, group_h = 0.3, 0.32
+    # A row holds its matches one above another, each in a band of its own.
+    band = 0.32
     if figsize is None:
         unit = 0.1 if not has_logos else min(0.1, max(0.05, 10.0 / total_units))
-        row_h = 0.55
+        row_h = max(0.55, n_cols * band + 0.08)
         width = texts_w + total_units * unit + n_logo_cols * gap
         height = 2 * pad + head_h + n_heads * group_h + len(pats) * row_h
     else:
@@ -466,6 +565,7 @@ def plot_modisco(
         unit = (width - texts_w - n_logo_cols * gap) / total_units if has_logos else 0.1
         if row_h <= 0 or unit <= 0:
             raise ValueError("figsize is too small for the labels")
+        band = (row_h - 0.08) / n_cols if n_cols else band
     fig.set_size_inches(width, height)
     ax = fig.add_axes((0, 0, 1, 1), label="modisco")
     ax.set_axis_off()
@@ -474,19 +574,20 @@ def plot_modisco(
     x = pad
     left = {"label": x}
     x += widths["label"] + gap
-    if "seqlets" in columns:
-        left["seqlets"] = x
-        x += widths["seqlets"] + gap
+    for c in counted:
+        left[c] = x
+        x += widths[c] + gap
     for t, u in zip(shown, units):
         left[t] = x
         x += u * unit + gap
-    match_left = []
-    for k in range(n_cols):
-        logo_x = x if database is not None else None
-        if database is not None:
-            x += match_units[k] * unit + gap
-        match_left.append((logo_x, x))
+    match_logo_x = match_text_x = None
+    if n_cols:
+        # Each match's name comes first, with its logo after it.
+        match_text_x = x
         x += match_text + gap
+        if has_db:
+            match_logo_x = x
+            x += match_units * unit + gap
     right = x - gap
 
     def heading(s, x0, y, ha="left"):
@@ -494,15 +595,12 @@ def plot_modisco(
 
     y = height - pad - head_h / 2
     heading(head["label"], left["label"], y)
-    if "seqlets" in columns:
-        heading(head["seqlets"], left["seqlets"] + widths["seqlets"], y, ha="right")
+    for c in counted:
+        heading(head[c], left[c] + widths[c], y, ha="right")
     for t, u in zip(shown, units):
         heading(head[t], left[t] + u * unit / 2, y, ha="center")
-    for k, (logo_x, text_x) in enumerate(match_left):
-        if logo_x is None:
-            heading(match_head[k], text_x, y)
-        else:
-            heading(match_head[k], logo_x + match_units[k] * unit / 2, y, ha="center")
+    if n_cols:
+        heading(head["match"], match_text_x, y)
     y = height - pad - head_h
     ax.plot([pad, right], [y, y], color="#9A9A9A", linewidth=0.8, solid_capstyle="butt")
 
@@ -511,6 +609,7 @@ def plot_modisco(
         # their shared frame together.
         return (u - (span if align else w)) / 2 * unit
 
+    logo_h = 0.76 * min(row_h, 0.55)
     group = object()
     for i, p in enumerate(pats):
         if p.group != group:
@@ -523,34 +622,33 @@ def plot_modisco(
         mid = y - row_h / 2
         ax.text(left["label"], mid, p.label, ha="left", va="center", fontsize=text_size,
                 fontweight="bold")
-        if "seqlets" in columns:
-            ax.text(left["seqlets"] + widths["seqlets"], mid, seqlets[i], ha="right", va="center",
-                    fontsize=text_size)
-        logo_y, logo_h = y - 0.88 * row_h, 0.76 * row_h
+        for c in counted:
+            ax.text(left[c] + widths[c], mid, numbers[c][i], ha="right", va="center", fontsize=text_size)
         for t, u in zip(shown, units):
             draw_logo(ax, p.motifs[t], x=left[t] + centred(u, p.motifs[t].width, p.span) + p.placements[0] * unit,
-                      y=logo_y,
+                      y=mid - logo_h / 2,
                       width=p.motifs[t].width * unit, height=logo_h,
                       use_type="CWM" if t != "PPM" else use_type)
+        if n_cols and not p.matches:
+            ax.text(match_text_x, mid, "no match", ha="left",
+                    va="center", fontsize=small, color=_GREY)
+        # The matches are stacked in bands centred on the row.
+        top_band = mid + band * len(p.matches) / 2
         k_logo = 1
-        for k, (logo_x, text_x) in enumerate(match_left):
-            if k >= len(p.matches):
-                if k == 0:
-                    ax.text(logo_x if logo_x is not None else text_x, mid, "no match", ha="left",
-                            va="center", fontsize=small, color=_GREY)
-                continue
-            target, m, score, qvalue, _ = p.matches[k]
-            if m is not None and logo_x is not None:
-                draw_logo(ax, m, x=logo_x + centred(match_units[k], m.width, p.span) + p.placements[k_logo] * unit,
-                          y=logo_y,
-                          width=m.width * unit, height=logo_h, use_type=use_type)
+        for k, (target, m, _, q, _) in enumerate(p.matches):
+            band_mid = top_band - band * (k + 0.5)
+            if m is not None and match_logo_x is not None:
+                # Unaligned logos sit against their names.
+                shift = centred(match_units, m.width, p.span) + p.placements[k_logo] * unit if align else 0
+                draw_logo(ax, m, x=match_logo_x + shift,
+                          y=band_mid - 0.4 * band, width=m.width * unit, height=0.8 * band, use_type=use_type)
                 k_logo += 1
-            ls = _match_lines(target, m, score, qvalue)
+            ls = _match_lines(target, m, q)
             sizes = [small] + [0.75 * text_size] * (len(ls) - 1)
-            step = 1.25 * max(sizes) / 72
-            top = mid + step * (len(ls) - 1) / 2
-            for j, (s, size) in enumerate(zip(ls, sizes)):
-                ax.text(text_x, top - j * step, s, ha="left", va="center", fontsize=size,
+            step = 1.2 * max(sizes) / 72
+            top = band_mid + step * (len(ls) - 1) / 2
+            for j, (s_, size) in enumerate(zip(ls, sizes)):
+                ax.text(match_text_x, top - j * step, s_, ha="left", va="center", fontsize=size,
                         color="black" if j == 0 else _GREY)
         y -= row_h
         if i + 1 < len(pats) and pats[i + 1].group == p.group:
@@ -559,6 +657,153 @@ def plot_modisco(
     ax.set_xlim(0, width)
     ax.set_ylim(0, height)
     return fig
+
+
+def _headings(use_type: str, n_cols: int) -> dict[str, str]:
+    # The PPM column is headed by what it shows: information content (ICM) or probabilities (PPM).
+    head = {"label": "Pattern", "seqlets": "Seqlets", "hits": "Hits", "CWM": "CWM", "hCWM": "hCWM", "PPM": use_type}
+    head["match"] = "Best match" if n_cols == 1 else "Matches"
+    return head
+
+
+# How a motif of contribution_motifs() was found, when not in the seqlets as
+# they are.
+_SOURCES = {"idealized": "found in idealized seqlets", "gapped": "gapped composite"}
+
+_SORT_SCRIPT = """<script>
+// Clicking a heading sorts the rows by that column, and clicking it again
+// turns the order around. Rows without a value go last either way.
+document.querySelectorAll("th.sort").forEach((th) => {
+  th.addEventListener("click", () => {
+    const col = [...th.parentNode.children].indexOf(th);
+    const body = th.closest("table").tBodies[0];
+    const dir = th.dataset.dir ? (th.dataset.dir === "asc" ? "desc" : "asc") : th.dataset.first;
+    th.parentNode.querySelectorAll("th").forEach((h) => delete h.dataset.dir);
+    th.dataset.dir = dir;
+    const key = (row) => {
+      const v = row.children[col].dataset.v;
+      return v === "" || v === undefined ? null : Number(v);
+    };
+    const rows = [...body.rows].sort((a, b) => {
+      const x = key(a), y = key(b);
+      if (x === null || y === null) return (x === null) - (y === null);
+      return dir === "asc" ? x - y : y - x;
+    });
+    rows.forEach((r) => body.appendChild(r));
+  });
+});
+</script>"""
+
+_HTML_HEAD = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root { --bg: #ffffff; --fg: #000000; --muted: #666666; --rule: #e3e3e3; --head: #ffffff; color-scheme: light; }
+body { background: var(--bg); color: var(--fg); font: 13px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+       margin: 0; }
+main { max-width: 1600px; margin: 0 auto; padding: 20px 16px 48px; }
+.wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th { position: sticky; top: 0; background: var(--head); font-weight: 600; color: var(--muted); text-align: left;
+     padding: 6px 10px 6px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; z-index: 1; }
+th.n { text-align: right; }
+td { padding: 4px 10px 4px 0; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td svg { display: block; max-width: none; }
+th.sort { cursor: pointer; user-select: none; }
+th.sort::after { content: " \\2195"; color: var(--rule); }
+th.sort[data-dir="asc"]::after { content: " \\2191"; color: var(--fg); }
+th.sort[data-dir="desc"]::after { content: " \\2193"; color: var(--fg); }
+.mg { display: grid; grid-template-columns: max-content max-content; gap: 2px 8px; align-items: center; }
+.mg > span { white-space: nowrap; }
+.m { color: var(--muted); }
+code { font-family: ui-monospace, Menlo, monospace; font-size: 0.92em; }
+details summary { cursor: pointer; color: var(--muted); }
+.mem { display: flex; align-items: center; gap: 8px; white-space: nowrap; margin: 2px 0; }
+</style></head><body><main>
+"""
+
+
+def _html_page(modisco, pats: list[_Pattern], columns: list[str], shown: list[str], n_cols: int, use_type: str,
+               title: str | None) -> str:
+    """The report as one self-contained HTML page, with the same columns as
+    the figure and one more that lists the CWMs making up each pattern."""
+    from ._contribution_motifs import ContributionMotifs
+    from ._display import logo_svg
+
+    found = isinstance(modisco, ContributionMotifs)
+    if title is None:
+        title = ("Motifs from contribution scores" if found
+                 else "TF-MoDISco patterns" if isinstance(modisco, (str, os.PathLike)) else "Patterns")
+    esc = _html.escape
+    head = _headings(use_type, n_cols)
+    counted = [c for c in ("seqlets", "hits") if c in columns]
+    with_parts = any(p.members for p in pats)
+
+    # Columns that sort, and the way each sorts first: counts from the most,
+    # q-values from the least, and the rest from the top.
+    cols = [("Pattern", "asc"), ("Sign", "asc"), *[(head[c], "desc") for c in counted],
+            *[(head[t], None) for t in shown], *([(head["match"], "asc")] if n_cols else []),
+            *([("CWMs", "desc")] if with_parts else [])]
+    out = [_HTML_HEAD.replace("__TITLE__", esc(title))]
+    heads = []
+    for name, first in cols:
+        cls = " ".join(x for x in ("sort" if first else "", "n" if name in ("Seqlets", "Hits") else "") if x)
+        attrs = (f' class="{cls}"' if cls else "") + (f' data-first="{first}"' if first else "")
+        heads.append(f"<th{attrs}>{esc(name)}</th>")
+    out.append('<div class="wrap"><table><thead><tr>' + "".join(heads) + "</tr></thead><tbody>")
+    for i, p in enumerate(pats):
+        sign = {"pos": "positive", "neg": "negative"}.get(p.group, "")
+        cells = [f'<td data-v="{i}"><b>{esc(p.label)}</b>'
+                 + (f"<br><code>{esc(p.consensus)}</code>" if p.consensus else "") + "</td>",
+                 f'<td data-v="{"pos neg".find(p.group or "x")}">{sign}</td>']
+        for c in counted:
+            v = p.nsites if c == "seqlets" else p.hits
+            text = "" if v is None else f"{v:,}"
+            if c == "seqlets" and p.share is not None:
+                text += f'<br><span class="m">{100 * p.share:.1f}%</span>'
+            cells.append(f'<td class="n" data-v="{"" if v is None else v}">{text}</td>')
+        for t in shown:
+            logo = logo_svg(p.motifs[t], use_type="CWM" if t != "PPM" else use_type, height=34, position_width=8)
+            cells.append(f"<td>{logo}</td>")
+        if n_cols:
+            if p.matches:
+                lines = []
+                for target, m, _, q, _ in p.matches:
+                    ls = _match_lines(target, m, q)
+                    label = f"<span><b>{esc(ls[0])}</b>" + "".join(f' <span class="m">{esc(x)}</span>' for x in ls[1:])
+                    logo = "" if m is None else logo_svg(m, use_type=use_type, height=18, position_width=6)
+                    lines.append(label + "</span>" + (logo or "<span></span>"))
+                best = min((q for *_, q, _ in p.matches if q is not None), default="")
+                cells.append(f'<td data-v="{best}"><div class="mg">{"".join(lines)}</div></td>')
+            else:
+                cells.append('<td class="m" data-v="">no match</td>')
+        if with_parts:
+            if p.members:
+                inner = "".join(
+                    f'<div class="mem"><span><b>{esc(r["name"])}</b>'
+                    + (f' <code>{esc(r["consensus"])}</code>' if r.get("consensus") else "")
+                    + f' <span class="m">{r["seqlets"]:,} seqlets'
+                    + (f", {_SOURCES[r['source']]}" if r.get("source") in _SOURCES else "") + "</span></span>"
+                    + f'{logo_svg(r["cwm"], height=24, position_width=6)}</div>' for r in p.members)
+                n = len(p.members)
+                cells.append(f'<td data-v="{n}"><details><summary>{n} CWM{"s" if n != 1 else ""}</summary>'
+                             f"{inner}</details></td>")
+            else:
+                cells.append('<td class="m" data-v="0">none</td>')
+        out.append("<tr>" + "".join(cells) + "</tr>")
+    out.append("</tbody></table></div></main>" + _SORT_SCRIPT + "</body></html>")
+    return "\n".join(out)
+
+
+def _report(modisco, path, database, n_matches, qvalue, title, nthreads) -> str:
+    """The HTML page of plot_modisco(), without drawing the figure."""
+    pats, columns, shown, n_cols = _prepare(modisco, None, database, None, None, None, n_matches, qvalue, "ICM",
+                                            0.3, False, nthreads)
+    page = _html_page(modisco, pats, columns, shown, n_cols, "ICM", title)
+    if path is not None:
+        pathlib.Path(path).write_text(page)
+    return page
 
 
 __all__ = ["plot_modisco"]

@@ -73,7 +73,7 @@ def _logos(fig):
 
 def test_file_report(modisco, known):
     cmp = _matches(modisco, known)
-    fig = plot_modisco(modisco, matches=cmp, database=known)
+    fig = plot_modisco(modisco, matches=cmp, database=known, n_matches=1)
     texts = _texts(fig)
     # PPMs are drawn as information content by default, and headed so.
     assert texts[:5] == ["Pattern", "Seqlets", "CWM", "ICM", "Best match"]
@@ -113,7 +113,7 @@ def test_matches_skip_patterns_and_respect_n_matches(modisco, known):
     cmp = _matches(modisco, known)
     fig = plot_modisco(modisco, matches=cmp, database=known, n_matches=3)
     texts = _texts(fig)
-    assert texts[4:7] == ["Match 1", "Match 2", "Match 3"]
+    assert texts[4] == "Matches"
     # A pattern is never its own match, nor that of another pattern.
     names = {"pos_0", "pos_1", "pos_2", "neg_0"}
     assert [t for t in texts if t in names] == ["pos_0", "pos_1", "pos_2", "neg_0"]
@@ -133,13 +133,18 @@ def test_matches_are_oriented(known):
     assert "PPM" in _texts(fig) and "ICM" not in _texts(fig)
     pattern, match = _logos(fig)[1:]
     # Drawn as probabilities, the reverse-complemented match has the same
-    # letters as the pattern, so their shapes line up after a shift.
+    # letters as the pattern, so their shapes line up once each logo is
+    # scaled to its own frame. The matches are drawn smaller.
     a, b = pattern.get_paths(), match.get_paths()
     assert len(a) == len(b)
-    shift = b[0].vertices[:, 0].min() - a[0].vertices[:, 0].min()
-    for p, q in zip(a, b):
-        np.testing.assert_allclose(q.vertices[:, 0] - shift, p.vertices[:, 0], atol=1e-9)
-        np.testing.assert_allclose(q.vertices[:, 1], p.vertices[:, 1], atol=1e-9)
+
+    def frame(paths):
+        v = np.concatenate([q.vertices for q in paths])
+        lo, hi = v.min(axis=0), v.max(axis=0)
+        return [(q.vertices - lo) / (hi - lo) for q in paths]
+
+    for p, q in zip(frame(a), frame(b)):
+        np.testing.assert_allclose(q, p, atol=1e-9)
 
 
 def test_align_shares_a_frame(known):
@@ -204,6 +209,8 @@ def test_columns(modisco):
     assert not _logos(fig)
     with pytest.raises(ValueError, match="columns"):
         plot_modisco(modisco, columns=["ICM"])
+    with pytest.raises(ValueError, match="hits column"):
+        plot_modisco(modisco, columns=["hits"])
 
 
 def test_trim_threshold(modisco):
@@ -253,8 +260,6 @@ def test_motif_lists(known):
 
 def test_argument_checks(modisco, known):
     cmp = _matches(modisco, known)
-    with pytest.raises(ValueError, match="database needs matches"):
-        plot_modisco(modisco, database=known)
     with pytest.raises(ValueError, match="n_matches"):
         plot_modisco(modisco, matches=cmp, n_matches=0)
     with pytest.raises(ValueError, match="use_type"):
@@ -295,7 +300,7 @@ def test_label_can_share_a_database_name(known):
     cmp = um.compare_motifs([ppm] + known, compare_to=[0], qvalue=0.5)
     names = {"pos_patterns.pattern_0": "GATA"}
     for matches in (cmp, cmp.drop("subject_i", "target_i")):
-        texts = _texts(plot_modisco([ppm], matches=matches, database=known, names=names))
+        texts = _texts(plot_modisco([ppm], matches=matches, database=known, names=names, n_matches=1))
         best = texts.index("Best match")
         assert texts[best + 1:].count("GATA") == 2, texts
         assert "CCAAT-box" not in texts
@@ -303,3 +308,39 @@ def test_label_can_share_a_database_name(known):
     for matches in (cmp, cmp.drop("subject_i", "target_i")):
         texts = _texts(plot_modisco([ppm], matches=matches, n_matches=12))
         assert "pos_patterns.pattern_0" not in texts and "pos_0" in texts and "GATA" in texts
+
+
+def test_named_by_database_alone(modisco, known):
+    fig = plot_modisco(modisco, database=known, qvalue=0.5)
+    texts = _texts(fig)
+    assert texts[4] == "Matches"
+    ppms = [m.replace(name=f"{m.name[:3]}_{m.name.rsplit('_', 1)[1]}")
+            for m in um.read_modisco(modisco, type="PPM", trim_threshold=0.3)]
+    names = um.name_motifs(ppms, known, qvalue=0.5)
+    for alt in names.filter(pl.col("rank") == 1)["altname"]:
+        assert not alt or alt in texts
+    assert _texts(plot_modisco(modisco, matches=names, database=known)) == texts
+
+
+def test_html_page(modisco, known, tmp_path):
+    path = tmp_path / "report.html"
+    fig = plot_modisco(modisco, database=known, qvalue=0.5, patterns=(2, 1), html=path, title="Run 1")
+    page = path.read_text()
+    assert page.startswith("<!doctype html>") and "<title>Run 1</title>" in page
+    # The same columns as the figure, and one row per pattern under its group's heading.
+    texts = _texts(fig)
+    for head in ("Pattern", "Sign", "Seqlets", "CWM", "ICM", "Matches"):
+        assert f">{head}</th>" in page
+    # The fixture's patterns have no subpatterns, so there are no CWMs to list.
+    assert ">CWMs</th>" not in page
+    assert page.count("<tr>") == 1 + 3
+    assert page.index("pos_0") < page.index("pos_1") < page.index("neg_0")
+    assert page.count(">positive</td>") == 2 and page.count(">negative</td>") == 1
+    # The columns sort, but not those of logos.
+    assert page.count('<th class="sort') == 4 and "<script>" in page
+    assert "1,200" in page
+    for t in texts:
+        if t.startswith("q = ") or "· q = " in t:
+            assert t in page
+    # The same logos as the figure: the two pattern columns and each match.
+    assert page.count("<svg") == len(_logos(fig)) > 2 * 3

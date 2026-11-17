@@ -4,6 +4,8 @@
 
 Changes in behaviour:
 
+- `plot_modisco()` shows three matches per pattern by default, stacked in
+  one column, each with its name, ID and q-value but no longer its score.
 - `motif_finder()` and `gapped_motif_finder()` build their background, when
   none is given, from three shuffles of the sequences rather than one
   (`bkg_shuffles`, and `--bkg-shuffles` for the `find` and `find-gapped`
@@ -59,8 +61,11 @@ New:
 - `ContributionMotifs.patterns` gathers motifs with similar CWMs into
   patterns, each led by the motif reaching the most seqlets, as
   TF-MoDISco gathers seqlets (`pattern_similarity`, 0.8 by default), and
-  `ContributionMotifs.report()` writes the patterns as one HTML page with
-  their logos, seqlets, hits and database matches.
+  `ContributionMotifs.report()` writes the patterns as one HTML page.
+- `plot_modisco()` draws the patterns of `contribution_motifs()` as it does
+  those of TF-MoDISco, and with `html` also writes the report as an HTML
+  page whose columns sort and whose rows open to show each pattern's CWMs,
+  or a TF-MoDISco pattern's subpatterns.
 - `name_motifs()` names motifs by the database motifs, such as JASPAR's,
   they resemble most, scored the TOMTOM way, with q-values corrected for
   the size of the database.
@@ -68,7 +73,8 @@ New:
   for its chromBPNet and BPNet models, whose Blosc compression needs
   `hdf5plugin`, now part of the `h5py` extra.
 - `plot_modisco()` takes the matches of `name_motifs()` as well as those of
-  `compare_motifs()`.
+  `compare_motifs()`, or names the patterns itself when given only a
+  `database`.
 - The deep-learning guides are reorganized into an introduction to
   contribution scores and three guides: TF-MoDISco results, motifs from
   contribution scores, and experiments on a model. The deep-learning
