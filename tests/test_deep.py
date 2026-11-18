@@ -263,6 +263,33 @@ def test_read_contributions_encode(tmp_path):
         um.read_contributions(tmp_path / "other.h5")
 
 
+def test_read_contributions_encode_all_regions(tmp_path):
+    h5py = pytest.importorskip("h5py")
+    genome = {"chr1": "ACGTACGTAAccggttGATTACAGAT", "chr2": "TTTTGGGGCAAAAA"}
+    seqs = ["ACGTACGTAA", "TTTTGGGGCA", "GATTACAGAT"]
+    onehot = um.one_hot(seqs, dtype=np.float32)
+    hyp = np.random.default_rng(1).normal(size=onehot.shape)
+    path = tmp_path / "seq_contrib.counts.fold_mean.all_regions.ENCSR000AAA.h5"
+    # The files of all regions hold (sequences, letters, length) scores and coordinates, but no sequences.
+    with h5py.File(path, "w") as f:
+        f["attributions/shap"] = hyp
+        f["coords/coords_chrom"] = np.array([b"chr1", b"chr2", b"chr1"])
+        f["coords/coords_start_dset"] = np.array([0, 0, 16])
+        f["coords/coords_end_dset"] = np.array([10, 10, 26])
+    c = um.read_contributions(path, sequences=genome)
+    # Soft-masked letters of the genome are read as any other.
+    assert c.sequences == seqs and c.scores.dtype == np.float32
+    np.testing.assert_allclose(c.scores, hyp, rtol=1e-6)
+    assert c.names == ["chr1:0-10", "chr2:0-10", "chr1:16-26"]
+    proj = um.read_contributions(path, sequences=genome, scores="projected", indices=[2, 0])
+    np.testing.assert_allclose(proj.scores, (hyp * onehot)[[2, 0]], rtol=1e-6)
+    assert proj.sequences == [seqs[2], seqs[0]]
+    strings = um.read_contributions(path, sequences=seqs, indices=[1])
+    assert strings.sequences == [seqs[1]] and strings.names == ["chr2:0-10"]
+    with pytest.raises(ValueError, match="holds no sequences"):
+        um.read_contributions(path)
+
+
 def test_read_contributions_numpy(tmp_path):
     seqs = ["ACGTA", "GGCAT"]
     onehot = um.one_hot(seqs, dtype=np.int8)

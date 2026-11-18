@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+New:
+
+- `read_contributions()` reads the files of all regions in ENCODE's
+  chromBPNet archives, which hold no sequences; `sequences` gives them,
+  and can now be a `Genome` to read them from at the file's coordinates.
+
+Fixes:
+
+- `refine_motifs()`, and so `contribution_motifs()`, no longer fail with
+  "PCM columns must all have the same sum" when a site holds an N.
+
 ## 0.6.0 (2026-11-17)
 
 Changes in behaviour:

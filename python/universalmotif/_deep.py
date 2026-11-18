@@ -856,6 +856,22 @@ def _encode_regions(chrom: np.ndarray, start: np.ndarray, end: np.ndarray, lengt
     return pl.DataFrame({"chrom": chrom, "start": lo, "end": lo + length})
 
 
+def _picked(x: np.ndarray, pick: list[int] | None) -> np.ndarray:
+    """The sequences ``pick`` of an array, picked before it is converted so
+    that only those are read from memory-mapped files."""
+    x = x[None] if x.ndim == 2 else x
+    return x if pick is None else x[pick]
+
+
+def _one_hot_of(sequences: Any, pick: list[int] | None, n: int, alphabet: str) -> np.ndarray:
+    """One-hot sequences, letters first, from strings or from a file or
+    array of them one-hot encoded."""
+    if isinstance(sequences, list) and sequences and isinstance(sequences[0], str):
+        onehot = one_hot(sequences, alphabet=alphabet, dtype=np.int8)
+        return onehot if pick is None else onehot[pick]
+    return _letters_first(np.asarray(_picked(_load_array(sequences, "sequences"), pick)), n, "the sequences")
+
+
 def read_contributions(
     path: str | os.PathLike[str],
     sequences: Any = None,
@@ -866,13 +882,20 @@ def read_contributions(
 ) -> ContributionScores:
     """Read the contribution scores a sequence model gives its inputs.
 
-    Three layouts are read.
+    Four layouts are read.
 
     - The HDF5 files ENCODE publishes for its chromBPNet and BPNet models,
       such as ``seq_contrib.counts.fold_mean.<accession>.h5`` in their
       sequence contribution archives. These hold the one-hot sequences,
       their hypothetical scores and their coordinates. They are compressed
       with Blosc, which needs ``hdf5plugin`` installed as well as ``h5py``.
+    - The HDF5 files of all regions in ENCODE's chromBPNet archives, such
+      as ``seq_contrib.counts.fold_mean.all_regions.<accession>.h5``. These
+      hold the hypothetical scores and coordinates but not the sequences,
+      which are given as ``sequences``: a [`Genome`][universalmotif.Genome]
+      (or any mapping of chromosomes to sequences) to read them from at the
+      file's coordinates, the sequences as strings, or their one-hot
+      encoding as a file or an array.
     - The HDF5 files chromBPNet writes, ``<prefix>.counts_scores.h5`` and
       ``<prefix>.profile_scores.h5``, which hold the one-hot sequences and
       their scores. The genomic range of each sequence
@@ -912,6 +935,9 @@ def read_contributions(
     >>> c = um.read_contributions("model.counts_scores.h5")  # doctest: +SKIP
     >>> c.view(0, kind="all")  # doctest: +SKIP
     >>> c = um.read_contributions("shap.npz", sequences="ohe.npz")  # doctest: +SKIP
+    >>> genome = um.Genome("hg38.2bit")  # doctest: +SKIP
+    >>> c = um.read_contributions("seq_contrib.counts.fold_mean.all_regions.ENCSR868FGK.h5",
+    ...                           sequences=genome, indices=range(1000))  # doctest: +SKIP
     """
     if scores not in ("hypothetical", "projected"):
         raise ValueError('scores must be "hypothetical" or "projected"')
@@ -921,8 +947,6 @@ def read_contributions(
     pick = None if indices is None else [int(i) for i in indices]
     ranges = None
     if path.endswith((".h5", ".hdf5")):
-        if sequences is not None:
-            warnings.warn("sequences is ignored for HDF5 files, which hold the sequences", stacklevel=2)
         try:
             import h5py
         except ImportError as e:
@@ -963,6 +987,15 @@ def read_contributions(
                     onehot = _letters_first(np.asarray(read(f["raw"]["seq"])), n, "the sequences")
                     values = _letters_first(np.asarray(read(f[key]["seq"]), dtype=np.float32), n, "the scores")
                     coords = None
+                elif "attributions" in f and "coords" in f:
+                    # ENCODE's chromBPNet files of all regions, without the sequences.
+                    onehot = None
+                    values = _letters_first(np.asarray(read(f["attributions"]["shap"]), dtype=np.float32), n,
+                                            "the scores")
+                    coords = None
+                    if regions is None:
+                        coords = [np.asarray(read(f["coords"][f"coords_{k}"]))
+                                  for k in ("chrom", "start_dset", "end_dset")]
                 else:
                     raise ValueError(f"{path} is not a chromBPNet or BPNet scores file; it holds {', '.join(f)}")
         except OSError as e:
@@ -978,27 +1011,32 @@ def read_contributions(
             ranges = _chrombpnet_regions(path, regions, values.shape[-1])
             if ranges is not None and pick is not None:
                 ranges = ranges[pick]
+        if onehot is not None and sequences is not None:
+            warnings.warn("sequences is ignored for HDF5 files that hold the sequences", stacklevel=2)
+        if onehot is None:
+            if sequences is None:
+                raise ValueError(f"{path} holds no sequences; give them with sequences, as a Genome to read "
+                                 "them from at its coordinates, strings or their one-hot encoding")
+            if isinstance(sequences, Mapping):
+                from ._genome import extract_ranges
+
+                if ranges is None:
+                    raise ValueError("reading the sequences from a genome needs the coordinates of the scores")
+                seqs = [s.upper() for s in extract_ranges(sequences, ranges).values()]
+                onehot = one_hot(seqs, alphabet=alphabet, dtype=np.int8)
+            else:
+                onehot = _one_hot_of(sequences, pick, n, alphabet)
+            if scores == "projected":
+                values = values * onehot
     else:
         if regions is not None:
             warnings.warn("regions is only used with chromBPNet HDF5 files and is ignored", stacklevel=2)
         if sequences is None:
             raise ValueError("give the sequences, or a file of them one-hot encoded, with sequences")
 
-        # Sequences are picked before the scores are converted, so that only
-        # those are read from memory-mapped files.
-        def picked(x):
-            x = x[None] if x.ndim == 2 else x
-            return x if pick is None else x[pick]
-
-        values = _letters_first(np.asarray(picked(_load_array(path, "scores")), dtype=np.float32),
+        values = _letters_first(np.asarray(_picked(_load_array(path, "scores"), pick), dtype=np.float32),
                                 n, "the scores")
-        if isinstance(sequences, list) and sequences and isinstance(sequences[0], str):
-            onehot = one_hot(sequences, alphabet=alphabet, dtype=np.int8)
-            if pick is not None:
-                onehot = onehot[pick]
-        else:
-            onehot = _letters_first(np.asarray(picked(_load_array(sequences, "sequences"))),
-                                    n, "the sequences")
+        onehot = _one_hot_of(sequences, pick, n, alphabet)
         if scores == "projected":
             values = values * onehot
     if onehot.shape[0] != values.shape[0] or onehot.shape[-1] != values.shape[-1]:
