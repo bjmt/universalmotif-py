@@ -275,16 +275,37 @@ def test_io_argument_checks(tmp_path):
 
 
 @pytest.mark.parametrize("fmt, label", [
-    ("meme", "MEME"), ("jaspar", "JASPAR"), ("homer", "HOMER"), ("transfac", "TRANSFAC"),
-    ("cisbp", "CIS-BP"), ("uniprobe", "UniPROBE"), ("matrix", "Raw matrix"),
+    ("homer", "HOMER"), ("cisbp", "CIS-BP"), ("uniprobe", "UniPROBE"), ("matrix", "Raw matrix"),
 ])
 def test_writers_warn_about_gaps(tmp_path, fmt, label):
     gapped = um.add_gap(um.create_motif("ACGTACGT", nsites=10), gaploc=4, mingap=1, maxgap=3)
-    with pytest.warns(UserWarning, match=f"{label} format cannot preserve gap definitions"):
+    with pytest.warns(UserWarning, match=f"{label} format cannot keep the gaps of motifs"):
         getattr(um, f"write_{fmt}")(gapped, tmp_path / f"g.{fmt}")
     # The motif is still written, without its gap.
     back = getattr(um, f"read_{fmt}")(tmp_path / f"g.{fmt}")[0]
     assert back.width == 8 and not back.isgapped
+
+
+@pytest.mark.parametrize("fmt", ["meme", "jaspar", "transfac"])
+def test_writers_keep_gaps_in_the_alternative_name(tmp_path, fmt):
+    gapped = um.add_gap(um.create_motif("ACGTACGT", nsites=10), gaploc=4, mingap=1, maxgap=3)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        getattr(um, f"write_{fmt}")(gapped, tmp_path / f"g.{fmt}")
+        back = getattr(um, f"read_{fmt}")(tmp_path / f"g.{fmt}")[0]
+    assert back.altname == "ACGT[1-3]ACGT"
+    assert (back.gaploc, back.mingap, back.maxgap) == ([4], [1], [3])
+    # A motif's own alternative name gives way to its gaps, with a warning.
+    named = gapped.replace(altname="kept?")
+    with pytest.warns(UserWarning, match="alternative names of gapped motifs"):
+        getattr(um, f"write_{fmt}")(named, tmp_path / f"n.{fmt}")
+
+
+def test_meme_cannot_keep_gaps_without_a_consensus(tmp_path):
+    custom = um.add_gap(um.create_motif(["HHCCEE", "HHCCEE"], alphabet="CEH"), gaploc=2, mingap=0, maxgap=2)
+    with pytest.warns(UserWarning, match="cannot keep the gaps of these motifs"):
+        um.write_meme(custom, tmp_path / "c.meme")
+    assert not um.read_meme(tmp_path / "c.meme")[0].isgapped
 
 
 def test_fasta_round_trip_other_alphabets(tmp_path):
@@ -293,3 +314,37 @@ def test_fasta_round_trip_other_alphabets(tmp_path):
     assert um.read_fasta(tmp_path / "s.fa.gz") == seqs
     lines = gzip.decompress((tmp_path / "s.fa.gz").read_bytes()).decode().splitlines()
     assert max(len(x) for x in lines if not x.startswith(">")) == 3
+
+
+def test_universalmotif_format_from_the_r_package(tmp_path):
+    path = reference_file("universalmotif_mixed.yml")
+    if not path.exists():
+        pytest.skip("reference files not found")
+    with pytest.warns(UserWarning, match="multifreq"):
+        motifs = um.read_universalmotif(path)
+    assert [m.name for m in motifs] == ["toy: protein #1", "MA0108.2 TBP", "ss", "r", "DR"]
+    assert motifs[0].altname == "yes" and motifs[0].family == "it's a family"
+    assert motifs[1].pval == 1e-5 and motifs[1].nsites == 50
+    assert motifs[4].gaploc == [3, 6] and motifs[4].maxgap == [1, 5]
+    # Written and read again, every motif comes back the same.
+    um.write_universalmotif(motifs, tmp_path / "back.yml")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        back = um.read_universalmotif(tmp_path / "back.yml")
+    assert back == motifs
+    # Appending adds motifs without a second header.
+    um.write_universalmotif(motifs[:1], tmp_path / "back.yml", append=True)
+    text = (tmp_path / "back.yml").read_text()
+    assert text.count("# universalmotif version") == 1
+    assert len(um.read_universalmotif(tmp_path / "back.yml")) == 6
+
+
+def test_universalmotif_format_on_the_command_line(tmp_path):
+    from universalmotif._cli import main
+
+    dr = um.add_gap(um.create_motif("AGGTCAAGGTCA", name="DR"), gaploc=6, mingap=1, maxgap=5)
+    um.write_universalmotif(dr, tmp_path / "in.txt")
+    # The format is recognized from the contents, and from a .yml extension.
+    assert main(["convert", str(tmp_path / "in.txt"), "-o", str(tmp_path / "out.yml")]) in (None, 0)
+    back = um.read_universalmotif(tmp_path / "out.yml")
+    assert back[0].gaploc == [6] and back[0].maxgap == [5]

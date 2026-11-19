@@ -91,7 +91,8 @@ Finding the motifs a sequence model relies on, from its contribution scores or i
 A few conventions hold across the commands.
 
 - **Motifs** can be MEME, JASPAR, HOMER, TRANSFAC, CIS-BP, UniPROBE or
-  plain matrix files, gzipped or not. CIS-BP archives downloaded as `.zip`
+  plain matrix files, or files saved by the R package universalmotif
+  (`universalmotif`, recognized from a `.yml` extension), gzipped or not. CIS-BP archives downloaded as `.zip`
   files are read too. The format is recognized
   from the extension, or else from the contents, and can be given with `-f`.
   When a file cannot be read, the error names the format it was taken to be.
@@ -385,8 +386,8 @@ drawn from the genome with `bkg` gives far fewer false motifs than shuffled
 targets.
 
 Here `find-gapped` finds the G-box planted 23 letters from the AP-1 site, read on the
-other strand. No motif format keeps gaps, so the motifs are written as
-their two parts joined, and the table gives each gap:
+other strand. The table gives each motif's gap, and the MEME file keeps it
+as the motif's alternative name, as in `CACGTG[23-23]TGAGTCA`:
 
 ```sh
 umotif bkg -s peaks.fa -g genome.fa.gz --exclude peaks.bed --seed 1 -o bkg.fa

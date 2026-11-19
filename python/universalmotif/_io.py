@@ -56,9 +56,40 @@ def _motif_list(motifs: Motif | Iterable[Motif]) -> list[Motif]:
     return out
 
 
-def _warn_gaps(motifs: list[Motif], fmt: str) -> None:
-    if any(m.isgapped for m in motifs):
-        warnings.warn(f"{fmt} format cannot preserve gap definitions", stacklevel=3)
+def _gap_notation(m: Motif) -> str | None:
+    """A gapped motif's gaps written into its consensus, as in
+    AGGTCA[1-5]AGGTCA."""
+    if not m.isgapped or m.consensus is None:
+        return None
+    c, out, at = m.consensus, "", 0
+    for loc, lo, hi in zip(m.gaploc, m.mingap, m.maxgap):
+        out += f"{c[at:loc]}[{lo}-{hi}]"
+        at = loc
+    return out + c[at:]
+
+
+def _warn_gaps(motifs: list[Motif], fmt: str, notation: bool = False) -> None:
+    """Warn of gaps a format loses. Formats that keep them in the
+    alternative name (``notation``) lose them only for motifs without a
+    consensus, and replace the alternative names of gapped motifs."""
+    gapped = [m for m in motifs if m.isgapped]
+    if not gapped:
+        return
+    if not notation or any(m.consensus is None for m in gapped):
+        warnings.warn(
+            f"{fmt} format cannot keep the gaps of {'these motifs' if notation else 'motifs'}; "
+            "write_universalmotif() keeps them" + ("" if notation else ", and MEME, JASPAR and "
+                                                   "TRANSFAC files keep them in the alternative name"),
+            stacklevel=3,
+        )
+    replaced = [m.name for m in gapped if m.altname and _gap_notation(m) not in (None, m.altname)]
+    if notation and replaced:
+        warnings.warn(
+            f"the alternative names of gapped motifs ({', '.join(replaced[:3])}"
+            f"{', ...' if len(replaced) > 3 else ''}) are replaced by their gaps, written as in "
+            "AGGTCA[1-5]AGGTCA",
+            stacklevel=3,
+        )
 
 
 def _write_text(file: PathLike, text: str, overwrite: bool, append: bool) -> None:
@@ -217,7 +248,10 @@ def read_meme(
 
     The ``strands:`` line gives every motif its ``strand``, which scanning
     respects. Without it, DNA and RNA motifs are for both strands and those
-    of other alphabets for one.
+    of other alphabets for one. A motif whose alternative name gives gaps,
+    as in ``AGGTCA[1-5]AGGTCA``, gets those gaps, as do those read by
+    [`read_jaspar()`][universalmotif.read_jaspar] and
+    [`read_transfac()`][universalmotif.read_transfac].
 
     Parameters
     ----------
@@ -373,7 +407,9 @@ def write_meme(
     for DNA is A, C, G, T. By default the motifs' shared background is used,
     or a uniform one if they differ. ``strand`` overrides the ``strands:``
     line. When appending to an existing file, only the motifs are written.
-    Equal signs in names become periods and spaces become dashes.
+    Equal signs in names become periods and spaces become dashes. A gapped
+    motif gets its gaps as its alternative name, written into its consensus
+    as in ``AGGTCA[1-5]AGGTCA``, which the readers turn back into gaps.
 
     References
     ----------
@@ -397,7 +433,7 @@ def write_meme(
     [('TATA-box', 'PPM'), ('AP-1', 'PPM')]
     """
     ms = _motif_list(motifs)
-    _warn_gaps(ms, "MEME")
+    _warn_gaps(ms, "MEME", notation=True)
     header = not (append and Path(file).exists())
     text = _core._write_meme(
         ms, version, None if bkg is None else _bkg_letters(bkg), strand, cwm, header
@@ -409,6 +445,9 @@ def write_jaspar(
     motifs: Motif | Iterable[Motif], file: PathLike, overwrite: bool = False, append: bool = False
 ) -> None:
     """Write DNA, RNA or amino acid motifs as JASPAR count matrices.
+
+    A gapped motif gets its gaps as its alternative name, as
+    [`write_meme()`][universalmotif.write_meme] describes.
 
     References
     ----------
@@ -436,7 +475,7 @@ def write_jaspar(
     T [  9 21  0 20  1 10  0 13  0  8 ]
     """
     ms = _motif_list(motifs)
-    _warn_gaps(ms, "JASPAR")
+    _warn_gaps(ms, "JASPAR", notation=True)
     _write_text(file, _core._write_jaspar(ms), overwrite, append)
 
 
@@ -500,7 +539,8 @@ def write_transfac(
     """Write DNA or RNA motifs as TRANSFAC count matrices.
 
     ``name_tag`` and ``altname_tag`` choose the fields used for the name and
-    alternate name.
+    alternate name. A gapped motif gets its gaps as its alternative name, as
+    [`write_meme()`][universalmotif.write_meme] describes.
 
     References
     ----------
@@ -528,7 +568,7 @@ def write_transfac(
     [('TATA-box', 'PCM', 23.0), ('AP-1', 'PCM', 49.0)]
     """
     ms = _motif_list(motifs)
-    _warn_gaps(ms, "TRANSFAC")
+    _warn_gaps(ms, "TRANSFAC", notation=True)
     _write_text(file, _core._write_transfac(ms, name_tag, altname_tag), overwrite, append)
 
 
@@ -598,6 +638,73 @@ def write_uniprobe(
     ms = _motif_list(motifs)
     _warn_gaps(ms, "UniPROBE")
     _write_text(file, _core._write_uniprobe(ms), overwrite, append)
+
+
+def read_universalmotif(file: PathLike, skip: int = 0) -> list[Motif]:
+    """Read motifs saved by the R package universalmotif.
+
+    The R package's ``write_motifs()`` saves motifs in a text format of its
+    own, which keeps every field of a motif: its names, type, background,
+    pseudocount, ``nsites``, P-values, extra information and gaps. Files
+    from version 1.1.67 of the R package onwards can be read, and gaps from
+    version 1.31.51. Higher-order matrices (``multifreq``), background
+    frequencies of words longer than one letter, and the extra P-values of
+    gapped motifs are left out with a warning, as this package does not
+    keep them. The total IC and the consensus are computed again from the
+    matrix. ``skip`` drops lines from the start of the file.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import universalmotif as um
+    >>> dr = um.add_gap(um.create_motif("AGGTCAAGGTCA", name="DR"), gaploc=6, mingap=1, maxgap=5)
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     path = Path(tmp) / "motifs.yml"
+    ...     um.write_universalmotif(dr, path)
+    ...     back = um.read_universalmotif(path)[0]
+    >>> back.name, back.gaploc, back.mingap, back.maxgap
+    ('DR', [6], [1], [5])
+    """
+    motifs, notes = _core._read_universalmotif(_read_text(file, skip))
+    for note in notes:
+        warnings.warn(note, stacklevel=2)
+    return motifs
+
+
+def write_universalmotif(
+    motifs: Motif | Iterable[Motif], file: PathLike, overwrite: bool = False, append: bool = False
+) -> None:
+    """Write motifs in the text format of the R package universalmotif.
+
+    The R package reads these files with ``read_motifs()``. Every field of
+    each motif is kept, gaps included, with the numbers written in full so
+    that [`read_universalmotif()`][universalmotif.read_universalmotif]
+    gives back the same motifs. Versions of the R package before 1.31.51
+    fail on a file holding a gapped motif, so for those, write the motifs
+    with their gaps turned off by [`ungap()`][universalmotif.ungap].
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import universalmotif as um
+    >>> motif = um.create_motif("TATAAA", name="TATA", nsites=20)
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     path = Path(tmp) / "motifs.yml"
+    ...     um.write_universalmotif(motif, path)
+    ...     for line in path.read_text().splitlines()[:6]:
+    ...         print(line)
+    # universalmotif version 1.31.51
+    <BLANKLINE>
+    ---
+    name: TATA
+    alphabet: DNA
+    type: PPM
+    """
+    ms = _motif_list(motifs)
+    header = not (append and Path(file).exists())
+    _write_text(file, _core._write_universalmotif(ms, header), overwrite, append)
 
 
 def read_fasta(

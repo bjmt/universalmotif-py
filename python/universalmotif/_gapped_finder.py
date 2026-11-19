@@ -258,9 +258,9 @@ def gapped_motif_finder(
 
 
 def _consensus(m) -> str:
-    c = m.consensus
-    loc = m.gaploc[0]
-    return f"{c[:loc]}[{m.mingap[0]}-{m.maxgap[0]}]{c[loc:]}"
+    from ._io import _gap_notation
+
+    return _gap_notation(m)
 
 
 __all__ = ["gapped_motif_finder"]

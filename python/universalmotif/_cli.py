@@ -19,7 +19,7 @@ from pathlib import Path
 
 import polars as pl
 
-_MOTIF_FORMATS = ("meme", "jaspar", "homer", "transfac", "cisbp", "uniprobe", "matrix")
+_MOTIF_FORMATS = ("meme", "jaspar", "homer", "transfac", "cisbp", "uniprobe", "matrix", "universalmotif")
 _EXTENSIONS = {
     ".meme": "meme",
     ".jaspar": "jaspar",
@@ -32,10 +32,13 @@ _EXTENSIONS = {
     ".cisbp": "cisbp",
     ".uniprobe": "uniprobe",
     ".matrix": "matrix",
+    ".yml": "universalmotif",
+    ".yaml": "universalmotif",
 }
 _FORMAT_LIST = ", ".join(_MOTIF_FORMATS)
 _FORMAT_NAMES = {"meme": "MEME", "jaspar": "JASPAR", "homer": "HOMER", "transfac": "TRANSFAC",
-                 "cisbp": "CIS-BP", "uniprobe": "UniPROBE", "matrix": "a plain matrix"}
+                 "cisbp": "CIS-BP", "uniprobe": "UniPROBE", "matrix": "a plain matrix",
+                 "universalmotif": "universalmotif (the R package's format)"}
 _BED_SUFFIXES = (".bed", ".narrowpeak", ".broadpeak", ".bedgraph")
 
 
@@ -64,6 +67,8 @@ def _sniff_format(text: str) -> str:
     """The motif format of a file, judged from its contents."""
     if re.search(r"^MEME version", text, re.MULTILINE):
         return "meme"
+    if re.search(r"^# universalmotif version", text, re.MULTILINE):
+        return "universalmotif"
     if re.search(r"^P[0O]\s", text, re.MULTILINE):
         return "transfac"
     if re.search(r"^Pos\t", text, re.MULTILINE):
@@ -91,6 +96,7 @@ def read_motifs(paths: list[str], fmt: str | None = None) -> list:
         "cisbp": um.read_cisbp,
         "uniprobe": um.read_uniprobe,
         "matrix": um.read_matrix,
+        "universalmotif": um.read_universalmotif,
     }
     motifs = []
     for path in paths:
@@ -145,6 +151,7 @@ def write_motifs(motifs: list, path: str | None, fmt: str | None) -> None:
         "cisbp": um.write_cisbp,
         "uniprobe": um.write_uniprobe,
         "matrix": um.write_matrix,
+        "universalmotif": um.write_universalmotif,
     }
     kind = fmt or (None if path in (None, "-") else _EXTENSIONS.get(_stem_suffix(path))) or "meme"
     if not motifs:

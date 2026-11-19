@@ -6,7 +6,9 @@ use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::PyBool;
 use universalmotif::Motif;
-use universalmotif::io::{cisbp, fasta, homer, jaspar, matrix, meme, transfac, uniprobe};
+use universalmotif::io::{
+    cisbp, fasta, homer, jaspar, matrix, meme, transfac, uniprobe, universalmotif as umf,
+};
 
 use crate::{PyMotif, err, parse_alphabet, parse_type};
 
@@ -43,6 +45,17 @@ fn positions(p: &str) -> PyResult<matrix::Positions> {
             "positions must be 'columns' or 'rows'",
         )),
     }
+}
+
+#[pyfunction]
+fn _read_universalmotif(text: &str) -> PyResult<(Vec<PyMotif>, Vec<String>)> {
+    let (motifs, notes) = umf::read(text).map_err(err)?;
+    Ok((motifs.into_iter().map(PyMotif::from).collect(), notes))
+}
+
+#[pyfunction]
+fn _write_universalmotif(motifs: Vec<PyRef<'_, PyMotif>>, header: bool) -> PyResult<String> {
+    umf::write(&unwrap(&motifs), header).map_err(err)
 }
 
 #[pyfunction]
@@ -264,6 +277,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_read_fasta, m)?)?;
     m.add_function(wrap_pyfunction!(_read_fasta_path, m)?)?;
     m.add_function(wrap_pyfunction!(_write_fasta, m)?)?;
+    m.add_function(wrap_pyfunction!(_read_universalmotif, m)?)?;
+    m.add_function(wrap_pyfunction!(_write_universalmotif, m)?)?;
     m.add_function(wrap_pyfunction!(_read_jaspar, m)?)?;
     m.add_function(wrap_pyfunction!(_read_homer, m)?)?;
     m.add_function(wrap_pyfunction!(_read_transfac, m)?)?;

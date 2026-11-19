@@ -20,6 +20,8 @@ FASTA files, bgzip included, are read as they are.
 
 ::: universalmotif.read_matrix
 
+::: universalmotif.read_universalmotif
+
 ::: universalmotif.write_meme
 
 ::: universalmotif.write_jaspar
@@ -33,6 +35,8 @@ FASTA files, bgzip included, are read as they are.
 ::: universalmotif.write_uniprobe
 
 ::: universalmotif.write_matrix
+
+::: universalmotif.write_universalmotif
 
 ::: universalmotif.meme_alph
 

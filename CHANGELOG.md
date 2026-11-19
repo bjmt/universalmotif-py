@@ -9,8 +9,16 @@ Changes in behaviour:
 - `gapped_motif_finder()` takes `mismatch="auto"` by default, which runs
   the search again with one mismatch, at half of `stop_pvalue`, when it
   finds nothing; `find-gapped --mismatch` takes `off`, `on` or `auto`.
+- `write_meme()`, `write_jaspar()` and `write_transfac()` give gapped
+  motifs their gaps as their alternative name (`AGGTCA[1-5]AGGTCA`), and
+  the readers restore them.
 
 New:
+
+- `read_universalmotif()` and `write_universalmotif()` read and write the
+  R package's own format (its `read_motifs()` and `write_motifs()`), which
+  keeps every field, gaps included; the command line takes it as
+  `universalmotif`.
 
 - `read_contributions()` reads the files of all regions in ENCODE's
   chromBPNet archives, which hold no sequences; `sequences` gives them,

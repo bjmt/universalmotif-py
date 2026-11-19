@@ -87,6 +87,7 @@ from ._io import (
     read_meme,
     read_transfac,
     read_uniprobe,
+    read_universalmotif,
     write_cisbp,
     write_fasta,
     write_homer,
@@ -95,6 +96,7 @@ from ._io import (
     write_meme,
     write_transfac,
     write_uniprobe,
+    write_universalmotif,
 )
 from ._core import Motif
 from ._enrich import enrich_motifs, motif_coocc, motif_peaks
@@ -281,6 +283,7 @@ __all__ = [
     "read_seqlets",
     "read_transfac",
     "read_uniprobe",
+    "read_universalmotif",
     "read_vcf",
     "refine_motifs",
     "resize_ranges",
@@ -329,6 +332,7 @@ __all__ = [
     "write_meme",
     "write_transfac",
     "write_uniprobe",
+    "write_universalmotif",
 ]
 
 # Motifs show as a logo with their metadata in Jupyter.
