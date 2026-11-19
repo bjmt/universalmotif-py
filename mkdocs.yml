@@ -117,7 +117,7 @@ nav:
       - Comparing motifs and P-values: guides/comparison-and-pvalues.ipynb
       - Choosing a background: guides/background-models.ipynb
       - Scanning large genomes: guides/large-genomes.ipynb
-      - Gapped motifs and other alphabets: guides/gaps-and-alphabets.ipynb
+      - Gapped motifs: guides/gapped-motifs.ipynb
       - A ChIP-seq workflow: guides/chipseq-workflow.ipynb
       - Building a motif library: guides/building-a-library.ipynb
       - Motifs and deep learning: guides/deep-learning.ipynb
