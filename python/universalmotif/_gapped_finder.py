@@ -40,8 +40,8 @@ def gapped_motif_finder(
     bkg_sequences: Sequence[str] | Mapping[str, str] | None = None,
     k: int | Sequence[int] = (4, 5, 6),
     min_gap: int = 0,
-    max_gap: int = 20,
-    nmotifs: int = 3,
+    max_gap: int = 31,
+    nmotifs: int = 5,
     hit_pvalue: float = 1e-4,
     stop_pvalue: float = 1e-3,
     flank: int = 3,
@@ -49,7 +49,7 @@ def gapped_motif_finder(
     n_seed_pairs: int = 6,
     min_fraction: float = 0.02,
     holdout: float = 0.3,
-    mismatch: bool = False,
+    mismatch: bool | str = "auto",
     mask: bool = True,
     shuffle_k: int = 2,
     rc: bool = True,
@@ -144,9 +144,12 @@ def gapped_motif_finder(
         both P-values come from all the sequences instead, corrected for the
         pairs and seeds tried. They are then somewhat optimistic.
     mismatch
-        Count pairs of 6-mers in each sequence that holds them with at most
-        one mismatch. This finds the spacing of rarer motifs better but
-        takes several times longer. Shorter k-mers always match exactly.
+        Whether to count pairs of 6-mers in each sequence that holds them
+        with at most one mismatch, which finds the spacing of rarer motifs
+        better but takes several times longer. With ``"auto"``, the
+        search runs with exact matches and is run again with mismatches,
+        keeping motifs at half of ``stop_pvalue``, only if it finds
+        nothing. Shorter k-mers always match exactly.
     mask
         Mask low-complexity regions, such as homopolymers and short tandem
         repeats, with DUST in the sequences and the background before the
@@ -222,6 +225,9 @@ def gapped_motif_finder(
     _, pos = _sequence_pairs(sequences)
     neg = None if bkg_sequences is None else list(_sequence_pairs(bkg_sequences)[1])
     ks = [int(k)] if isinstance(k, (int, np.integer)) else [int(x) for x in k]
+    if mismatch not in (False, True, "auto"):
+        raise ValueError("mismatch must be False, True or 'auto'")
+    mismatch = {False: "off", True: "on", "auto": "auto"}[mismatch]
     found, info = _core._gapped_motif_finder(
         list(pos), neg, ks, min_gap, max_gap, nmotifs, hit_pvalue, stop_pvalue, flank, min_ic, n_seed_pairs,
         min_fraction, holdout, mismatch, mask, rc, shuffle_k, bkg_shuffles, _seed(seed), _nthreads(nthreads),

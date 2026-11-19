@@ -390,7 +390,7 @@ their two parts joined, and the table gives each gap:
 
 ```sh
 umotif bkg -s peaks.fa -g genome.fa.gz --exclude peaks.bed --seed 1 -o bkg.fa
-umotif find-gapped -s peaks.fa -b bkg.fa --max-gap 30 --seed 1 --table gapped.tsv -o gapped.meme
+umotif find-gapped -s peaks.fa -b bkg.fa --seed 1 --table gapped.tsv -o gapped.meme
 ```
 
 <!-- output: gapped.tsv 2 8 -->

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+Changes in behaviour:
+
+- `gapped_motif_finder()` and `find-gapped` search spacers up to 31 and
+  find up to 5 motifs by default (`max_gap=31`, `nmotifs=5`).
+- `gapped_motif_finder()` takes `mismatch="auto"` by default, which runs
+  the search again with one mismatch, at half of `stop_pvalue`, when it
+  finds nothing; `find-gapped --mismatch` takes `off`, `on` or `auto`.
+
 New:
 
 - `read_contributions()` reads the files of all regions in ENCODE's

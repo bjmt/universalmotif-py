@@ -8,7 +8,7 @@ use pyo3::types::PyDict;
 use universalmotif::Motif;
 use universalmotif::complexity::{self, ComplexityMethod, ComplexityOptions};
 use universalmotif::finder::{FinderOptions, motif_finder};
-use universalmotif::gapped::{GappedFinderOptions, gapped_motif_finder};
+use universalmotif::gapped::{GappedFinderOptions, Mismatch, gapped_motif_finder};
 use universalmotif::kmer::{self, BkgOptions, WindowOptions};
 use universalmotif::sample::{self, ImplantMode, ImplantOptions};
 use universalmotif::select::{
@@ -329,7 +329,7 @@ fn _gapped_motif_finder<'py>(
     n_seed_pairs: usize,
     min_fraction: f64,
     holdout: f64,
-    mismatch: bool,
+    mismatch: &str,
     mask: bool,
     rc: bool,
     shuffle_k: usize,
@@ -337,6 +337,16 @@ fn _gapped_motif_finder<'py>(
     seed: u64,
     nthreads: usize,
 ) -> PyResult<(Vec<PyMotif>, Bound<'py, PyDict>)> {
+    let mismatch = match mismatch {
+        "off" => Mismatch::Off,
+        "on" => Mismatch::On,
+        "auto" => Mismatch::Auto,
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "mismatch must be False, True or 'auto'",
+            ));
+        }
+    };
     let opts = GappedFinderOptions {
         k,
         min_gap,

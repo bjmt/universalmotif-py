@@ -545,7 +545,7 @@ def _gapped_motif_finder(
     n_seed_pairs: int,
     min_fraction: float,
     holdout: float,
-    mismatch: bool,
+    mismatch: str,
     mask: bool,
     rc: bool,
     shuffle_k: int,

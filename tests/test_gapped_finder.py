@@ -54,6 +54,17 @@ def test_checks_its_options(planted):
         um.gapped_motif_finder(planted, holdout=0.95)
     with pytest.raises(ValueError, match="too few sequences"):
         um.gapped_motif_finder(planted[:1])
+    with pytest.raises(ValueError, match="mismatch"):
+        um.gapped_motif_finder(planted, mismatch="yes")
+
+
+def test_mismatch_modes(planted):
+    # The exact search finds the repeat, so "auto" never runs again.
+    auto = um.gapped_motif_finder(planted, k=6, nmotifs=1, seed=1)
+    exact = um.gapped_motif_finder(planted, k=6, nmotifs=1, mismatch=False, seed=1)
+    assert auto.height == 1 and auto.drop("motif").equals(exact.drop("motif"))
+    loose = um.gapped_motif_finder(planted, k=6, nmotifs=1, mismatch=True, seed=1)
+    assert loose.height == 1
 
 
 def test_find_gapped_command(planted, tmp_path):

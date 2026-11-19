@@ -1027,8 +1027,8 @@ def _gapped_pass(seqs, sub, sites, si, lengths, observed, reached, label, sg, ma
     s, e = _widen(sub["start"].to_numpy(), sub["end"].to_numpy(), lengths[si], _MIN_GAPPED_TARGET)
     targets = [seqs[i][a:b] for i, a, b in zip(si, s, e)]
     bkg = _background(seqs, sub, e - s, np.random.default_rng(rng.integers(2**63)))
-    res = gapped_motif_finder(targets, bkg or None, max_gap=max_gap, nmotifs=10, seed=int(rng.integers(2**63)),
-                              nthreads=nthreads, progress=False)
+    res = gapped_motif_finder(targets, bkg or None, max_gap=max_gap, nmotifs=10, mismatch=False,
+                              seed=int(rng.integers(2**63)), nthreads=nthreads, progress=False)
     ms = [m.replace(name=f"{label}_g{k + 1}") for k, m in enumerate(res["motif"].to_list())]
     if refine and ms:
         wseqs, wsites = _windows(seqs, sites, ms)

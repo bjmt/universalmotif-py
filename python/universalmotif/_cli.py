@@ -752,7 +752,7 @@ def cmd_find_gapped(a):
     res = um.gapped_motif_finder(targets, bkg, k=a.k, min_gap=a.min_gap, max_gap=a.max_gap,
                                  nmotifs=a.nmotifs, hit_pvalue=a.hit_pvalue, stop_pvalue=a.stop_pvalue,
                                  n_seed_pairs=a.seed_pairs, min_fraction=a.min_fraction, holdout=a.holdout,
-                                 mismatch=a.mismatch, mask=a.mask, shuffle_k=a.shuffle_k,
+                                 mismatch={"off": False, "on": True}.get(a.mismatch, "auto"), mask=a.mask, shuffle_k=a.shuffle_k,
                                  bkg_shuffles=a.bkg_shuffles, rc=a.rc, seed=a.seed, nthreads=a.threads)
     if a.table:
         write_table(res, a.table)
@@ -1703,8 +1703,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("-k", type=int, nargs="+", default=[4, 5, 6],
                    help="k-mer sizes to seed motifs from, each from 2 to 6 (default: 4 5 6)")
     p.add_argument("--min-gap", type=int, default=0, help="shortest spacer (default: 0)")
-    p.add_argument("--max-gap", type=int, default=20, help="longest spacer, at most 31 (default: 20)")
-    p.add_argument("--nmotifs", type=int, default=3, help="most motifs to find (default: 3)")
+    p.add_argument("--max-gap", type=int, default=31, help="longest spacer, at most 31 (default: 31)")
+    p.add_argument("--nmotifs", type=int, default=5, help="most motifs to find (default: 5)")
     p.add_argument("--hit-pvalue", type=float, default=1e-4,
                    help="P-value of a site counting as a hit (default: 1e-4)")
     p.add_argument("--stop-pvalue", type=float, default=1e-3,
@@ -1717,8 +1717,9 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--holdout", type=float, default=0.3,
                    help="share of the targets and background held out to test the motifs; "
                         "0 tests them where they were found (default: 0.3)")
-    p.add_argument("--mismatch", action="store_true",
-                   help="count pairs of 6-mers with up to one mismatch, for rarer motifs")
+    p.add_argument("--mismatch", choices=["off", "on", "auto"], default="auto",
+                   help="count pairs of 6-mers with up to one mismatch, for rarer motifs; auto "
+                        "does so only when the exact search finds nothing (default: auto)")
     p.add_argument("--no-mask", dest="mask", action="store_false",
                    help="leave low-complexity regions unmasked")
     p.add_argument("--no-rc", dest="rc", action="store_false", help="search only the forward strand")
