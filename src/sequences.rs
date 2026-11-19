@@ -12,8 +12,8 @@ use universalmotif::gapped::{GappedFinderOptions, Mismatch, gapped_motif_finder}
 use universalmotif::kmer::{self, BkgOptions, WindowOptions};
 use universalmotif::sample::{self, ImplantMode, ImplantOptions};
 use universalmotif::select::{
-    RefineOptions, SelectOptions, Site, StabilityOptions, motif_stability, refine_motifs,
-    select_motifs,
+    RefineOptions, SelectOptions, Selection, Site, StabilityOptions, motif_stability,
+    refine_motifs, select_motifs, select_reached,
 };
 use universalmotif::shuffle::{self, ShuffleMethod, ShuffleOptions};
 
@@ -555,6 +555,33 @@ fn _select_motifs<'py>(
             )
         })
         .map_err(err)?;
+    selection_dict(py, sel)
+}
+
+#[pyfunction]
+#[pyo3(signature = (reached, n_targets, similarity, min_gain, max_similarity, min_gains=None))]
+fn _select_reached<'py>(
+    py: Python<'py>,
+    reached: Vec<Vec<usize>>,
+    n_targets: usize,
+    similarity: Option<Vec<Vec<f64>>>,
+    min_gain: f64,
+    max_similarity: Option<f64>,
+    min_gains: Option<Vec<f64>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let opts = SelectOptions {
+        min_gain,
+        min_gains,
+        max_similarity,
+        ..Default::default()
+    };
+    let sel = py
+        .detach(|| select_reached(&reached, n_targets, similarity.as_deref(), &opts))
+        .map_err(err)?;
+    selection_dict(py, sel)
+}
+
+fn selection_dict(py: Python<'_>, sel: Selection) -> PyResult<Bound<'_, PyDict>> {
     let d = PyDict::new(py);
     d.set_item("n_targets", sel.n_targets)?;
     d.set_item("targets", sel.targets)?;
@@ -677,6 +704,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_implant_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_motif_finder, m)?)?;
     m.add_function(wrap_pyfunction!(_select_motifs, m)?)?;
+    m.add_function(wrap_pyfunction!(_select_reached, m)?)?;
     m.add_function(wrap_pyfunction!(_refine_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_motif_stability, m)?)?;
     m.add_function(wrap_pyfunction!(_gapped_motif_finder, m)?)?;

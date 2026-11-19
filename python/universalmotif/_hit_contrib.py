@@ -12,7 +12,7 @@ import numpy as np
 import polars as pl
 
 from . import _core
-from ._analysis import _sequence_pairs, dedup_hits
+from ._analysis import _sequence_pairs
 from ._api import create_motif
 from ._core import Motif
 from ._deep import ContributionScores, _letters_first, _seqlet_regions, _to_numpy
@@ -136,14 +136,18 @@ class HitContributions:
             if hypothetical:
                 values = np.nanmean(self.hypothetical[rows, :, :cols], axis=0)
             else:
-                letters = self.hits["match"][rows].to_list()
+                words = [word.upper().replace("U", "T") for word in self.hits["match"][rows].to_list()]
                 onehot = np.zeros((len(rows), len(_LETTERS), cols))
-                lookup = {c: i for i, c in enumerate(_LETTERS)}
-                for r, word in enumerate(letters):
-                    for j, c in enumerate(word.upper().replace("U", "T")):
-                        i = lookup.get(c)
-                        if i is not None and self.flank + j < cols:
-                            onehot[r, i, self.flank + j] = 1
+                # Every letter of every word at once, as code points, with its hit and column.
+                chars = np.frombuffer("".join(words).encode("utf-32-le", "surrogatepass"), dtype=np.uint32)
+                sizes = np.array([len(word) for word in words], dtype=np.int64)
+                hit = np.repeat(np.arange(len(words)), sizes)
+                col = self.flank + np.arange(len(chars)) - np.repeat(np.cumsum(sizes) - sizes, sizes)
+                letter = np.full(len(chars), -1)
+                for i, c in enumerate(_LETTERS):
+                    letter[chars == ord(c)] = i
+                ok = (letter >= 0) & (col < cols)
+                onehot[hit[ok], letter[ok], col[ok]] = 1
                 obs = np.nan_to_num(self.observed[rows, :cols])
                 values = (onehot * obs[:, None, :]).mean(axis=0)
                 if self.flank:
@@ -369,11 +373,13 @@ def _per_motif(value: Any, names: list[str], what: str) -> list[float]:
 
 
 def _window_letters(codes: np.ndarray | None, projected: np.ndarray, seq: np.ndarray, start: np.ndarray,
-                    end: np.ndarray, minus: np.ndarray) -> np.ndarray:
-    """The letters of each window, read along its strand. They come from the
-    codes of the sequences or, without them, from the letters carrying the
-    projected scores, which only the windows need."""
-    out = np.empty(len(seq), dtype=object)
+                    end: np.ndarray, minus: np.ndarray) -> pl.Series:
+    """The letters of each window, read along its strand, as text. They come
+    from the codes of the sequences or, without them, from the letters
+    carrying the projected scores, which only the windows need."""
+    if not len(seq):
+        return pl.Series([], dtype=pl.String)
+    parts, rows = [], []
     widths = end - start
     letters = np.frombuffer(b"ACGTN", dtype=np.uint8)
     for w in np.unique(widths):
@@ -386,8 +392,18 @@ def _window_letters(codes: np.ndarray | None, projected: np.ndarray, seq: np.nda
             c = np.where((win != 0).any(axis=2), np.abs(win).argmax(axis=2), 4).astype(np.uint8)
         flip = minus[sel]
         c[flip] = np.where(c[flip] == 4, 4, 3 - c[flip])[:, ::-1]
-        out[sel] = np.ascontiguousarray(letters[c]).view(f"S{w}").ravel().astype(str)
-    return out
+        # Bytes become text in polars at once, rather than a Python string each.
+        parts.append(pl.Series(np.ascontiguousarray(letters[c]).view(f"S{w}").ravel()).cast(pl.String))
+        rows.append(sel)
+    if len(parts) == 1:
+        return parts[0]
+    return pl.concat(parts).gather(np.argsort(np.concatenate(rows), kind="stable"))
+
+
+def _name_codes(names: list[str]) -> np.ndarray:
+    """Each name's number in order of first appearance."""
+    first: dict[str, int] = {}
+    return np.array([first.setdefault(n, len(first)) for n in names], dtype=np.int64)
 
 
 def scan_contributions(
@@ -653,35 +669,46 @@ def scan_contributions(
         raise ValueError("thresholds cannot be NaN, as they are for patterns without seqlets")
     motif_i, seq_i, start, end, minus, score, similarity, importance, gapped = _core._scan_contributions(
         ms, projected, scores.lengths.tolist(), smin, imin, rc, use_gaps, _nthreads(nthreads), hyp)
-    letters = (_window_letters(codes, projected, seq_i.astype(np.int64), start, end, minus)
-               if len(seq_i) else np.empty(0, dtype=object))
-    for row, sizes in gapped:
-        # Gaps sit after the motif's gap locations, read along the motif.
-        site = list(letters[row])
-        at = 0
-        for loc, size in zip(ms[motif_i[row]].gaploc, sizes):
-            site[loc + at:loc + at + size] = "." * size
-            at += size
-        letters[row] = "".join(site)
     seq_names = scores.names or [f"seq{i + 1}" for i in range(projected.shape[0])]
-    hits = pl.DataFrame({
-        "motif": pl.Series(np.asarray(names, dtype=object)[motif_i] if len(motif_i) else [], dtype=pl.String),
+    if no_overlaps and len(motif_i):
+        # dedup_hits() on the hits before their text columns are made, so that
+        # only those kept are written out. Motifs and sequences are told apart
+        # by name, as it tells them apart.
+        priority = {"score": score, "similarity": similarity, "importance": importance}[no_overlaps_by]
+        if np.isnan(priority).any():
+            raise ValueError(f"the column {no_overlaps_by!r} cannot contain missing values")
+        keep = _core._dedup(_name_codes(seq_names)[seq_i], _name_codes(names)[motif_i], minus.astype(np.int32),
+                            start, end, priority, no_overlaps_across_strands, no_overlaps_across_motifs)
+        row = np.cumsum(keep) - 1
+        gapped = [(int(row[r]), sizes) for r, sizes in gapped if keep[r]]
+        motif_i, seq_i, start, end, minus, score, similarity, importance = (
+            x[keep] for x in (motif_i, seq_i, start, end, minus, score, similarity, importance))
+    letters = _window_letters(codes, projected, seq_i.astype(np.int64), start, end, minus)
+    if gapped:
+        rows = [r for r, _ in gapped]
+        sites = letters.gather(rows).to_list()
+        for k, (r, sizes) in enumerate(gapped):
+            # Gaps sit after the motif's gap locations, read along the motif.
+            site = list(sites[k])
+            at = 0
+            for loc, size in zip(ms[motif_i[r]].gaploc, sizes):
+                site[loc + at:loc + at + size] = "." * size
+                at += size
+            sites[k] = "".join(site)
+        letters = letters.scatter(rows, sites)
+    return pl.DataFrame({
+        "motif": pl.Series(names, dtype=pl.String).gather(motif_i),
         "motif_i": motif_i,
-        "sequence": pl.Series(np.asarray(seq_names, dtype=object)[seq_i] if len(seq_i) else [],
-                              dtype=pl.String),
+        "sequence": pl.Series(seq_names, dtype=pl.String).gather(seq_i),
         "sequence_i": seq_i,
         "start": start,
         "end": end,
-        "strand": pl.Series(np.where(minus, "-", "+") if len(minus) else [], dtype=pl.String),
+        "strand": pl.Series(["+", "-"]).gather(minus.astype(np.uint32)),
         "score": score,
         "similarity": similarity,
         "importance": importance,
-        "match": pl.Series(letters, dtype=pl.String),
+        "match": letters,
     })
-    if no_overlaps and hits.height:
-        hits = dedup_hits(hits, by=no_overlaps_by, across_strands=no_overlaps_across_strands,
-                          across_motifs=no_overlaps_across_motifs)
-    return hits
 
 
 def hit_contributions(

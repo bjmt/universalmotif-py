@@ -358,7 +358,8 @@ fn _scan_fasta<'py>(
 #[pyfunction]
 #[pyo3(signature = (sequence, motif, strand, start, end, priority, ignore_strand, ignore_motif))]
 #[allow(clippy::too_many_arguments)]
-fn _dedup(
+fn _dedup<'py>(
+    py: Python<'py>,
     sequence: PyReadonlyArray1<i64>,
     motif: PyReadonlyArray1<i64>,
     strand: PyReadonlyArray1<i32>,
@@ -367,7 +368,9 @@ fn _dedup(
     priority: PyReadonlyArray1<f64>,
     ignore_strand: bool,
     ignore_motif: bool,
-) -> PyResult<Vec<bool>> {
+) -> PyResult<Bound<'py, numpy::PyArray1<bool>>> {
+    use numpy::IntoPyArray;
+
     let (sequence, motif, strand) = (sequence.as_slice()?, motif.as_slice()?, strand.as_slice()?);
     let (start, end, priority) = (start.as_slice()?, end.as_slice()?, priority.as_slice()?);
     let hits: Vec<Interval> = (0..sequence.len())
@@ -384,7 +387,7 @@ fn _dedup(
             priority: priority[i],
         })
         .collect();
-    Ok(dedup(&hits, ignore_strand, ignore_motif))
+    Ok(dedup(&hits, ignore_strand, ignore_motif).into_pyarray(py))
 }
 
 fn null_model(null: &str) -> PyResult<NullModel> {

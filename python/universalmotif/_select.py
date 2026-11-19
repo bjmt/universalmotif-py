@@ -203,20 +203,39 @@ def select_motifs(
         if any(not 0 <= g <= 1 for g in min_gains):
             raise ValueError("min_gain must be between 0 and 1")
         min_gain = 0.0
-    similarity = None
-    if max_similarity is not None:
-        from ._compare import compare_motifs
-
-        cmp = ms if compare_as is None else [_check_motif(m) for m in compare_as]
-        if len(cmp) != len(ms):
-            raise ValueError(f"compare_as has {len(cmp)} motifs for {len(ms)} motifs")
-        # A single motif has nothing to be like.
-        similarity = (np.asarray(compare_motifs(cmp, nthreads=nthreads), dtype=float).tolist() if len(cmp) > 1
-                      else [[1.0]] * len(cmp))
-    elif compare_as is not None:
-        raise ValueError("compare_as needs max_similarity")
+    similarity = _similarity(ms, max_similarity, compare_as, nthreads)
     out = _core._select_motifs(ms, seqs, _sites_of(sites, names), similarity, pvalue, min_gain, min_overlap,
                                max_similarity, _rc(rc, seqs), _nthreads(nthreads), reachable, min_gains)
+    return _selection(ms, out)
+
+
+def _select_reached(ms: list[Motif], reached: list[list[int]], n_targets: int, min_gains: list[float],
+                    max_similarity: float | None, compare_as: list[Motif] | None, nthreads: int) -> pl.DataFrame:
+    """select_motifs() for motifs whose hits are already known, from the
+    targets each reaches, as indices below ``n_targets``."""
+    similarity = _similarity(ms, max_similarity, compare_as, nthreads)
+    return _selection(ms, _core._select_reached(reached, n_targets, similarity, 0.0, max_similarity, min_gains))
+
+
+def _similarity(ms: list[Motif], max_similarity: float | None, compare_as: Any,
+                nthreads: int | None) -> list[list[float]] | None:
+    """The similarities select_motifs() compares with ``max_similarity``."""
+    if max_similarity is None:
+        if compare_as is not None:
+            raise ValueError("compare_as needs max_similarity")
+        return None
+    from ._compare import compare_motifs
+
+    cmp = ms if compare_as is None else [_check_motif(m) for m in compare_as]
+    if len(cmp) != len(ms):
+        raise ValueError(f"compare_as has {len(cmp)} motifs for {len(ms)} motifs")
+    # A single motif has nothing to be like.
+    return (np.asarray(compare_motifs(cmp, nthreads=nthreads), dtype=float).tolist() if len(cmp) > 1
+            else [[1.0]] * len(cmp))
+
+
+def _selection(ms: list[Motif], out: dict) -> pl.DataFrame:
+    """The table of select_motifs() from the choice made."""
     labels = [m.name for m in ms]
     similar = [labels[k] if k is not None else None for k in out["similar_to"]]
     df = pl.DataFrame({

@@ -23,7 +23,7 @@ from ._hit_contrib import (
     hit_contributions,
     scan_contributions,
 )
-from ._select import refine_motifs, select_motifs
+from ._select import _select_reached, refine_motifs
 from ._seqlets import call_seqlets
 from ._sequences import _seed, motif_finder
 from ._threads import _nthreads
@@ -1082,12 +1082,12 @@ def _choose(found, seqs, sites, observed, sg, refine, min_gain, max_similarity, 
     meta = {f[0].name: f for f in found}
     kept = []
     if have:
-        wseqs, wsites = _windows(seqs, sites, have)
-        sel = select_motifs(have, wseqs, sites=wsites, min_gain=[min_gain[_later(m.name)] for m in have],
-                            min_overlap=_MIN_OVERLAP,
-                            max_similarity=max_similarity,
-                            compare_as=[cwms[m.name] for m in have] if max_similarity is not None else None,
-                            nthreads=nthreads, progress=False)
+        # select_motifs() would scan for these same hits, except that a motif refined out of reach of the
+        # P-value cutoff would have none; its hits here, at its best score, have P-values above the cutoff.
+        reach = _reach(hits.filter(pl.col("pvalue") <= 1e-4))
+        sel = _select_reached(have, [list(reach.get(m.name, ())) for m in have], sites.height,
+                              [min_gain[_later(m.name)] for m in have], max_similarity,
+                              [cwms[m.name] for m in have] if max_similarity is not None else None, nthreads)
         for r in sel.filter("kept").iter_rows(named=True):
             m = r["object"]
             kept.append({"name": m.name, "sign": sg, "source": meta[m.name][1], "consensus": m.consensus or "",
@@ -1172,9 +1172,9 @@ def _scan(table: pl.DataFrame, observed: np.ndarray, seqs: list[str], names: lis
         hits = hits.filter(pl.Series(_parts_kept(
             hits["motif"].cast(pl.String).to_numpy(), hits["sequence_i"].to_numpy(), hits["start"].to_numpy(),
             hits["end"].to_numpy(), hits["strand"].to_numpy() == "-", observed, composites)))
-    i = hits["sequence_i"].to_numpy()
-    label = np.asarray(names, dtype=object)[i] if names else np.char.add("seq", (i + 1).astype(str))
-    return hits.with_columns(pl.Series("sequence", label, dtype=pl.String))
+    if names:
+        return hits.with_columns(pl.Series("sequence", names, dtype=pl.String).gather(hits["sequence_i"]))
+    return hits.with_columns(sequence=pl.format("seq{}", pl.col("sequence_i") + 1))
 
 
 def _group(kept: list[dict], label: str, similarity: float | None, nthreads: int,

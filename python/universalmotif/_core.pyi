@@ -313,7 +313,7 @@ def _dedup(
     priority: list[float],
     ignore_strand: bool,
     ignore_motif: bool,
-) -> list[bool]: ...
+) -> npt.NDArray[np.bool_]: ...
 def _compare_matrix(
     motifs: list[Motif],
     min_overlap: int,
@@ -497,6 +497,14 @@ def _select_motifs(
     rc: bool,
     nthreads: int,
     reachable: bool = ...,
+    min_gains: list[float] | None = ...,
+) -> dict[str, Any]: ...
+def _select_reached(
+    reached: list[list[int]],
+    n_targets: int,
+    similarity: list[list[float]] | None,
+    min_gain: float,
+    max_similarity: float | None,
     min_gains: list[float] | None = ...,
 ) -> dict[str, Any]: ...
 def _refine_motifs(

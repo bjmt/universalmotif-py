@@ -46,6 +46,14 @@ New:
   `--later-min-gain` and `--contribution-test`, and `seqlets` takes
   `--passes`.
 
+Other changes:
+
+- `contribution_motifs()` is about twice as fast, with identical results
+  and less peak memory: seqlet calling, `motif_finder()`,
+  `gapped_motif_finder()`, `scan_sequences()`, `scan_contributions()` and
+  motif selection are each faster, and selection reuses hits it already
+  has.
+
 Fixes:
 
 - `refine_motifs()`, and so `contribution_motifs()`, no longer fail with
