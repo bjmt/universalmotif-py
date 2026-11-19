@@ -496,6 +496,8 @@ def _select_motifs(
     max_similarity: float | None,
     rc: bool,
     nthreads: int,
+    reachable: bool = ...,
+    min_gains: list[float] | None = ...,
 ) -> dict[str, Any]: ...
 def _refine_motifs(
     motifs: list[Motif],

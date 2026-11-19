@@ -24,7 +24,8 @@ def test_select_ranks_by_new_sequences(data):
     assert sel["kept"].to_list() == [True, True, False]
     gains = sel["gain"].to_list()
     assert gains == sorted(gains, reverse=True)
-    assert sel["cumulative"].to_list() == pytest.approx([sum(gains[:i + 1]) for i in range(3)])
+    kept_gains = [g if k else 0 for g, k in zip(gains, sel["kept"].to_list())]
+    assert sel["cumulative"].to_list() == pytest.approx([sum(kept_gains[:i + 1]) for i in range(3)])
     assert sel["targets"][0] >= 150
     assert sel.filter("kept")["object"].to_list() == [data["ap1"], data["gata"]]
     # min_gain of 0 keeps any motif adding a sequence.
@@ -50,6 +51,21 @@ def test_select_with_sites(data):
     shifted = sites.with_columns(pl.col("start") + 5, pl.col("end") + 5)
     far = um.select_motifs([data["gata"]], seqs, sites=shifted, min_overlap=3)
     assert far["gain"][0] == 0 and not far["kept"][0]
+
+
+def test_select_min_gain_per_motif(data):
+    ms = [data["ap1"], data["gata"], data["longer"]]
+    strict = um.select_motifs(ms, data["seqs"], min_gain=0.4)
+    assert strict["kept"].to_list() == [True, False, False]
+    # GATA, held to a lower cutoff of its own, is kept after it.
+    own = um.select_motifs(ms, data["seqs"], min_gain=[0.4, 0.15, 0.4])
+    assert own.filter("kept")["motif"].to_list() == ["AP-1", "GATA"]
+    # Only kept motifs count as reaching their targets.
+    assert own["cumulative"].max() == pytest.approx(own.filter("kept")["gain"].sum())
+    with pytest.raises(ValueError, match="2 values for 3 motifs"):
+        um.select_motifs(ms, data["seqs"], min_gain=[0.1, 0.1])
+    with pytest.raises(ValueError, match="min_gain"):
+        um.select_motifs(ms, data["seqs"], min_gain=[0.1, 0.1, 1.5])
 
 
 def test_select_leaves_out_similar_motifs(data):

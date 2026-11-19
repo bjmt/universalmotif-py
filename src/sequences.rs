@@ -515,7 +515,7 @@ fn sites_from(sites: Option<Vec<(usize, usize, usize)>>) -> Option<Vec<Site>> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (motifs, sequences, sites, similarity, pvalue, min_gain, min_overlap, max_similarity, rc, nthreads, reachable=false))]
+#[pyo3(signature = (motifs, sequences, sites, similarity, pvalue, min_gain, min_overlap, max_similarity, rc, nthreads, reachable=false, min_gains=None))]
 #[allow(clippy::too_many_arguments)]
 fn _select_motifs<'py>(
     py: Python<'py>,
@@ -530,12 +530,14 @@ fn _select_motifs<'py>(
     rc: bool,
     nthreads: usize,
     reachable: bool,
+    min_gains: Option<Vec<f64>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let motifs: Vec<Motif> = motifs.iter().map(|m| m.inner.clone()).collect();
     let sites = sites_from(sites);
     let opts = SelectOptions {
         pvalue,
         min_gain,
+        min_gains,
         min_overlap,
         max_similarity,
         rc,

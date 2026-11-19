@@ -73,7 +73,7 @@ def select_motifs(
     sequences: str | Sequence[str] | Mapping[str, str],
     sites: pl.DataFrame | None = None,
     pvalue: float = 1e-4,
-    min_gain: float = 0.01,
+    min_gain: float | Sequence[float] = 0.01,
     min_overlap: int = 1,
     max_similarity: float | None = None,
     compare_as: Iterable[Motif] | None = None,
@@ -89,8 +89,14 @@ def select_motifs(
     rare, and some are spellings of one site that each catch some of its
     instances. Here motifs are chosen greedily, each step taking the motif
     whose hits reach the most targets not yet reached. A motif is kept if
-    it adds at least ``min_gain`` of all targets when its turn comes. The
-    gains only shrink along the order, so the kept motifs come first.
+    it adds at least ``min_gain`` of all targets when its turn comes, and
+    only kept motifs count as reaching their targets. The gains only shrink
+    along the order, so the kept motifs come first.
+
+    ``min_gain`` can also be given motif by motif. Motifs found in a second
+    search among the targets the first left unreached are rare by design,
+    for instance, and may deserve a lower cutoff than the rest. A motif held
+    to a lower cutoff can then be kept after others were left out.
 
     Targets are the ``sites`` when given, such as the seqlets of a sequence
     model or the summits of peaks. A hit reaches a site when it shares at
@@ -126,7 +132,8 @@ def select_motifs(
     pvalue
         The P-value cutoff for hits.
     min_gain
-        The share of all targets a motif must add to be kept.
+        The share of all targets a motif must add to be kept, as one value
+        or as one value per motif.
     min_overlap
         With sites, the positions a hit must share with a site to reach it.
     max_similarity, compare_as
@@ -156,8 +163,8 @@ def select_motifs(
         - ``motif_i``, its place in ``motifs``.
         - ``rank``, from 1.
         - ``targets``, those it reaches on its own.
-        - ``gain`` and ``cumulative``, the shares of all targets it adds
-          and that the motifs up to it reach.
+        - ``gain`` and ``cumulative``, the shares of all targets it adds,
+          or would add if kept, and that the kept motifs up to it reach.
         - ``kept``.
         - ``similar_to``, the kept motif a left-out one resembles.
         - ``object``, the motif itself.
@@ -185,8 +192,17 @@ def select_motifs(
         return _progress.run(lambda: select_motifs(**args))
     ms = _motifs_of(motifs)
     names, seqs = _sequence_pairs(sequences)
-    if not 0 <= min_gain <= 1:
-        raise ValueError("min_gain must be between 0 and 1")
+    min_gains = None
+    if isinstance(min_gain, (int, float)):
+        if not 0 <= min_gain <= 1:
+            raise ValueError("min_gain must be between 0 and 1")
+    else:
+        min_gains = [float(g) for g in min_gain]
+        if len(min_gains) != len(ms):
+            raise ValueError(f"min_gain has {len(min_gains)} values for {len(ms)} motifs")
+        if any(not 0 <= g <= 1 for g in min_gains):
+            raise ValueError("min_gain must be between 0 and 1")
+        min_gain = 0.0
     similarity = None
     if max_similarity is not None:
         from ._compare import compare_motifs
@@ -200,7 +216,7 @@ def select_motifs(
     elif compare_as is not None:
         raise ValueError("compare_as needs max_similarity")
     out = _core._select_motifs(ms, seqs, _sites_of(sites, names), similarity, pvalue, min_gain, min_overlap,
-                               max_similarity, _rc(rc, seqs), _nthreads(nthreads), reachable)
+                               max_similarity, _rc(rc, seqs), _nthreads(nthreads), reachable, min_gains)
     labels = [m.name for m in ms]
     similar = [labels[k] if k is not None else None for k in out["similar_to"]]
     df = pl.DataFrame({

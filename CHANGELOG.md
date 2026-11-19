@@ -12,6 +12,9 @@ Changes in behaviour:
 - `write_meme()`, `write_jaspar()` and `write_transfac()` give gapped
   motifs their gaps as their alternative name (`AGGTCA[1-5]AGGTCA`), and
   the readers restore them.
+- `select_motifs()` counts only kept motifs as reaching their targets, so
+  a motif left out no longer takes targets from the motifs after it, and
+  `cumulative` is the share the kept motifs reach.
 
 New:
 
@@ -19,10 +22,10 @@ New:
   R package's own format (its `read_motifs()` and `write_motifs()`), which
   keeps every field, gaps included; the command line takes it as
   `universalmotif`.
-
 - `read_contributions()` reads the files of all regions in ENCODE's
   chromBPNet archives, which hold no sequences; `sequences` gives them,
   and can now be a `Genome` to read them from at the file's coordinates.
+- `select_motifs()` takes one `min_gain` per motif.
 
 Fixes:
 
