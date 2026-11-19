@@ -1,6 +1,7 @@
 import threading
 import time
 
+import numpy as np
 import pytest
 import universalmotif as um
 from universalmotif import _core, _progress
@@ -84,7 +85,7 @@ def test_ctrl_c_cancels_and_waits(monkeypatch, seqs):
     seen = {}
     real = _progress._state
 
-    def interrupt(handle, o):
+    def interrupt(handle, o, step=None):
         seen["handle"] = handle
         raise KeyboardInterrupt
 
@@ -121,6 +122,36 @@ def test_genome_scans_count_the_whole_genome(capture, tmp_path, monkeypatch):
     assert hits.equals(plain)
     # One batch, counted against the length of the whole genome.
     assert seen == [("scanning", 15000, 15000)]
+
+
+def test_named_steps(capture):
+    def work():
+        st = _progress.steps(4)
+        st.next("first")
+        time.sleep(0.05)
+        st.skip(2)
+        st.next("last")
+        time.sleep(0.05)
+        return 1
+
+    assert _progress.run(work) == 1
+    err = capture.readouterr().err
+    assert "step 1/4, first [" in err and "step 4/4, last [" in err
+    # No estimate of the time left, and nothing left behind for the next call.
+    assert "<" not in err and not _progress._steps
+
+
+def test_contribution_motifs_names_its_steps(monkeypatch):
+    names = []
+    real = _progress.steps.next
+    monkeypatch.setattr(_progress.steps, "next", lambda self, name: (names.append((self.done + 1, self.total, name)),
+                                                                      real(self, name)))
+    scores = np.zeros((40, 100), dtype=np.float32)
+    seqs = um.create_sequences(seqnum=40, seqlen=100, seed=3)
+    with pytest.warns(UserWarning, match="too few to search"):
+        um.contribution_motifs(scores, seqs, seed=1)
+    # Too few seqlets to search: the sign's steps are skipped.
+    assert names == [(1, 9, "calling seqlets"), (9, 9, "finding hits")]
 
 
 def test_the_command_line_flag(capture, tmp_path):

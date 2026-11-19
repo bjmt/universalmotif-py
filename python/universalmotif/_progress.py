@@ -25,6 +25,9 @@ _DELAY = 1.0
 _INTERVAL = 0.1
 # Python-level progress of the calls running with a bar, by worker thread.
 _outers: dict[int, _Outer] = {}
+# The step under way of the calls running with a bar that name their steps,
+# by worker thread, as (step, steps, name).
+_steps: dict[int, tuple[int, int, str]] = {}
 
 
 def set_progress(enabled: bool | None) -> None:
@@ -106,6 +109,36 @@ class outer:
         _outers.pop(self._key, None)
 
 
+class steps:
+    """Name the steps of a call run with a bar.
+
+    Use ``st = steps(n)``, or ``with steps(n) as st:``, then
+    ``st.next("searching")`` as each step begins and ``st.skip(k)`` for
+    steps that will not run. The steps are forgotten when the call ends. The
+    bar
+    then reads ``step 2/5, searching`` with the progress of the call to the
+    extension under way, and no estimate of the time left, as steps take
+    very different times. Outside a call with a bar, it does nothing."""
+
+    def __init__(self, total: int):
+        self.total, self.done = total, 0
+        self._key = threading.get_ident()
+
+    def __enter__(self) -> steps:
+        return self
+
+    def __exit__(self, *exc) -> None:
+        _steps.pop(self._key, None)
+
+    def next(self, name: str) -> None:
+        self.done += 1
+        if self._key in _running:
+            _steps[self._key] = (min(self.done, self.total), self.total, name)
+
+    def skip(self, k: int) -> None:
+        self.done += k
+
+
 def _fmt_count(n: float) -> str:
     for size, unit in ((1e9, "G"), (1e6, "M"), (1e3, "k")):
         if n >= size:
@@ -126,9 +159,16 @@ class _Bar:
         self.width = 0
         self.shown = False
 
-    def draw(self, label: str, fraction: float | None, count: float, elapsed: float) -> None:
+    def draw(self, label: str, fraction: float | None, count: float | None, elapsed: float) -> None:
+        """Draw the bar. A count of None marks a named step, shown without a
+        count or an estimate of the time left."""
         if fraction is None:
-            text = f"{label}: {_fmt_count(count)} [{_fmt_time(elapsed)}]"
+            shown = "" if count is None else f": {_fmt_count(count)}"
+            text = f"{label}{shown} [{_fmt_time(elapsed)}]"
+        elif count is None:
+            fraction = min(max(fraction, 0.0), 1.0)
+            filled = int(round(24 * fraction))
+            text = f"{label}: {100 * fraction:5.1f}% |{'#' * filled}{'-' * (24 - filled)}| [{_fmt_time(elapsed)}]"
         else:
             fraction = min(max(fraction, 0.0), 1.0)
             filled = int(round(24 * fraction))
@@ -146,10 +186,13 @@ class _Bar:
             self.stream.flush()
 
 
-def _state(handle, o: _Outer | None) -> tuple[str, float | None, float]:
+def _state(handle, o: _Outer | None, step: tuple[int, int, str] | None = None) -> tuple[str, float | None, float | None]:
     """The label, the fraction done (None when it is not known) and the
-    count to show."""
+    count to show (None for a named step)."""
     stage, done, total = handle.stage, handle.done, handle.total
+    if step is not None:
+        k, n, name = step
+        return f"step {k}/{n}, {name}", (done / total if stage and total > 0 else None), None
     if o is not None and o.total > 0:
         inner = done / total if total > 0 else 0.0
         return o.stage, (o.done + inner * o.part) / o.total, o.done
@@ -184,26 +227,30 @@ def run(f: Callable[[], T], stream=None) -> T:
             result["error"] = e
         finally:
             _running.discard(threading.get_ident())
+            _steps.pop(threading.get_ident(), None)
 
     thread = threading.Thread(target=work, name="universalmotif-progress", daemon=True)
     bar = _Bar(stream)
     start = time.monotonic()
     thread.start()
+    last = None
     try:
         while thread.is_alive():
             thread.join(_INTERVAL)
             elapsed = time.monotonic() - start
             o = _outers.get(thread.ident)
+            step = _steps.get(thread.ident)
+            last = step or last
             # Nothing is drawn before the first stage has begun.
-            if elapsed >= _DELAY and thread.is_alive() and (handle.stage or o is not None):
-                bar.draw(*_state(handle, o), elapsed)
+            if elapsed >= _DELAY and thread.is_alive() and (handle.stage or o is not None or step is not None):
+                bar.draw(*_state(handle, o, step), elapsed)
     except KeyboardInterrupt:
         handle.cancel()
         thread.join()
         bar.close()
         raise
     if bar.shown:
-        label, fraction, count = _state(handle, None)
+        label, fraction, count = _state(handle, None, last)
         bar.draw(label, None if fraction is None else 1.0, count, time.monotonic() - start)
     bar.close()
     if "error" in result:

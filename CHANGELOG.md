@@ -53,6 +53,8 @@ Other changes:
   `gapped_motif_finder()`, `scan_sequences()`, `scan_contributions()` and
   motif selection are each faster, and selection reuses hits it already
   has.
+- The progress bar of `contribution_motifs()` names the step under way,
+  as in `step 3/9, choosing motifs`, rather than only the calls within it.
 
 Fixes:
 

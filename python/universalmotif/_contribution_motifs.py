@@ -648,7 +648,8 @@ def contribution_motifs(
         Threads to use, with 0 for all available; by default the package
         setting from [`set_nthreads()`][universalmotif.set_nthreads].
     progress
-        Show a progress bar on stderr once the call has run for a second;
+        Show a progress bar on stderr once the call has run for a second,
+        naming each step as it runs, such as ``step 3/9, choosing motifs``;
         by default the package setting from
         [`set_progress()`][universalmotif.set_progress].
 
@@ -746,8 +747,12 @@ def contribution_motifs(
             observed = observed.sum(axis=1)
     observed = np.asarray(observed, dtype=np.float32)
     lengths = np.array([len(s) for s in seqs])
+    # The steps the progress bar names, for each sign searched and around them.
+    per_sign = 2 * rounds + bool(gapped) + (contribution_test is not None) + 1
+    st = _progress.steps((seqlets is None) + per_sign * (2 if sign == "both" else 1) + bool(hits))
 
     if seqlets is None:
+        st.next("calling seqlets")
         # Scores of different lengths come padded; each is called at its own length.
         given = ([observed[i, :n] for i, n in enumerate(lengths)] if (lengths != observed.shape[1]).any()
                  else observed)
@@ -772,7 +777,9 @@ def contribution_motifs(
         sub_ids = (seqlets.with_row_index("_id").filter(pl.col("sign") == sg)["_id"].to_numpy()
                    if "sign" in seqlets.columns else np.arange(seqlets.height))
         label = "pos" if sg == "+" else "neg"
+        of = "" if sign != "both" else f" ({'positive' if sg == '+' else 'negative'})"
         if sub.height < 20:
+            st.skip(per_sign)
             # A sign searched alongside the other may well have no seqlets at all.
             if sub.height or sign != "both":
                 kind = "positive" if sg == "+" else "negative"
@@ -790,20 +797,27 @@ def contribution_motifs(
             part = sub if not round_ else sub.with_row_index("_site").filter(
                 ~pl.col("_site").is_in(list(reached))).drop("_site")
             if part.height < 20:
+                st.skip(2 * (rounds - round_))
                 break
+            st.next(("searching seqlets" if not round_ else "searching the seqlets left") + of)
             found += _search(part, sub, sources, lengths, label, "r" * round_, min_width, max_width, nmotifs,
                              stability, min_stability, rng, nthreads)
+            st.next("choosing motifs" + of)
             kept, cand_hits = _choose(found, seqs, sites, observed, sg, refine, (min_gain, later_min_gain),
                                       max_similarity, nthreads)
             reach = _reach(cand_hits) if cand_hits is not None else {}
             reached = set().union(*(reach[r["name"]] for r in kept)) if kept else set()
         if gapped:
+            st.next("finding composites" + of)
             si = sub["sequence_i"].to_numpy().astype(np.int64)
             kept += _gapped_pass(seqs, sub, sites, si, lengths, observed, reached, label, sg, max_gap, min_gain,
                                  max_similarity, refine, rng, nthreads)
+        if contribution_test is not None:
+            st.next("testing contributions" + of)
         if kept and contribution_test is not None:
             failed = _contribution_test(kept, seqs, observed, sg, contribution_test, rng, nthreads)
             kept = [r for r in kept if r["name"] not in failed]
+        st.next("giving seqlets to motifs" + of)
         if kept:
             # Thresholds come from the hits within the seqlets. Motifs wider than their seqlets take the
             # defaults instead, since hits only overlapping a seqlet are mostly positions the model gave
@@ -855,6 +869,7 @@ def contribution_motifs(
                                pl.Series("cwm", [r["cwm"] for r in rows], dtype=pl.Object))
     found_hits = None
     if hits:
+        st.next("finding hits")
         found_hits = _scan(table, observed, seqs, scores.names, nthreads)
     return ContributionMotifs(table, seqlets, found_hits, reach_by_motif)
 
