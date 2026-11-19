@@ -86,6 +86,62 @@ def test_composites():
     assert ungrouped.patterns.height == len(ungrouped)
 
 
+def test_later_rounds_can_have_a_lower_min_gain():
+    """AP-1 in half of 600 sequences, GATA in a third, and a rare E-box in
+    one in 25, under 5% of the seqlets."""
+    rng = np.random.default_rng(1)
+    seqs = ["".join(rng.choice(list("ACGT"), 120)) for _ in range(600)]
+    scores = rng.normal(0, 0.005, (600, 120))
+    for i, s in enumerate(seqs):
+        if i % 2 == 0:
+            s = s[:30] + "TGACTCA" + s[37:]
+            scores[i, 30:37] += 0.1
+        if i % 3 == 0:
+            s = s[:80] + "AGATAAG" + s[87:]
+            scores[i, 80:87] += 0.08
+        if i % 25 == 7:
+            s = s[:55] + "GCCACGTGAC" + s[65:]
+            scores[i, 55:65] += 0.1
+        seqs[i] = s
+    strict = um.contribution_motifs(scores, seqs, seed=1, gapped=False, hits=False, min_gain=0.06)
+    assert not any("CACGTG" in c for c in strict.motifs["consensus"])
+    # The second round searches the seqlets left unreached, where the E-box is common, and keeps it.
+    later = um.contribution_motifs(scores, seqs, seed=1, gapped=False, hits=False, min_gain=0.06,
+                                   later_min_gain=0.01)
+    ebox = later.motifs.filter(pl.col("consensus").str.contains("ACGTG|CACGT"))
+    assert ebox.height == 1 and ebox["name"][0].startswith("pos_r") and ebox["gain"][0] < 0.06
+    assert later.motifs.head(2)["consensus"].to_list() == strict.motifs["consensus"].to_list()
+    with pytest.raises(ValueError, match="later_min_gain"):
+        um.contribution_motifs(scores, seqs, later_min_gain=2)
+
+
+def test_contribution_test_drops_motifs_of_composition_alone():
+    """AP-1 in half of 400 sequences, and in the other half a run of ten G
+    and C in any order, which the stand-in model rewards for its
+    composition alone."""
+    rng = np.random.default_rng(1)
+    seqs = ["".join(rng.choice(list("ACGT"), 120)) for _ in range(400)]
+    scores = rng.normal(0, 0.005, (400, 120))
+    for i, s in enumerate(seqs):
+        if i % 2 == 0:
+            s = s[:30] + "TGACTCA" + s[37:]
+            scores[i, 30:37] += 0.1
+        else:
+            s = s[:70] + "".join(rng.choice(list("GC"), 10)) + s[80:]
+            scores[i, 70:80] += 0.06
+        seqs[i] = s
+    def gc_only(found):
+        return [c for c in found.motifs["consensus"] if set(c) <= set("GCS")]
+
+    loose = um.contribution_motifs(scores, seqs, seed=1, gapped=False, hits=False, contribution_test=None)
+    assert gc_only(loose)
+    tested = um.contribution_motifs(scores, seqs, seed=1, gapped=False, hits=False)
+    assert tested.motifs["consensus"][0] == "TGACTCA" and not gc_only(tested)
+    assert len(tested) < len(loose)
+    with pytest.raises(ValueError, match="contribution_test"):
+        um.contribution_motifs(scores, seqs, contribution_test=0)
+
+
 def test_inputs_and_options(model):
     seqs, scores = model["seqs"], model["scores"]
     # Projected scores carry their letters, so the sequences can be left out.

@@ -12,6 +12,17 @@ Changes in behaviour:
 - `write_meme()`, `write_jaspar()` and `write_transfac()` give gapped
   motifs their gaps as their alternative name (`AGGTCA[1-5]AGGTCA`), and
   the readers restore them.
+- `contribution_motifs()` calls seqlets in two passes by default
+  (`seqlet_passes=2`), the second with the first's seqlets set to 0, so
+  that the weaker sites of cofactors beside a factor's strong ones are
+  found, which takes about three times as long; `seqlet_passes=1` gives
+  the old behaviour.
+- `contribution_motifs()` drops motifs whose matches carry no more
+  contribution than shuffled copies of themselves (`contribution_test`),
+  such as runs of GCs in GC-rich regions.
+- `contribution_motifs()` holds motifs from later rounds to four fifths of
+  `min_gain` by default (`later_min_gain`), and seeds composites from
+  pairs of k-mers in 0.2% of the seqlets rather than 2%.
 - `select_motifs()` counts only kept motifs as reaching their targets, so
   a motif left out no longer takes targets from the motifs after it, and
   `cumulative` is the share the kept motifs reach.
