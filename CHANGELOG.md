@@ -42,6 +42,9 @@ New:
 - `select_motifs()` takes one `min_gain` per motif.
 - `call_seqlets()` takes `passes`, to call seqlets again with those found
   so far set to 0.
+- `contrib-motifs` takes `--seqlet-passes`, `--max-seqlets`,
+  `--later-min-gain` and `--contribution-test`, and `seqlets` takes
+  `--passes`.
 
 Fixes:
 

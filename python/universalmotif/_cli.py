@@ -1166,7 +1166,7 @@ def cmd_seqlets(a):
     null = _read_scores(a, a.null_scores, a.null_sequences).observed if a.null_scores else None
     res = um.call_seqlets(sc.observed, sc.sequences, null_scores=null, threshold=a.threshold,
                           min_len=a.min_len, max_len=a.max_len, flank=a.flank, fdr=a.fdr, sign=a.sign,
-                          seed=a.seed, nthreads=a.threads)
+                          passes=a.passes, seed=a.seed, nthreads=a.threads)
     write_table(res, a.output)
 
 
@@ -1179,7 +1179,8 @@ def cmd_contrib_motifs(a):
     hyp = sc.hypothetical if a.idealize else None
     found = um.contribution_motifs(
         sc.observed, sc.sequences, hypothetical=hyp, seqlets=seqlets, null_scores=null, sign=a.sign,
-        min_width=a.min_width, max_width=a.max_width, nmotifs=a.nmotifs, refine=a.refine, min_gain=a.min_gain,
+        seqlet_passes=a.seqlet_passes, max_seqlets=a.max_seqlets or None, later_min_gain=a.later_min_gain,
+        contribution_test=a.contribution_test or None, min_width=a.min_width, max_width=a.max_width, nmotifs=a.nmotifs, refine=a.refine, min_gain=a.min_gain,
         max_similarity=a.max_similarity, stability=a.stability, rounds=a.rounds, gapped=a.gapped,
         max_gap=a.max_gap, hits=a.hits_out is not None, hit_quantile=a.hit_quantile,
         pattern_similarity=a.pattern_similarity, seed=a.seed, nthreads=a.threads)
@@ -1929,6 +1930,9 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--flank", type=int, default=3, help="positions added on either side (default: 3)")
     p.add_argument("--fdr", type=float, default=0.2,
                    help="largest share of the null scores' seqlets among those kept (default: 0.2)")
+    p.add_argument("--passes", type=int, default=1,
+                   help="times to call seqlets, each after the first with those found so far set to 0 "
+                        "(default: 1)")
     _seed_arg(p)
     _threads_arg(p)
 
@@ -1954,6 +1958,12 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                                      "seqlets command")
     p.add_argument("--sign", choices=("positive", "negative", "both"), default="positive",
                    help="seqlets to search (default: positive)")
+    p.add_argument("--seqlet-passes", type=int, default=2,
+                   help="times to call seqlets, the second with those of the first set to 0, which finds "
+                        "weaker sites beside strong ones (default: 2)")
+    p.add_argument("--max-seqlets", type=int, default=50_000,
+                   help="most seqlets of each sign to search, as a random sample, or 0 for all of them "
+                        "(default: 50000)")
     p.add_argument("--no-idealize", dest="idealize", action="store_false",
                    help="leave out the search on seqlets rewritten in the letters the model prefers, "
                         "which needs hypothetical scores")
@@ -1964,6 +1974,11 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="keep the motifs as found, without rebuilding them from their hits")
     p.add_argument("--min-gain", type=float, default=0.0025,
                    help="least share of the seqlets a motif must add to be kept (default: 0.0025)")
+    p.add_argument("--later-min-gain", type=float,
+                   help="least share for motifs of later searches (default: four fifths of --min-gain)")
+    p.add_argument("--contribution-test", type=float, default=0.01,
+                   help="adjusted P-value cutoff of the test against shuffled copies of each motif, or 0 to "
+                        "skip it (default: 0.01)")
     p.add_argument("--max-similarity", type=float, default=0.9,
                    help="most a motif's CWM may resemble one kept before it, by cosine (default: 0.9)")
     p.add_argument("--stability", type=int, default=0,
