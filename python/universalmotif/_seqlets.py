@@ -43,6 +43,7 @@ def call_seqlets(
     fdr: float | None = 0.2,
     sign: str = "both",
     n_bins: int = 1000,
+    passes: int = 1,
     seed: int | None = None,
     nthreads: int | None = None,
     progress: bool | None = None,
@@ -119,6 +120,15 @@ def call_seqlets(
         ``"both"``, ``"positive"`` or ``"negative"``.
     n_bins
         The bins the scores are counted in to build the null.
+    passes
+        How many times to call seqlets. Each pass after the first calls
+        them again in the scores with the seqlets so far set to 0. Without
+        ``null_scores``, the null comes from the scores themselves, and the
+        large scores of strong sites stretch its top, so weaker sites (such
+        as a cofactor's next to the factor's own) are often missed by the
+        first pass. With ``null_scores`` the null stays the same, so later
+        passes add little. Seqlets of later passes come after those of the
+        first.
     seed
         Seed for the shuffles behind ``fdr``, so that the seqlets kept near
         the cutoff are the same from run to run.
@@ -185,10 +195,20 @@ def call_seqlets(
         raise ValueError("max_len must be at most 200")
     if flank < 0:
         raise ValueError("flank must be zero or positive")
+    if passes < 1:
+        raise ValueError("passes must be at least 1")
     values, lengths, names, codes = _observed(contributions, sequences)
     null_values, null_lengths = (None, None) if null_scores is None else _observed(null_scores, null_sequences)[:2]
-    out = _core._call_seqlets(values, lengths, null_values, null_lengths, threshold, min_len, max_len, flank, fdr, sign,
-                              n_bins, _seed(seed), _nthreads(nthreads))
+    seed = _seed(seed)
+    out = None
+    for _ in range(passes):
+        found = _core._call_seqlets(values, lengths, null_values, null_lengths, threshold, min_len, max_len, flank,
+                                    fdr, sign, n_bins, seed, _nthreads(nthreads))
+        out = found if out is None else {k: list(out[k]) + list(found[k]) for k in out}
+        if passes > 1:
+            values = np.array(values, copy=True)
+            for i, a, b in zip(found["sequence_i"], found["start"], found["end"]):
+                values[i, a:b] = 0
     seq_i = np.asarray(out["sequence_i"], dtype=np.int64)
     df = pl.DataFrame({
         "sequence": pl.Series([names[i] for i in seq_i], dtype=pl.String),

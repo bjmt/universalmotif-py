@@ -26,6 +26,8 @@ New:
   chromBPNet archives, which hold no sequences; `sequences` gives them,
   and can now be a `Genome` to read them from at the file's coordinates.
 - `select_motifs()` takes one `min_gain` per motif.
+- `call_seqlets()` takes `passes`, to call seqlets again with those found
+  so far set to 0.
 
 Fixes:
 

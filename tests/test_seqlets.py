@@ -65,6 +65,26 @@ def test_seqlets_feed_discovery(scores):
     assert sel["kept"].any()
 
 
+def test_second_pass_finds_weak_sites_beside_strong_ones():
+    """A strong site in each of 300 sequences, and a weak one beside it in
+    every other sequence."""
+    rng = np.random.default_rng(1)
+    scores = rng.normal(0, 0.01, (300, 120))
+    scores[:, 30:38] += 0.4
+    scores[::2, 80:87] += 0.06
+
+    def weak(s):
+        return s.filter((pl.col("start") < 87) & (pl.col("end") > 80))
+
+    one = um.call_seqlets(scores, sign="positive", seed=1)
+    assert one.height == 300 and weak(one).height == 0
+    two = um.call_seqlets(scores, sign="positive", seed=1, passes=2)
+    assert two.head(300).equals(one)
+    assert weak(two)["sequence_i"].n_unique() == 150 and (weak(two)["sequence_i"] % 2 == 0).all()
+    with pytest.raises(ValueError, match="passes"):
+        um.call_seqlets(scores, passes=0)
+
+
 def test_errors(scores):
     with pytest.raises(ValueError, match="sign"):
         um.call_seqlets(scores, sign="up")
