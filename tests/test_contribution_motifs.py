@@ -137,6 +137,8 @@ def test_contribution_test_drops_motifs_of_composition_alone():
     assert gc_only(loose)
     tested = um.contribution_motifs(scores, seqs, seed=1, gapped=False, hits=False)
     assert tested.motifs["consensus"][0] == "TGACTCA" and not gc_only(tested)
+    # Gains count only the motifs left after the test.
+    assert tested.motifs["cumulative"].max() == pytest.approx(tested.motifs["gain"].sum())
     assert len(tested) < len(loose)
     with pytest.raises(ValueError, match="contribution_test"):
         um.contribution_motifs(scores, seqs, contribution_test=0)

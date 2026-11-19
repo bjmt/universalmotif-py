@@ -652,8 +652,9 @@ def contribution_motifs(
         - ``consensus`` and ``width``.
         - ``seqlets``, the seqlets given to it.
         - ``gain`` and ``cumulative``, the shares of the seqlets of its sign
-          that its sequence matches added when it was chosen, and that those
-          of the motifs up to it reach.
+          that its sequence matches add to those of the motifs kept before
+          it, in the order they were chosen, and that those of the motifs up
+          to it reach.
         - ``stability``, with reruns.
         - ``min_similarity`` and ``min_importance``, its hit thresholds.
         - ``motif``, the motif as a PPM.
@@ -807,6 +808,13 @@ def contribution_motifs(
             # seqlets by its CWM can have a CWM much like others, such as one weighted on a CpG, and
             # would gather unrelated motifs as the first of a pattern.
             matched = _reach(_site_hits([r["motif"] for r in kept], seqs, sites, nthreads))
+            # The contribution test and the check on shapes can leave out motifs chosen before others,
+            # so gains are counted again over the motifs kept, in the order they were chosen.
+            so_far: set[int] = set()
+            for r in kept:
+                new = matched.get(r["name"], set()) - so_far
+                so_far |= new
+                r["gain"], r["cumulative"] = len(new) / sites.height, len(so_far) / sites.height
             _group(kept, label, pattern_similarity, nthreads, {q: len(v) for q, v in matched.items()})
             for r in kept:
                 reach_by_motif[r["name"]] = sub_ids[np.sort(np.fromiter(reach.get(r["name"], ()), dtype=np.int64))]
