@@ -5,6 +5,11 @@ hide:
 
 # Benchmarks
 
+This page holds two benchmarks: the speed and memory use of this package
+against the R package, and the motifs of
+[`contribution_motifs()`](#motifs-from-contribution-scores) checked against
+outside evidence.
+
 The speed and memory use of this package compared with the
 [universalmotif](https://bioconductor.org/packages/universalmotif/) R
 package, on the same inputs with matching parameters. The R side uses the
@@ -86,3 +91,60 @@ The scripts are in
 [`benchmarks/r_vs_python`](https://github.com/bjmt/universalmotif-py/tree/main/benchmarks/r_vs_python),
 along with the raw timings of this run, and its README describes how to run
 them.
+
+## Motifs from contribution scores
+
+[`contribution_motifs()`][universalmotif.contribution_motifs] was run with
+its defaults on the contribution scores of 25 of ENCODE's models: BPNet
+models of 16 single factors, chromBPNet models of ATAC-seq in K562, HepG2
+and GM12878 cells, and ProCapNet models of PRO-cap in six cell lines. TF-MoDISco
+(modisco-lite 3.0.0, default settings) was run on the same regions, and
+ENCODE's own TF-MoDISco results for each model were added beside them.
+
+No set of motifs is known to be complete for any of these models, so each
+motif was checked for evidence of its own rather than against another
+method's:
+
+- outside support, either conservation at its sites in the regions (mean
+  phyloP of its sites against their flanks, compared with sites of the same
+  GC and CpG content) or more ChIP-seq peaks of the factor it is named after,
+  in the same cell line, than expected;
+- the model's response, a change in the prediction when the motif is planted
+  in 128 shuffled sequences, against copies of it with its columns shuffled.
+
+Each threshold is a Benjamini-Hochberg q-value of 0.01. Motifs alike in
+their CWMs (a cosine of 0.9) were counted once.
+
+<div class="bench-table" markdown>
+| Run | BPNet | chromBPNet | ProCapNet counts | ProCapNet profile |
+| --- | ---: | ---: | ---: | ---: |
+| `contribution_motifs()` | 28.4 / 3.8 | 50.7 / 13.7 | 60.2 / 8.2 | 41.7 / 17.8 |
+| `contribution_motifs()`, `seqlet_passes=1` | 8.4 / 0.7 | 33.0 / 0.7 | 41.3 / 2.8 | 40.7 / 10.5 |
+| TF-MoDISco, same regions | 12.4 / 1.4 | 26.7 / 1.0 | 21.8 / 2.2 | 26.3 / 12.0 |
+| TF-MoDISco, ENCODE's results | 10.9 / 0.4 | 46.7 / 2.7 | 28.2 / 2.3 | 24.8 / 13.7 |
+</div>
+
+Means per model of the distinct motifs with evidence of either kind, and of
+the motifs with none. The single-pass row also holds motifs from the second
+search to `min_gain` itself.
+
+The motifs without evidence are an upper bound on noise, since motifs of
+factors without ChIP-seq data, or whose sites are not conserved, land there
+too. Split by the kind of evidence, much of what the second seqlet pass adds
+on chromBPNet and ProCapNet is backed by the model's response alone:
+
+<div class="bench-table" markdown>
+| Run | BPNet | chromBPNet | ProCapNet counts | ProCapNet profile |
+| --- | ---: | ---: | ---: | ---: |
+| `contribution_motifs()` | 12.1 / 17.1 | 27.0 / 23.7 | 31.0 / 30.0 | 28.8 / 13.0 |
+| `contribution_motifs()`, `seqlet_passes=1` | 5.0 / 3.9 | 21.7 / 11.7 | 23.7 / 18.3 | 28.5 / 12.2 |
+| TF-MoDISco, same regions | 6.8 / 5.8 | 19.3 / 7.7 | 14.3 / 7.5 | 17.3 / 9.0 |
+| TF-MoDISco, ENCODE's results | 5.8 / 5.5 | 30.3 / 18.0 | 19.2 / 9.7 | 19.8 / 5.2 |
+</div>
+
+Motifs with outside support, with or without a response from the model,
+and motifs with the model's response only, per model and not merged.
+
+On scores shuffled across and within regions, with nothing to find, the
+defaults gave 2 motifs over 7 heads of 6 models, where 0.6.0 gave up to 48
+per head.

@@ -519,21 +519,27 @@ def contribution_motifs(
     half-sized reruns. Setting ``stability`` therefore trades them for
     motifs that other samples of regions would give too.
 
-    On a chromBPNet model of chromatin accessibility in K562 cells, over
-    21,000 windows of 500 bases, the defaults with hypothetical scores
-    recovered 28 of the model's 44 published TF-MoDISco patterns at a CWM
-    cosine of 0.8, against 25 for TF-MoDISco on the same windows. The call
-    took 10 seconds, against 41 minutes for TF-MoDISco, and the patterns
-    found included the NFI palindrome and the TAL1–GATA composite. Over all
-    187,000 of the model's windows it took 72 seconds on two threads, with
-    memory peaking at 2.6 GB. The
+    On 25 of ENCODE's models (BPNet models of 16 single factors, three
+    chromBPNet models of accessibility and six ProCapNet models of
+    transcription initiation), each motif was checked for evidence of its
+    own: conservation at its sites or ChIP-seq of the factor it is named
+    after, or a change in the model's prediction when it is planted in
+    shuffled sequences. With the defaults, each BPNet model gave about 28
+    distinct motifs with such evidence, against 12 from TF-MoDISco on the
+    same regions, and each chromBPNet model about 51, against 27. Motifs
+    with no evidence, an upper bound on noise, numbered about 4 and 14 per
+    model, against 1 and 1. The
     [motifs from contribution scores](../guides/contribution-motifs.ipynb)
     guide gives the full comparison.
 
-    Scores from a model's profile head are spikier than those of its counts
-    head, with a few strong positions and weak ones between. In the default
-    seqlets, every stretch of 4 or more positions must stand out, so they
-    miss some of these sites. Seqlets called with
+    Profile heads of models of transcription initiation, such as ProCapNet,
+    are the hardest case. They rely on elements of two to four letters, such
+    as the initiator, which cannot reach the P-value motifs are chosen by on
+    their own and are found, if at all, only within longer motifs. Their
+    scores are also spikier than those of counts heads, with a few strong
+    positions and weak ones between. In the default seqlets, every stretch
+    of 4 or more positions must stand out, so they miss some of these sites.
+    Seqlets called with
     ``call_seqlets(scores, sequences, min_len=2, threshold=0.05)`` and given
     as ``seqlets`` often suit them better. TF-MoDISco's profile-head
     patterns are wide, with much of their weight in the flanks, so our
@@ -542,7 +548,7 @@ def contribution_motifs(
     The motifs found in different samples of regions, or with different
     seeds, differ mostly in the rarer ones, while the common patterns are
     found every time. On a BPNet model of GATA1, three seeds all gave the
-    GATA motif and the TAL1–GATA composite, but between none and three
+    GATA motif and the TAL1-GATA composite, but between none and three
     rarer spellings of the GATA site. Give ``seed`` for results that can be
     repeated, and use ``stability``, or
     [`combine_patterns()`][universalmotif.combine_patterns] over runs with
