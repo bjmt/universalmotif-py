@@ -126,9 +126,9 @@ Each threshold is a Benjamini-Hochberg q-value of 0.01.
 | TF-MoDISco, ENCODE's results | 10.9 / 0.4 | 46.7 / 2.7 | 28.3 / 2.2 | 24.8 / 13.7 |
 </div>
 
-Means per model of the distinct motifs with evidence of either kind (motifs
-with CWMs at a cosine of 0.9 or more counted once), and of the motifs with
-none. The one-pass row searched every seqlet, and held motifs from the
+Each cell holds two means per model, separated by a slash: first the
+distinct motifs with evidence of either kind (motifs with CWMs at a cosine
+of 0.9 or more counted once), then the motifs with none. The one-pass row searched every seqlet, and held motifs from the
 second search to `min_gain` itself.
 
 `contribution_motifs()` tends to give several spellings of one site, which
@@ -160,8 +160,9 @@ on chromBPNet and ProCapNet is backed by the model's response alone:
 | TF-MoDISco, ENCODE's results | 5.6 / 5.7 | 29.7 / 18.7 | 19.5 / 9.5 | 20.5 / 4.5 |
 </div>
 
-Motifs with outside support, with or without a response from the model,
-and motifs with the model's response only, per model and not merged.
+Each cell holds two means per model, separated by a slash: first the
+motifs with outside support, with or without a response from the model,
+then the motifs with the model's response only. These are not merged.
 
 On scores shuffled across and within regions, with nothing to find,
 `contribution_motifs()` with two seqlet passes gave 2 motifs over 7 heads of
