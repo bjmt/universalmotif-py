@@ -396,6 +396,7 @@ def contribution_motifs(
     null_sequences: Any = None,
     sign: str = "positive",
     seqlet_passes: int = 2,
+    max_seqlets: int | None = None,
     min_width: int = 6,
     max_width: int = 15,
     nmotifs: int = 60,
@@ -594,6 +595,13 @@ def contribution_motifs(
         which can suit profile heads. Null scores of the model's own
         contributions for shuffled sequences (``null_scores``) are the
         strictest choice, when you have them.
+    max_seqlets
+        The most seqlets of each sign to search. When there are more, a
+        random sample of this many is searched, as TF-MoDISco's
+        ``max_seqlets_per_metacluster`` caps its seqlets (though it takes
+        the first ones). This bounds the time on large sets of regions, at
+        the cost of rare motifs, whose few seqlets a sample may miss. Hits
+        are still found in all the scores.
     min_width, max_width, nmotifs
         As for ``motif_finder()``. Refinement can widen motifs beyond
         ``max_width``, up to 30 letters.
@@ -714,6 +722,8 @@ def contribution_motifs(
         raise ValueError("later_min_gain must be between 0 and 1")
     if contribution_test is not None and not 0 < contribution_test <= 1:
         raise ValueError("contribution_test must be above 0 and at most 1, or None")
+    if max_seqlets is not None and max_seqlets < 20:
+        raise ValueError("max_seqlets must be at least 20, or None")
     if hypothetical is not None and idealized is not None:
         raise ValueError("give hypothetical scores or idealized sequences, not both")
     nthreads = _nthreads(nthreads)
@@ -745,6 +755,8 @@ def contribution_motifs(
         if "sign" not in seqlets.columns and sign == "both":
             raise ValueError("seqlets without a 'sign' column can be searched for one sign only; give "
                              "sign='positive' or 'negative', or add a sign column of '+' and '-'")
+    if max_seqlets is not None:
+        seqlets = _sample_seqlets(seqlets, max_seqlets, seed)
     signs = {"positive": ["+"], "negative": ["-"], "both": ["+", "-"]}[sign]
     ideal = {} if idealized is None else _given_idealized(idealized, seqs, sign)
     rows = []
@@ -1008,6 +1020,22 @@ def _bh(p: np.ndarray) -> np.ndarray:
     out = np.empty(len(p))
     out[order] = np.minimum(adj, 1.0)
     return out
+
+
+def _sample_seqlets(seqlets: pl.DataFrame, n: int, seed: int) -> pl.DataFrame:
+    """At most n seqlets of each sign, sampled at random and kept in their
+    order. The sample has a generator of its own, so that the searches draw
+    the same numbers whether or not seqlets were left out."""
+    if "sign" not in seqlets.columns:
+        groups = [np.arange(seqlets.height)]
+    else:
+        signs = seqlets["sign"].to_numpy()
+        groups = [np.flatnonzero(signs == sg) for sg in ("+", "-")]
+    if all(len(g) <= n for g in groups):
+        return seqlets
+    rng = np.random.default_rng([seed, 1])
+    keep = np.sort(np.concatenate([g if len(g) <= n else rng.choice(g, n, replace=False) for g in groups]))
+    return seqlets[keep]
 
 
 def _later(name: str) -> bool:

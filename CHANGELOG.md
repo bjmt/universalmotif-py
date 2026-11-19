@@ -39,6 +39,8 @@ New:
 - `select_motifs()` takes one `min_gain` per motif.
 - `call_seqlets()` takes `passes`, to call seqlets again with those found
   so far set to 0.
+- `contribution_motifs()` takes `max_seqlets`, to search a random sample
+  of at most that many seqlets of each sign.
 
 Fixes:
 

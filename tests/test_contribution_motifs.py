@@ -258,3 +258,21 @@ def test_idealized_sequences_stand_in_for_hypothetical_scores(model):
         um.contribution_motifs(scores, seqs, idealized=ideal, sign="both")
     with pytest.raises(ValueError, match="number and length"):
         um.contribution_motifs(scores, seqs, idealized=ideal[:10])
+
+
+def test_max_seqlets_searches_a_sample(model):
+    full = um.contribution_motifs(model["scores"], model["seqs"], seed=1, hits=False)
+    capped = um.contribution_motifs(model["scores"], model["seqs"], seed=1, hits=False, max_seqlets=100)
+    assert full.seqlets.height > 100 and capped.seqlets.height == 100
+    # The sample is of the seqlets called, and the same for the same seed.
+    key = ["sequence_i", "start", "end"]
+    assert capped.seqlets.join(full.seqlets, on=key, how="semi").height == 100
+    again = um.contribution_motifs(model["scores"], model["seqs"], seed=1, hits=False, max_seqlets=100)
+    assert again.seqlets.equals(capped.seqlets)
+    cons = capped.motifs["consensus"].to_list()
+    assert any("TGACTCA" in c or "TGAGTCA" in c for c in cons)
+    # A cap above the seqlets there are changes nothing.
+    loose = um.contribution_motifs(model["scores"], model["seqs"], seed=1, hits=False, max_seqlets=10**6)
+    assert loose.motifs["name"].to_list() == full.motifs["name"].to_list()
+    with pytest.raises(ValueError, match="max_seqlets"):
+        um.contribution_motifs(model["scores"], model["seqs"], max_seqlets=5)
