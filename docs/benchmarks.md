@@ -166,3 +166,23 @@ and motifs with the model's response only, per model and not merged.
 On scores shuffled across and within regions, with nothing to find,
 `contribution_motifs()` with two seqlet passes gave 2 motifs over 7 heads of
 6 models, where 0.6.0 gave up to 48 per head.
+
+By default `contribution_motifs()` searches at most 50,000 seqlets of each
+sign, a random sample of them when there are more. On the machine above,
+with 2 threads, the sample made the search 2.5 to 8 times faster on the
+chromBPNet models, whose full sets of regions hold about 200,000 to 700,000
+seqlets, and saved little memory, most of which holds the scores:
+
+<div class="bench-table" markdown>
+| Model | Regions | Seqlets searched | Time, sample | Time, every seqlet | Memory, sample | Memory, every seqlet |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| chromBPNet K562, counts | 186,881 | 50,000 of 688,674 | 67.5 s | 550 s | 8.2 GB | 8.7 GB |
+| chromBPNet K562, profile | 186,881 | 50,000 of 193,411 | 54.3 s | 138 s | 3.5 GB | 4.2 GB |
+| chromBPNet HepG2, counts | 172,191 | 50,000 of 653,337 | 71.5 s | 520 s | 6.3 GB | 7.0 GB |
+| BPNet NFIC, counts | 13,723 | 50,000 of 63,317 | 41.5 s | 46.9 s | 2.3 GB | 2.3 GB |
+</div>
+
+Times are of single runs, and memory is the peak of the whole process,
+the scores included. The other BPNet heads tried, of GATA1 and of NFIC's
+profile, had fewer than 50,000 seqlets and so were searched whole either
+way.
