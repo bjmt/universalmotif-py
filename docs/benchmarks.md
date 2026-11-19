@@ -98,8 +98,11 @@ them.
 its defaults on the contribution scores of 25 of ENCODE's models: BPNet
 models of 16 single factors, chromBPNet models of ATAC-seq in K562, HepG2
 and GM12878 cells, and ProCapNet models of PRO-cap in six cell lines. TF-MoDISco
-(modisco-lite 3.0.0, default settings) was run on the same regions, and
-ENCODE's own TF-MoDISco results for each model were added beside them.
+(modisco-lite 3.0.0, default settings, with at most 50,000 seqlets of each
+sign) was run on the same regions, and ENCODE's own TF-MoDISco results for
+each model were added beside them. `contribution_motifs()` searched every
+seqlet it called, which on the chromBPNet models was several times as many,
+so part of its lead there may come from seeing more of the data.
 
 No set of motifs is known to be complete for any of these models, so each
 motif was checked for evidence of its own rather than against another
