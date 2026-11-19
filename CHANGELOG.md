@@ -17,6 +17,9 @@ Changes in behaviour:
   that the weaker sites of cofactors beside a factor's strong ones are
   found, which takes about three times as long; `seqlet_passes=1` gives
   the old behaviour.
+- `contribution_motifs()` searches a random sample of at most 50,000
+  seqlets of each sign (`max_seqlets`), much as TF-MoDISco caps its
+  seqlets; `max_seqlets=None` searches them all.
 - `contribution_motifs()` drops motifs whose matches carry no more
   contribution than shuffled copies of themselves (`contribution_test`),
   such as runs of GCs in GC-rich regions.
@@ -39,8 +42,6 @@ New:
 - `select_motifs()` takes one `min_gain` per motif.
 - `call_seqlets()` takes `passes`, to call seqlets again with those found
   so far set to 0.
-- `contribution_motifs()` takes `max_seqlets`, to search a random sample
-  of at most that many seqlets of each sign.
 
 Fixes:
 

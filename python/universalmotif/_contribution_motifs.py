@@ -396,7 +396,7 @@ def contribution_motifs(
     null_sequences: Any = None,
     sign: str = "positive",
     seqlet_passes: int = 2,
-    max_seqlets: int | None = None,
+    max_seqlets: int | None = 50_000,
     min_width: int = 6,
     max_width: int = 15,
     nmotifs: int = 60,
@@ -524,11 +524,11 @@ def contribution_motifs(
     transcription initiation), each motif was checked for evidence of its
     own: conservation at its sites or ChIP-seq of the factor it is named
     after, or a change in the model's prediction when it is planted in
-    shuffled sequences. With the defaults, each BPNet model gave about 28
+    shuffled sequences. With the defaults, each BPNet model gave about 25
     distinct motifs with such evidence, against 12 from TF-MoDISco on the
-    same regions, and each chromBPNet model about 51, against 27. Motifs
-    with no evidence, an upper bound on noise, numbered about 4 and 14 per
-    model, against 1 and 1. The
+    same regions (with the same cap on seqlets), and each chromBPNet model
+    about 47, against 27. Motifs with no evidence, an upper bound on noise,
+    numbered about 4 and 14 per model, against 1 and 1. The
     [motifs from contribution scores](../guides/contribution-motifs.ipynb)
     guide gives the full comparison.
 
@@ -602,12 +602,12 @@ def contribution_motifs(
         contributions for shuffled sequences (``null_scores``) are the
         strictest choice, when you have them.
     max_seqlets
-        The most seqlets of each sign to search. When there are more, a
-        random sample of this many is searched, as TF-MoDISco's
-        ``max_seqlets_per_metacluster`` caps its seqlets (though it takes
-        the first ones). This bounds the time on large sets of regions, at
-        the cost of rare motifs, whose few seqlets a sample may miss. Hits
-        are still found in all the scores.
+        The most seqlets of each sign to search, or ``None`` to search them
+        all. When there are more, a random sample of this many is searched,
+        as TF-MoDISco's ``max_seqlets_per_metacluster`` caps its seqlets
+        (though it takes the first ones). This bounds the time on large
+        sets of regions, at the cost of rare motifs, whose few seqlets a
+        sample may miss. Hits are still found in all the scores.
     min_width, max_width, nmotifs
         As for ``motif_finder()``. Refinement can widen motifs beyond
         ``max_width``, up to 30 letters.
