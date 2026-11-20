@@ -224,10 +224,13 @@ the same verdicts. The harness, with the per-model results the tables were
 summarized from, is in
 [`benchmarks/contribution_motifs_evidence`](https://github.com/bjmt/universalmotif-py/tree/main/benchmarks/contribution_motifs_evidence).
 
-On scores shuffled across and within regions, with nothing to find, an
-earlier development build of `contribution_motifs()`, with two seqlet passes
-as now, gave 2 motifs over 7 heads of 6 models, where 0.6.0 gave up to 48
-per head.
+With the hypothetical scores shuffled across and within regions, leaving
+nothing to find, `contribution_motifs()` at the same tag found 4 motifs over
+all the windows of 7 heads of 6 models. One is probably the CEBP sites in
+the letters of CEBPB's peaks, which the shuffling leaves in place, and the
+other three, on chromBPNet's HepG2 head, likely come from repeats common
+among its windows. Version 0.6.0, on samples of up to 20,000 of the same
+windows, found up to 48 motifs per head.
 
 ### Time and memory
 
