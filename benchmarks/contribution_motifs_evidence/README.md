@@ -31,6 +31,7 @@ conserved, land there too.
 | `harness.py` | Downloads everything, prepares the windows and runs every method. |
 | `checks.py` | The conservation and ChIP-seq checks, and the evidence tables. |
 | `insertion.py` | The model's response to each motif planted in shuffled sequences. |
+| `null.py` | Scores with nothing to find, for `contribution_motifs()`. |
 | `run.sh` | Runs every stage in order. |
 | `results/` | The per-model results the tables were summarized from. |
 
@@ -132,6 +133,21 @@ The share of motifs found depends on the runs in the pool, since motifs
 alike at a cosine of 0.8 are merged across all of them, so adding or leaving
 out a run changes every row's share.
 
+## Scores with nothing to find
+
+`null.py` gives each window of seven heads of six models (the counts heads
+of the BPNet models of CEBPB in HepG2, and CTCF and GATA1 in K562, of
+chromBPNet in HepG2 and K562, and both heads of ProCapNet in K562) the
+hypothetical scores of another window chosen at random, turned by a random
+offset, and takes the observed scores from them at the window's own
+letters. With the defaults and hypothetical scores, at the `evidence-1`
+tags, `contribution_motifs()` found 4 motifs over all seven heads on every
+window (one on CEBPB, a CEBP-like site, likely since its letters are those of
+CEBPB peaks, and three on chromBPNet in HepG2, one of them part of an Alu
+repeat), and 2 motifs (both on chromBPNet in HepG2) on the files of the
+earlier check of this kind, which used the same shuffle on a sample of up
+to 20,000 windows per head. Both are in `results/null.tsv`.
+
 ## Earlier results
 
 The tables first published on the benchmarks page came from earlier forms
@@ -194,4 +210,5 @@ out the same.
 | `support.tsv.gz` | The conservation and ChIP-seq checks of every motif. |
 | `insertion.tsv.gz` | The insertion test of every motif, with its width and total information content. |
 | `insertion_random.tsv.gz` | The insertion test of every random motif. |
+| `null.tsv` | The motifs found on scores with nothing to find, on every window (`all`) and on the earlier check's sample. |
 | `runs.tsv` | The windows, time, peak memory and motifs of every run. The times of the `contribution_motifs()` rows come from one batch of 10 runs side by side on a shared machine, and TF-MoDISco's from the earlier batches, so they are only a rough guide. |

@@ -1,0 +1,15 @@
+windows_used	model	head	method	windows	seconds	peak_gb	motifs	consensus
+all	bpnet_CEBPB_HepG2	counts	cm	52261	10.6	1.08	1	RTKRTGMAAYMNY
+all	bpnet_CTCF_K562	counts	cm	45327	23.3	1.33	0	
+all	bpnet_GATA1_K562	counts	cm	4449	2.3	0.36	0	
+all	chrombpnet_HepG2_ATAC-seq	counts	cm	172191	75.0	3.3	3	CCTGTARTCCCAGCWMYTYGGGAGGCYGAG,WSTNTGTKTGY,GSCAGGMA
+all	chrombpnet_K562_ATAC-seq	counts	cm	166464	67.3	3.15	0	
+all	procapnet_K562	counts	cm	30534	68.9	5.35	0	
+all	procapnet_K562	profile	cm	30534	87.0	7.29	0	
+earlier sample	bpnet_CEBPB_HepG2	counts	cm	17421	4.6	0.57	0	
+earlier sample	bpnet_CTCF_K562	counts	cm	15109	7.8	0.57	0	
+earlier sample	bpnet_GATA1_K562	counts	cm	1483	1.1	0.26	0	
+earlier sample	chrombpnet_HepG2_ATAC-seq	counts	cm	20000	24.1	0.93	2	GCBSCCRCCSCSGSSSSSNSC,CCCCACAS
+earlier sample	chrombpnet_K562_ATAC-seq	counts	cm	20000	14.5	0.76	0	
+earlier sample	procapnet_K562	counts	cm	10178	27.8	1.92	0	
+earlier sample	procapnet_K562	profile	cm	10178	48.0	2.75	0	
