@@ -6,18 +6,18 @@ hide:
 # Benchmarks
 
 This page holds two benchmarks: the speed and memory use of this package
-against the R package, and the motifs of
-[`contribution_motifs()`](#motifs-from-contribution-scores) checked against
-outside evidence.
+against the [universalmotif](https://bioconductor.org/packages/universalmotif/)
+R package, and [`contribution_motifs()`](#motifs-from-contribution-scores)
+against TF-MoDISco, by evidence for the motifs they find and by time and
+memory.
 
-The speed and memory use of this package compared with the
-[universalmotif](https://bioconductor.org/packages/universalmotif/) R
-package, on the same inputs with matching parameters. The R side uses the
-`_lite` functions where they exist, which run the same algorithms as this
-package, and every result was checked against the R package's. All agree
-but the clusters of merged motifs: this package leaves each motif's
-comparison with itself out of the correction of its q-values, which the R
-package includes, and so links a few fewer motifs (288 clusters to 268).
+Both packages were run on the same inputs with matching parameters. The R
+side uses the `_lite` functions where they exist, which run the same
+algorithms as this package, and every result was checked against the R
+package's. All agree but the clusters of merged motifs: this package leaves
+each motif's comparison with itself out of the correction of its q-values,
+which the R package includes, and so links a few fewer motifs (288 clusters
+to 268).
 
 ## Results
 
@@ -101,32 +101,26 @@ and GM12878 cells, and ProCapNet models of PRO-cap in six cell lines.
 
 ### How each method was run
 
-Every comparison on this page uses the runs below. "TF-MoDISco, same
-regions" was run on the same regions and scores as `contribution_motifs()`,
-and ENCODE's published TF-MoDISco results for each model were added beside
-them.
-
 <div class="bench-table" markdown>
 | | `contribution_motifs()` | TF-MoDISco, same regions | TF-MoDISco, ENCODE's results |
 | --- | --- | --- | --- |
 | Version | this package, 0.6.0 development version | modisco-lite 3.0.0 | tfmodisco-lite 2.2.0 |
-| Run as | `contribution_motifs()` with its defaults and `hypothetical` | the `modisco motifs` command with `-n 50000`, and `-w` the width of the regions | the `modisco motifs` command, as ENCODE's archives describe |
+| Run as | `contribution_motifs()` with its defaults | the `modisco motifs` command with `-n 50000`, and `-w` the width of the regions | the `modisco motifs` command, as ENCODE's archives describe |
 | Settings | its defaults | the command's defaults: 2 Leiden clusterings, a seqlet FDR of 0.05, seqlet cores of 20 and flanks of 5 | the command's defaults |
 | Seqlets searched | at most 50,000 of each sign | at most 50,000 of each sign | at most 1,000,000 of each sign |
 | Regions | every peak of each model as a 500 bp window around its summit, with overlapping windows dropped; for ProCapNet, the middle 1,000 bp of every peak | the same windows | all of each model's regions |
-| Scores | observed, and hypothetical for the idealized search (observed only in the row that says so) | hypothetical | hypothetical |
+| Scores | observed and hypothetical | hypothetical | hypothetical |
 | Threads | 2 | 2 | not stated |
 </div>
 
-Both methods were given the same scores: `contribution_motifs()` was given
-the hypothetical scores TF-MoDISco needs, for its search of idealized
-seqlets, as well as the observed scores it always uses. One difference is
-kept on purpose: the modisco command clusters the seqlets twice,
-where its library's `TFMoDISco()` clusters them 50 times by default, with a
-seqlet FDR of 0.2. Run through the library with those two defaults on
-21,000 of the 30,000 regions of the time comparison below, TF-MoDISco took
-about ten times as long as the command. The command is how ENCODE
-and most users run TF-MoDISco, so it is the one compared.
+Given hypothetical scores, `contribution_motifs()` adds a search of seqlets
+rewritten in the letters the model prefers; one run below goes without
+them. The modisco command clusters the seqlets twice, where its library's
+`TFMoDISco()` clusters them 50 times by default, with a seqlet FDR of 0.2.
+Run through the library with those two defaults on 21,000 of the 30,000
+regions of the time comparison below, TF-MoDISco took about ten times as
+long. The command is how ENCODE and most users run TF-MoDISco, so it is the
+one compared.
 
 ### Evidence
 
@@ -141,7 +135,10 @@ method's:
 - the model's response, a change in the prediction when the motif is planted
   in 128 shuffled sequences, against copies of it with its columns shuffled.
 
-Each threshold is a Benjamini-Hochberg q-value of 0.01.
+Each threshold is a Benjamini-Hochberg q-value of 0.01. Each cell of the
+table holds two means per model: first the distinct motifs with evidence of
+either kind (motifs with CWMs at a cosine of 0.9 or more counted once), then
+the motifs with none.
 
 <div class="bench-table" markdown>
 | Run | BPNet | chromBPNet | ProCapNet counts | ProCapNet profile |
@@ -154,26 +151,22 @@ Each threshold is a Benjamini-Hochberg q-value of 0.01.
 | TF-MoDISco, ENCODE's results | 10.9 / 0.4 | 46.7 / 2.7 | 28.3 / 2.2 | 24.8 / 13.7 |
 </div>
 
-Each cell holds two means per model, separated by a slash: first the
-distinct motifs with evidence of either kind (motifs with CWMs at a cosine
-of 0.9 or more counted once), then the motifs with none. The one-pass row searched every seqlet, and held
-motifs from the second search to `min_gain` itself. It and the
-`max_seqlets=None` row were run with development builds of 18 November,
-from before the seqlet cap became the default. The observed-only row was
-run like the first, with a build of 20 November, but without hypothetical
-scores, so without the search of idealized seqlets.
+The `max_seqlets=None` row searched every seqlet. The one-pass row also
+searched every seqlet, and held motifs from the second search to `min_gain`
+itself; both were run with development builds of 18 November, before the
+seqlet cap became the default. The observed-only row was run like the first
+on 20 November, without hypothetical scores.
 
 The search of idealized seqlets helps on chromBPNet and ProCapNet but not
 on BPNet. It added 2 to 3 motifs with evidence per model on chromBPNet and
 ProCapNet's profile heads, and 9 on ProCapNet's counts heads, along with 3
-or 4 more motifs without evidence. On BPNet the observed scores alone found
-as many. With observed scores only, `contribution_motifs()` still found
-more motifs with evidence than TF-MoDISco on the same regions, on every
-kind of model.
+or 4 more motifs without evidence. With observed scores only,
+`contribution_motifs()` still found more motifs with evidence than
+TF-MoDISco on the same regions, on every kind of model.
 
 `contribution_motifs()` tends to give several spellings of one site, which
-this count favours. Merging the motifs with evidence of the six runs above
-at a cosine of 0.8 instead, the share of them each run found is:
+this count favours. Merging the motifs with evidence of the six runs at a
+cosine of 0.8 instead, the share of them each run found is:
 
 <div class="bench-table" markdown>
 | Run | BPNet | chromBPNet | ProCapNet counts | ProCapNet profile |
@@ -189,7 +182,10 @@ at a cosine of 0.8 instead, the share of them each run found is:
 The motifs without evidence are an upper bound on noise, since motifs of
 factors without ChIP-seq data, or whose sites are not conserved, land there
 too. Split by the kind of evidence, much of what the second seqlet pass adds
-on chromBPNet and ProCapNet is backed by the model's response alone:
+on chromBPNet and ProCapNet is backed by the model's response alone. Here
+each cell holds first the motifs with outside support, with or without a
+response from the model, then the motifs with the model's response only,
+not merged:
 
 <div class="bench-table" markdown>
 | Run | BPNet | chromBPNet | ProCapNet counts | ProCapNet profile |
@@ -202,42 +198,40 @@ on chromBPNet and ProCapNet is backed by the model's response alone:
 | TF-MoDISco, ENCODE's results | 5.6 / 5.7 | 29.7 / 18.7 | 19.5 / 9.5 | 20.5 / 4.5 |
 </div>
 
-Each cell holds two means per model, separated by a slash: first the
-motifs with outside support, with or without a response from the model,
-then the motifs with the model's response only. These are not merged.
+On scores shuffled across and within regions, with nothing to find,
+`contribution_motifs()` with two seqlet passes gave 2 motifs over 7 heads of
+6 models, where 0.6.0 gave up to 48 per head.
 
 The harness behind these tables, with the per-model results they were
 summarized from and the commits behind each row, is in
 [`benchmarks/contribution_motifs_evidence`](https://github.com/bjmt/universalmotif-py/tree/main/benchmarks/contribution_motifs_evidence).
 
-On scores shuffled across and within regions, with nothing to find,
-`contribution_motifs()` with two seqlet passes gave 2 motifs over 7 heads of
-6 models, where 0.6.0 gave up to 48 per head.
-
 ### Time and memory
 
-These runs were on the machine above, each in its own process with 2
-threads, and are single runs. Times and peak memory are those of each
-whole process, from `/usr/bin/time -l`, with the inputs loaded; memory is in
-units of 10<sup>9</sup> bytes, and on the large sets its peak varies by
-about a gigabyte from one run to the next.
+These runs were on the machine of the [setup](#setup) above, each method in
+a process of its own with 2 threads. Each was run once, and its time and
+peak memory are those of the whole process from `/usr/bin/time -l`, with the
+inputs loaded. Memory is in units of 10<sup>9</sup> bytes, and on the large
+sets its peak varies by about a gigabyte from one run to the next.
 
-On 30,000 regions of 500 bp of the chromBPNet model of K562, with the same
-scores, `contribution_motifs()` took about a ninth of the time of
-TF-MoDISco, both run as described above:
+On 30,000 regions of 500 bp drawn at random from those of the chromBPNet
+model of K562, with the methods run as above, `contribution_motifs()` took
+a ninth of TF-MoDISco's time, or a seventh with its search of idealized
+seqlets:
 
 <div class="bench-table" markdown>
 | Run | Time | Memory |
 | --- | ---: | ---: |
-| TF-MoDISco, `modisco motifs -n 50000 -w 500` | 254 s | 3.6 GB |
-| `contribution_motifs()` | 27.1 s | 3.2 GB |
-| `contribution_motifs()`, with `hypothetical` | 38.0 s | 2.7 GB |
+| TF-MoDISco | 254 s | 3.6 GB |
+| `contribution_motifs()`, observed scores only | 27.1 s | 3.2 GB |
+| `contribution_motifs()`, observed and hypothetical scores | 38.0 s | 2.7 GB |
 </div>
 
 By default `contribution_motifs()` searches at most 50,000 seqlets of each
-sign, a random sample of them when there are more. On the chromBPNet
-models, whose regions hold about 200,000 to 700,000 seqlets, the sample made
-the search 2.4 to 8 times faster and used less memory:
+sign, a random sample of them when there are more. On every region of the
+chromBPNet models, which hold about 200,000 to 700,000 seqlets, the sample
+made the search 2.4 to 8 times faster and used less memory, here with
+observed scores only:
 
 <div class="bench-table" markdown>
 | Model | Regions | Seqlets searched | Time, sample | Time, every seqlet | Memory, sample | Memory, every seqlet |
