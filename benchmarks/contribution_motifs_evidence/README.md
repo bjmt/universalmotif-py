@@ -97,6 +97,9 @@ under that rule, with the cells where the two rules differ by more than 2
 motifs (or 0.02 in a share) listed under each table. The two rules agree
 closely for the motifs found with positive scores.
 
+With a second seed, `pooled.py` pools the two and replaces the window with a
+quantile regression on width, as described below.
+
 ## How the published results were made
 
 Every row and every check comes from one build of the packages, tagged
@@ -125,31 +128,70 @@ To check that the runs and checks can be reproduced, the defaults were run
 a second time on three models (the counts head of the BPNet model of GATA1 in
 K562, that of chromBPNet in K562, and both heads of ProCapNet in K562) and
 checked again. The motifs and their hits came out identical, and so did
-the conservation and ChIP-seq checks. The insertion effects agreed to about
-four significant figures (the GPU's arithmetic is not quite deterministic),
-which changed no motif's verdict under either rule. (Note that this second
-run drew the same backgrounds, sites and random motifs as the first, so it
-only shows that the same draws give the same verdicts.)
+the conservation and ChIP-seq checks, and the insertion effects agreed to
+about four significant figures (the GPU's arithmetic is not quite
+deterministic). That second run drew the same backgrounds, sites and random
+motifs as the first however, so it only shows that the same draws give the
+same verdicts.
 
-To see how much the insertion test depends on its draws, it was then run
-again on every row with a new seed (`insertion.py prep --seed 2`), which
-draws new backgrounds, sites and random motifs. The effects agreed closely
-(a Pearson correlation of 0.99), but the bars much less so (0.69, with over
-half moving by more than 25%, since each rests on only 34 to 94 random
-motifs), and the P-values moved by a median of about 50-fold. Of 6,529
-motifs, 15% changed verdict under the width-matched rule (17% under the
-IC-matched one), mostly ones near the bar, and about as many of these
-changes come from the new effects as from the new bars. The conservation and
-ChIP-seq checks stay the same, so only the motifs with the model's response
-alone move: by up to 4.2 a model (`contribution_motifs()` on ProCapNet's
-counts head went from 41.5 to 37.8 distinct motifs with evidence), and the
-shares by up to 0.04. Differences of a few motifs between rows (such as
-those between the `contribution_motifs()` rows on ProCapNet) are therefore
-within the noise of the test. The comparisons with TF-MoDISco all hold,
-apart from the share on ProCapNet's counts head, where
-`contribution_motifs()` goes from 0.52 against 0.49 for ENCODE's results to
-0.52 against 0.52. The tables from the new seed are in
-`results/evidence_tables_seed2.md`.
+The insertion test's own draws matter much more. Run again with a new seed
+(`insertion.py prep --seed 2`, which draws new backgrounds, sites and random
+motifs), the effects agreed closely (a Pearson correlation of 0.99), but the
+P-values moved by a median of about 50-fold, and the bars by more than 25%
+for over half of the motifs (each rests on only 34 to 94 random motifs). Of
+the 6,529 motifs, 15% changed verdict under the width-matched rule (about as
+many from the new effects as from the new bars), and the cells of the tables
+moved by up to 4.2 motifs (`results/evidence_tables_seed2.md`).
+
+The two seeds are therefore pooled by `pooled.py`, with no more of the
+models than the two runs of `insertion.py` (each of which keeps the effect
+of every motif on every background). Each motif's effect and Wilcoxon test
+take all 256 of its backgrounds, and its bar comes from the random motifs of
+both seeds (400 per head) by a quantile regression of their effects on
+width: a straight line through their 99th percentile, in place of the window
+of widths. (Fitted to one seed's random motifs, the line let through 1.4% of
+the other seed's, against 2.9% for the window, which follows the few random
+motifs it holds too closely; a square root did about as well, and a
+quadratic and a line broken at 15 and 30 letters did worse.) On a counts head, a motif that lowers the
+counts is held to the 1st percentile instead, though only 2 motifs count
+this way. (Note that each random motif's effect still rests on the 128
+backgrounds of its own seed, which if anything widens the bar a little.)
+Under this rule 3,169 motifs show the model's response, against 3,403 under
+the window rule on the same pooled tests. On each seed alone, the line only
+lowers the share of verdicts that differ between the seeds from 15% to 14%,
+since much of the difference comes from the effects and P-values.
+
+How steady the pooled verdicts are was estimated with 200 bootstraps, each
+resampling the backgrounds of each seed (the same draws for every motif of a
+head, and for its random motifs) and the random motifs, and fitting the bars
+again. Just over half of the motifs (54%) get the same verdict in every
+bootstrap, but 29% change verdict in more than 5% of them (22% on
+chromBPNet, 37% on BPNet and 26% on ProCapNet), and 12% in more than a
+quarter. From how often each motif passes, two pooled runs would be expected
+to differ on about 10% of the verdicts (8% on chromBPNet, 12% on BPNet and 9%
+on ProCapNet), against 14% for single seeds. The conservation and ChIP-seq
+checks are left out of the bootstrap (their own draws changed about 4% of
+the conservation verdicts, as below), so the intervals give the noise of
+the insertion test alone.
+
+`results/evidence_tables_pooled.md` gives the three tables from the pooled
+test, each cell with its mean over the bootstraps (the expected count, which
+for the counts of motifs is the sum over them of the share of bootstraps in
+which each passes) and their 5th to 95th percentiles. The means sit within
+0.8 motifs (0.03 in a share) of the cells, and no cell lies outside its
+interval, so the intervals are not noticeably shifted. Most span 1 to 3
+motifs. For whether two rows differ, the paired intervals under each table
+are the ones to go by: each is the difference between a row and
+`contribution_motifs()`'s defaults over the same bootstraps, which cancels
+the noise the two share, and those holding 0 are marked as within the noise.
+By them, `max_seqlets=None` and the defaults are within the noise on both
+ProCapNet heads (though not on BPNet and chromBPNet, where it finds 2.3 and
+3.7 more distinct motifs with evidence), as are one seqlet pass on
+ProCapNet's profile head and observed scores only on chromBPNet and
+ProCapNet's profile head. Every difference from TF-MoDISco is well outside
+the noise: `contribution_motifs()` finds more than both sets of TF-MoDISco's
+results on every kind of model, apart from ENCODE's on chromBPNet, which
+find 8.7 more (45.3 against 36.7) and a larger share (0.65 against 0.49).
 
 The share of motifs found depends on the runs in the pool, since motifs
 alike at a cosine of 0.8 are merged across all of them, so adding or leaving
@@ -219,6 +261,18 @@ for a quick test on one small model (a few minutes once its files are
 downloaded). Everything goes in `work/`, or in `WORK`, and the tables end up
 in `work/checks/evidence_tables.md`.
 
+To pool the insertion test over two seeds, make a second work directory
+with links to the first one's `data`, `files`, `models` and `results` and a
+copy of its `checks/support.tsv`, run the three stages of `insertion.py` in
+it (with `prep --seed 2`), and then
+
+```sh
+python pooled.py --works work work-seed2
+```
+
+which writes the pooled verdicts, the bootstraps and the tables to
+`work/pooled/`.
+
 Do keep in mind that the evidence will not come out exactly as in
 `results/`. Each test's P-values are adjusted over every motif checked
 together, so checking fewer models, or other methods beside them, shifts
@@ -232,6 +286,10 @@ out the same.
 | --- | --- |
 | `evidence_tables.md` | The three tables, and the first again under the IC-matched rule. |
 | `evidence_tables_seed2.md` | The same, with the insertion test drawn again from a new seed. |
+| `evidence_tables_pooled.md` | The three tables from the insertion test pooled over both seeds, with the smoothed bar, each cell's bootstrap mean and interval, and each row's difference from `contribution_motifs()`. |
+| `evidence_pooled.tsv.gz` | One row per motif, with the pooled test, its bars, its verdicts under both rules and the share of bootstraps in which it passes (`passes`) and changes verdict (`changed`). |
+| `evidence_runs_pooled.tsv` and `evidence_runs_pooled_ic.tsv` | One row per run under the pooled test, as `evidence_runs.tsv`. |
+| `evidence_pooled_bootstrap.tsv.gz` | Every cell of the tables in each of the 200 bootstraps. |
 | `evidence_runs.tsv` | One row per run (model, head and method): motifs, those with each kind of evidence, distinct motifs with evidence and the share of the pool found. |
 | `evidence_runs_ic.tsv` | The same, under the IC-matched rule. |
 | `evidence.tsv.gz` | One row per motif, with each test's statistics, the two bars and the verdicts under both rules. |

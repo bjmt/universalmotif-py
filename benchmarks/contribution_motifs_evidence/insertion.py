@@ -18,7 +18,8 @@ profile head the Jensen-Shannon distance between the profiles with and
 without the motif. Both are given against the shuffled copies (effect),
 along with a Wilcoxon signed-rank test over the backgrounds (pvalue). prep
 writes work/insertion/<model>.<head>.npz, and the same for the calibration
-motifs in work/insertion/random; run writes a .tsv beside each, and collect
+motifs in work/insertion/random; run writes a .tsv beside each, with the
+effect on each background in a .diffs.npy (for pooled.py), and collect
 work/checks/insertion.tsv and insertion_random.tsv.
 """
 
@@ -306,8 +307,8 @@ def run(args):
     eye = np.eye(4, dtype=np.float32)
     for f in files:
         model, head = f.name[:-4].rsplit(".", 1)
-        out = f.with_suffix(".tsv")
-        if out.exists() and not args.force:
+        out, diffs_out = f.with_suffix(".tsv"), f.with_suffix(".diffs.npy")
+        if out.exists() and diffs_out.exists() and not args.force:
             continue
         kind = "torch" if model.startswith("procapnet") else "tf"
         if kind != args.model_kind:
@@ -321,6 +322,7 @@ def run(args):
         coffsets = np.concatenate([[0], np.cumsum(np.repeat(widths, CONTROLS))])
         cache = {}
         lines = ["method\tmotif\tconsensus\teffect\traw\tcontrol\tpvalue"]
+        diffs = []
         rng = np.random.default_rng(1)
         for i in range(len(widths)):
             p = z["matrices"][offsets[i]:offsets[i + 1]]
@@ -339,10 +341,12 @@ def run(args):
                 d = d.reshape(len(sets), n)
                 diff = d[0] - d[1:].mean(0)
                 pval = float(wilcoxon(diff).pvalue) if np.any(diff != 0) else 1.0
-                cache[key] = (float(diff.mean()), float(d[0].mean()), float(d[1:].mean()), pval)
-            e, raw, ctrl, pval = cache[key]
+                cache[key] = (float(diff.mean()), float(d[0].mean()), float(d[1:].mean()), pval, diff)
+            e, raw, ctrl, pval, diff = cache[key]
+            diffs.append(diff)
             lines.append(f"{z['method'][i]}\t{z['name'][i]}\t{z['consensus'][i]}\t{e:.5g}\t{raw:.5g}\t{ctrl:.5g}\t{pval:.4g}")
         out.write_text("\n".join(lines) + "\n")
+        np.save(diffs_out, np.array(diffs, dtype=np.float32).reshape(len(widths), len(bg)))
         print(f"  {model} {head}: {len(widths)} motifs, {len(cache)} distinct", file=sys.stderr, flush=True)
 
 
