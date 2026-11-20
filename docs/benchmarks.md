@@ -229,8 +229,11 @@ nothing to find, `contribution_motifs()` at the same tag found 4 motifs over
 all the windows of 7 heads of 6 models. One is probably the CEBP sites in
 the letters of CEBPB's peaks, which the shuffling leaves in place, and the
 other three, on chromBPNet's HepG2 head, likely come from repeats common
-among its windows. Version 0.6.0, on samples of up to 20,000 of the same
-windows, found up to 48 motifs per head.
+among its windows. Version 0.6.0, on the same windows and scores, found 169
+motifs over six of the heads, up to 53 on one, mostly GC-rich and
+repeat-like words common in the regions. On the seventh, ProCapNet's K562
+profile head, it failed on windows holding an N, which later versions
+handle.
 
 ### Time and memory
 
