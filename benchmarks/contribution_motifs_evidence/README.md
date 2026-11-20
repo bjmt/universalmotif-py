@@ -146,7 +146,12 @@ window (one on CEBPB, a CEBP-like site, likely since its letters are those of
 CEBPB peaks, and three on chromBPNet in HepG2, one of them part of an Alu
 repeat), and 2 motifs (both on chromBPNet in HepG2) on the files of the
 earlier check of this kind, which used the same shuffle on a sample of up
-to 20,000 windows per head. Both are in `results/null.tsv`.
+to 20,000 windows per head. On every window, universalmotif 0.6.0
+(installed from PyPI, with its defaults) found 169 motifs over six of the
+heads, from 2 on CEBPB to 53 on ProCapNet's counts head, and failed on
+ProCapNet's profile head with an invalid PCM (likely the bug with letters
+outside the alphabet fixed in universalmotif-rs `30c5e11`, since 3 of its
+windows hold an N). All three are in `results/null.tsv`.
 
 ## Earlier results
 
@@ -210,5 +215,5 @@ out the same.
 | `support.tsv.gz` | The conservation and ChIP-seq checks of every motif. |
 | `insertion.tsv.gz` | The insertion test of every motif, with its width and total information content. |
 | `insertion_random.tsv.gz` | The insertion test of every random motif. |
-| `null.tsv` | The motifs found on scores with nothing to find, on every window (`all`) and on the earlier check's sample. |
+| `null.tsv` | The motifs found on scores with nothing to find: at `evidence-1` on every window (`all`) and on the earlier check's sample, and with 0.6.0 on every window. |
 | `runs.tsv` | The windows, time, peak memory and motifs of every run. The times of the `contribution_motifs()` rows come from one batch of 10 runs side by side on a shared machine, and TF-MoDISco's from the earlier batches, so they are only a rough guide. |
