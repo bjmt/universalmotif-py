@@ -232,8 +232,8 @@ other three, on chromBPNet's HepG2 head, likely come from repeats common
 among its windows. Version 0.6.0, on the same windows and scores, found 169
 motifs over six of the heads, up to 53 on one, mostly GC-rich and
 repeat-like words common in the regions. On the seventh, ProCapNet's K562
-profile head, it failed on windows holding an N, which later versions
-handle.
+profile head, it failed on windows holding an N, which the version tested
+here handles.
 
 ### Time and memory
 
