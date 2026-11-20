@@ -218,14 +218,16 @@ Only positive motifs are compared. The evidence for negative motifs, almost
 all of it the model's response, depends heavily on how the random motifs
 are matched, so it is left out.
 
-On scores shuffled across and within regions, with nothing to find,
-`contribution_motifs()` with two seqlet passes gave 2 motifs over 7 heads of
-6 models, where 0.6.0 gave up to 48 per head.
-
-Every row was run, and every motif checked, at the `evidence-1` tag, and
-`contribution_motifs()` run again on four heads gave the same verdicts. The harness, with the
-per-model results the tables were summarized from, is in
+Every row of these tables was run, and every motif in them checked, at the
+`evidence-1` tag, and `contribution_motifs()` run again on four heads gave
+the same verdicts. The harness, with the per-model results the tables were
+summarized from, is in
 [`benchmarks/contribution_motifs_evidence`](https://github.com/bjmt/universalmotif-py/tree/main/benchmarks/contribution_motifs_evidence).
+
+On scores shuffled across and within regions, with nothing to find, an
+earlier development build of `contribution_motifs()`, with two seqlet passes
+as now, gave 2 motifs over 7 heads of 6 models, where 0.6.0 gave up to 48
+per head.
 
 ### Time and memory
 
