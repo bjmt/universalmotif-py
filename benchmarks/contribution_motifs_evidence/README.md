@@ -127,7 +127,29 @@ K562, that of chromBPNet in K562, and both heads of ProCapNet in K562) and
 checked again. The motifs and their hits came out identical, and so did
 the conservation and ChIP-seq checks. The insertion effects agreed to about
 four significant figures (the GPU's arithmetic is not quite deterministic),
-which changed no motif's verdict under either rule.
+which changed no motif's verdict under either rule. (Note that this second
+run drew the same backgrounds, sites and random motifs as the first, so it
+only shows that the same draws give the same verdicts.)
+
+To see how much the insertion test depends on its draws, it was then run
+again on every row with a new seed (`insertion.py prep --seed 2`), which
+draws new backgrounds, sites and random motifs. The effects agreed closely
+(a Pearson correlation of 0.99), but the bars much less so (0.69, with over
+half moving by more than 25%, since each rests on only 34 to 94 random
+motifs), and the P-values moved by a median of about 50-fold. Of 6,529
+motifs, 15% changed verdict under the width-matched rule (17% under the
+IC-matched one), mostly ones near the bar, and about as many of these
+changes come from the new effects as from the new bars. The conservation and
+ChIP-seq checks stay the same, so only the motifs with the model's response
+alone move: by up to 4.2 a model (`contribution_motifs()` on ProCapNet's
+counts head went from 41.5 to 37.8 distinct motifs with evidence), and the
+shares by up to 0.04. Differences of a few motifs between rows (such as
+those between the `contribution_motifs()` rows on ProCapNet) are therefore
+within the noise of the test. The comparisons with TF-MoDISco all hold,
+apart from the share on ProCapNet's counts head, where
+`contribution_motifs()` goes from 0.52 against 0.49 for ENCODE's results to
+0.52 against 0.52. The tables from the new seed are in
+`results/evidence_tables_seed2.md`.
 
 The share of motifs found depends on the runs in the pool, since motifs
 alike at a cosine of 0.8 are merged across all of them, so adding or leaving
@@ -209,6 +231,7 @@ out the same.
 | File | What it holds |
 | --- | --- |
 | `evidence_tables.md` | The three tables, and the first again under the IC-matched rule. |
+| `evidence_tables_seed2.md` | The same, with the insertion test drawn again from a new seed. |
 | `evidence_runs.tsv` | One row per run (model, head and method): motifs, those with each kind of evidence, distinct motifs with evidence and the share of the pool found. |
 | `evidence_runs_ic.tsv` | The same, under the IC-matched rule. |
 | `evidence.tsv.gz` | One row per motif, with each test's statistics, the two bars and the verdicts under both rules. |
