@@ -2,11 +2,12 @@
 the chromBPNet model of ATAC-seq in K562 cells (ENCSR868FGK), cached in
 ~/.cache/universalmotif-docs.
 
-    python prepare.py sample OUTDIR       # 30,000 regions, with hypothetical scores
+    python prepare.py sample OUTDIR [N]       # N regions (30,000), with hypothetical scores
     python prepare.py all BIGWIG BED OUTDIR   # every region of a model
 
 Regions are 500 bp windows around the middles of the peaks of ENCFF834JBL,
-none overlapping another. "sample" draws 30,000 of them at random (seed 1)
+none overlapping another. "sample" draws N of them at random (seed 1;
+30,000 by default), so that smaller samples are the start of larger ones,
 and writes, as the modisco command takes them, the one-hot sequences and
 hypothetical scores as (regions, 4, 500) arrays, the observed scores those
 imply, and the sequences as letter codes (A, C, G, T, N as 0 to 4). Its
@@ -37,8 +38,8 @@ def windows(bed=REGIONS) -> pl.DataFrame:
     return regions.with_columns(wstart=(pl.col("start") + pl.col("end")) // 2 - W // 2)
 
 
-def sample_windows() -> pl.DataFrame:
-    """N windows drawn at random, each clear of those drawn before it."""
+def sample_windows(n: int = N) -> pl.DataFrame:
+    """n windows drawn at random, each clear of those drawn before it."""
     regions = windows()
     order = np.random.default_rng(1).permutation(regions.height)
     chrom, wstart = regions["chrom"].to_numpy(), regions["wstart"].to_numpy()
@@ -50,7 +51,7 @@ def sample_windows() -> pl.DataFrame:
             continue
         taken.setdefault(c, []).append(s)
         keep.append(i)
-        if len(keep) == N:
+        if len(keep) == n:
             break
     return regions[np.array(keep)].sort("region_i")
 
@@ -98,10 +99,11 @@ def hypothetical(sel: pl.DataFrame) -> np.ndarray:
 
 
 if __name__ == "__main__":
-    kind, out = sys.argv[1], pathlib.Path(sys.argv[-1])
+    kind = sys.argv[1]
+    out = pathlib.Path(sys.argv[2] if kind == "sample" else sys.argv[4])
     out.mkdir(parents=True, exist_ok=True)
     if kind == "sample":
-        sel = sample_windows()
+        sel = sample_windows(int(sys.argv[3]) if len(sys.argv) > 3 else N)
         seqs = codes(sel)
         hyp = hypothetical(sel)
         onehot = (seqs[:, None, :] == np.arange(4)[None, :, None]).astype(np.float32)

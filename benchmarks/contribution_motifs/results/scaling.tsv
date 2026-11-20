@@ -1,0 +1,16 @@
+regions	method	seqlets	seconds	memory_gb
+10000	TF-MoDISco	9192	71.7	1.48
+20000	TF-MoDISco	18564	153.7	2.36
+40000	TF-MoDISco	37078	362.4	4.49
+80000	TF-MoDISco	72501	790.7	7.55
+160000	TF-MoDISco	148788	2176.3	10.54
+10000	contribution_motifs(), every seqlet	36725	24.8	1.51
+20000	contribution_motifs(), every seqlet	73074	43.6	2.40
+40000	contribution_motifs(), every seqlet	145841	89.3	4.80
+80000	contribution_motifs(), every seqlet	291020	160.9	5.84
+160000	contribution_motifs(), every seqlet	588412	346.0	7.06
+10000	contribution_motifs(), default cap	36725	24.9	1.45
+20000	contribution_motifs(), default cap	50000	37.7	2.71
+40000	contribution_motifs(), default cap	50000	44.3	3.40
+80000	contribution_motifs(), default cap	50000	46.8	4.76
+160000	contribution_motifs(), default cap	50000	58.0	7.38

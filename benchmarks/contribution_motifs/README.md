@@ -11,6 +11,10 @@ of the documentation, which also says how the motifs found were checked.
 | `prepare.py` | Writes the inputs from ENCODE's files for the chromBPNet model of ATAC-seq in K562 cells: 30,000 regions with hypothetical scores, or every region with observed scores. |
 | `run_cm.py` | Runs `contribution_motifs()` once on prepared inputs. |
 | `run.zsh` | Prepares the inputs if needed and runs every comparison, each in its own process. |
+| `scaling.zsh` | Runs both methods on nested samples of the regions, to see how each grows with them. |
+| `treemem.py` | Runs a command and samples the memory of all its processes, since TF-MoDISco forks workers. |
+| `plot_scaling.py` | Draws the scaling figure of the benchmarks page from `results/scaling.tsv`. |
+| `results/scaling.tsv` | The time, peak memory and seqlets of every scaling run. |
 
 ## How each method is run
 
@@ -79,3 +83,18 @@ Every region, with and without the cap of 50,000 seqlets, 19 November 2026:
 
 On the large sets the peak memory varies by about a gigabyte from one run to
 the next.
+
+Nested samples of 10,000 to 160,000 regions, 20 November 2026, with
+TF-MoDISco given `-n 1000000` as ENCODE ran it and `contribution_motifs()`
+given hypothetical scores (`./scaling.zsh work 10000 20000 40000 80000
+160000`). TF-MoDISco's memory is the peak over all its processes, which was
+that of its main process at every size. The times, memory and seqlets of
+every run are in `results/scaling.tsv`:
+
+| Regions | TF-MoDISco | `contribution_motifs()`, every seqlet | `contribution_motifs()`, default cap |
+| ---: | ---: | ---: | ---: |
+| 10,000 | 72 s, 1.5 GB, 9,192 seqlets | 25 s, 1.5 GB, 36,725 seqlets | 25 s, 1.5 GB |
+| 20,000 | 154 s, 2.4 GB, 18,564 seqlets | 44 s, 2.4 GB, 73,074 seqlets | 38 s, 2.7 GB |
+| 40,000 | 362 s, 4.5 GB, 37,078 seqlets | 89 s, 4.8 GB, 145,841 seqlets | 44 s, 3.4 GB |
+| 80,000 | 791 s, 7.6 GB, 72,501 seqlets | 161 s, 5.8 GB, 291,020 seqlets | 47 s, 4.8 GB |
+| 160,000 | 2,176 s, 10.5 GB, 148,788 seqlets | 346 s, 7.1 GB, 588,412 seqlets | 58 s, 7.4 GB |

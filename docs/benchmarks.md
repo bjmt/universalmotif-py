@@ -213,8 +213,13 @@ summarized from and the commits behind each row, is in
 These runs were on the machine of the [setup](#setup) above, each method in
 a process of its own with 2 threads. Each was run once, and its time and
 peak memory are those of the whole process from `/usr/bin/time -l`, with the
-inputs loaded. Memory is in units of 10<sup>9</sup> bytes, and on the large
-sets its peak varies by about a gigabyte from one run to the next.
+inputs loaded. TF-MoDISco forks worker processes, so its memory was also
+sampled over all of them, and its peak was no higher than that of its main
+process. Memory is in units of 10<sup>9</sup> bytes, and on the large sets
+its peak varies by about a gigabyte from one run to the next. TF-MoDISco
+also clusters its negative seqlets, while `contribution_motifs()` searched
+only positive ones; on these regions TF-MoDISco called about one negative
+seqlet for every hundred positive ones.
 
 On 30,000 regions of 500 bp drawn at random from those of the chromBPNet
 model of K562, with the methods run as above, `contribution_motifs()` took
@@ -227,6 +232,36 @@ seqlets:
 | TF-MoDISco | 254 s | 3.6 GB |
 | `contribution_motifs()`, observed scores only | 27.1 s | 3.2 GB |
 | `contribution_motifs()`, observed and hypothetical scores | 38.0 s | 2.7 GB |
+</div>
+
+To see how each method grows with the data, both were run on nested random
+samples of 10,000 to 160,000 of the K562 regions. TF-MoDISco was run as
+ENCODE ran it, with up to 1,000,000 seqlets of each sign, and
+`contribution_motifs()` with hypothetical scores, both with every seqlet and
+with its default cap. TF-MoDISco calls fewer seqlets than
+`contribution_motifs()`, about 0.9 per region against 3.7, so the middle
+panel gives time against the seqlets each method clustered or searched:
+
+![Time against regions and against seqlets used, and peak memory against regions, for TF-MoDISco and contribution_motifs() with every seqlet and with its default cap](images/contribution-scaling.svg)
+
+TF-MoDISco's time grew a little faster than its seqlets, by a power of
+about 1.3 over the larger samples, and that of `contribution_motifs()` about
+in proportion to its seqlets. Carried on to 1,000,000 seqlets, ENCODE's cap,
+that comes to about 7 hours for TF-MoDISco and 9 minutes for
+`contribution_motifs()`. TF-MoDISco's growth was still steepening at the
+largest sample, so its figure may well be low. With its default cap of
+50,000 seqlets, `contribution_motifs()` took under a minute at every size.
+Memory grew with the regions for all three runs, much of it the scores
+themselves:
+
+<div class="bench-table" markdown>
+| Regions | TF-MoDISco | `contribution_motifs()`, every seqlet | `contribution_motifs()`, default cap |
+| ---: | ---: | ---: | ---: |
+| 10,000 | 72 s, 1.5 GB, 9,192 seqlets | 25 s, 1.5 GB, 36,725 seqlets | 25 s, 1.5 GB |
+| 20,000 | 154 s, 2.4 GB, 18,564 seqlets | 44 s, 2.4 GB, 73,074 seqlets | 38 s, 2.7 GB |
+| 40,000 | 362 s, 4.5 GB, 37,078 seqlets | 89 s, 4.8 GB, 145,841 seqlets | 44 s, 3.4 GB |
+| 80,000 | 791 s, 7.6 GB, 72,501 seqlets | 161 s, 5.8 GB, 291,020 seqlets | 47 s, 4.8 GB |
+| 160,000 | 2,176 s, 10.5 GB, 148,788 seqlets | 346 s, 7.1 GB, 588,412 seqlets | 58 s, 7.4 GB |
 </div>
 
 By default `contribution_motifs()` searches at most 50,000 seqlets of each
@@ -245,6 +280,6 @@ observed scores only:
 </div>
 
 The other BPNet heads tried, of GATA1 and of NFIC's profile, had fewer than
-50,000 seqlets and so were searched whole either way. The scripts for both
+50,000 seqlets and so were searched whole either way. The scripts for these
 comparisons, which prepare their inputs from ENCODE's files, are in
 [`benchmarks/contribution_motifs`](https://github.com/bjmt/universalmotif-py/tree/main/benchmarks/contribution_motifs).
