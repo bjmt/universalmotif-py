@@ -17,8 +17,9 @@ The effect on a counts head is the change in predicted log counts, and on a
 profile head the Jensen-Shannon distance between the profiles with and
 without the motif. Both are given against the shuffled copies (effect),
 along with a Wilcoxon signed-rank test over the backgrounds (pvalue). prep
-writes work/insertion/<model>.<head>.npz, run writes
-work/insertion/<model>.<head>.tsv, and collect work/checks/insertion.tsv.
+writes work/insertion/<model>.<head>.npz, and the same for the calibration
+motifs in work/insertion/random; run writes a .tsv beside each, and collect
+work/checks/insertion.tsv and insertion_random.tsv.
 """
 
 from __future__ import annotations
@@ -36,6 +37,13 @@ INPUT = 2114
 BACKGROUNDS = 128
 CONTROLS = 2
 FOLDS = 2
+# Random motifs, made of columns drawn at random from all of JASPAR's motifs, planted on each head's
+# backgrounds like the motifs themselves. Any two sequences differ a little in their effect on a model,
+# so with 128 backgrounds even these pass the test of significance; their effects, which grow with a
+# motif's width, set how large a motif's must be to count (checks.py). Half take their widths from the
+# head's own motifs and half are spread evenly over MIN_WIDTH to MAX_WIDTH.
+CALIBRATION = 200
+MIN_WIDTH, MAX_WIDTH = 6, 50
 
 
 # ---------------------------------------------------------------------------
@@ -61,36 +69,83 @@ def prep(args):
             continue
         if row["model"] not in backgrounds:
             backgrounds[row["model"]] = _backgrounds(um, pl, work, row, genome, args.seed)
-        rng = np.random.default_rng(args.seed)
-        recs, mats, ctrl = [], [], []
-        for method, ppms in checks._motifs(um, work, row).items():
-            for m in ppms:
-                p = np.asarray(m.matrix, dtype=np.float64)
-                p = (p + 1e-9) / (p + 1e-9).sum(0, keepdims=True)
-                gap = (m.gaploc[0], m.mingap[0], m.maxgap[0]) if m.isgapped else (0, 0, 0)
-                recs.append((method, m.name, m.consensus or "", *gap))
-                mats.append(p.astype(np.float32))
-                # Copies with the columns shuffled; a composite's halves are shuffled apart.
-                cs = []
-                for _ in range(CONTROLS):
-                    if m.isgapped:
-                        k = m.gaploc[0]
-                        cols = np.concatenate([rng.permutation(k), k + rng.permutation(p.shape[1] - k)])
-                    else:
-                        cols = rng.permutation(p.shape[1])
-                    cs.append(p[:, cols].astype(np.float32))
-                ctrl.append(cs)
-        if not recs:
+        name = f"{row['model']}.{row['head']}.npz"
+        found = checks._motifs(um, work, row)
+        if not found:
             continue
-        np.savez_compressed(
-            out_dir / f"{row['model']}.{row['head']}.npz",
-            backgrounds=backgrounds[row["model"]],
-            method=np.array([r[0] for r in recs]), name=np.array([r[1] for r in recs]),
-            consensus=np.array([r[2] for r in recs]), gap=np.array([r[3:] for r in recs], dtype=np.int64),
-            widths=np.array([m.shape[1] for m in mats]),
-            matrices=np.concatenate([m.T for m in mats]),
-            controls=np.concatenate([c.T for cs in ctrl for c in cs]))
-        print(f"  {row['model']} {row['head']}: {len(recs)} motifs", file=sys.stderr, flush=True)
+        _save(out_dir / name, backgrounds[row["model"]], found, np.random.default_rng(args.seed))
+        widths = [_span(m.width, (m.gaploc[0], m.mingap[0], m.maxgap[0]) if m.isgapped else (0, 0, 0))
+                  for ms in found.values() for m in ms]
+        _save(out_dir / "random" / name, backgrounds[row["model"]],
+              {"random": _random_motifs(um, work, widths, args.seed)}, np.random.default_rng(args.seed + 1))
+        print(f"  {row['model']} {row['head']}: {sum(len(v) for v in found.values())} motifs", file=sys.stderr,
+              flush=True)
+
+
+def _save(path: pathlib.Path, backgrounds: np.ndarray, found: dict, rng):
+    """The motifs of each method as PPMs, with CONTROLS copies of each with
+    their columns shuffled, and the backgrounds to plant them in."""
+    recs, mats, ctrl = [], [], []
+    for method, ppms in found.items():
+        for m in ppms:
+            p = np.asarray(m.matrix, dtype=np.float64)
+            p = (p + 1e-9) / (p + 1e-9).sum(0, keepdims=True)
+            gap = (m.gaploc[0], m.mingap[0], m.maxgap[0]) if m.isgapped else (0, 0, 0)
+            recs.append((method, m.name, m.consensus or "", *gap))
+            mats.append(p.astype(np.float32))
+            # Copies with the columns shuffled; a composite's halves are shuffled apart.
+            cs = []
+            for _ in range(CONTROLS):
+                if m.isgapped:
+                    k = m.gaploc[0]
+                    cols = np.concatenate([rng.permutation(k), k + rng.permutation(p.shape[1] - k)])
+                else:
+                    cols = rng.permutation(p.shape[1])
+                cs.append(p[:, cols].astype(np.float32))
+            ctrl.append(cs)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        path, backgrounds=backgrounds,
+        method=np.array([r[0] for r in recs]), name=np.array([r[1] for r in recs]),
+        consensus=np.array([r[2] for r in recs]), gap=np.array([r[3:] for r in recs], dtype=np.int64),
+        widths=np.array([m.shape[1] for m in mats]),
+        matrices=np.concatenate([m.T for m in mats]),
+        controls=np.concatenate([c.T for cs in ctrl for c in cs]))
+
+
+def _random_motifs(um, work: pathlib.Path, widths: list[int], seed: int) -> list:
+    """CALIBRATION random motifs, each of columns drawn at random from all of
+    JASPAR's: half with widths drawn from widths, the head's own motifs', and
+    half spread evenly over MIN_WIDTH to MAX_WIDTH. Their columns are as
+    informative as real ones, but no model can have learned their sites."""
+    jaspar = um.read_meme(work / "files" / "jaspar.meme")
+    pool = np.concatenate([np.asarray(m.matrix, dtype=float) / np.asarray(m.matrix, dtype=float).sum(0)
+                           for m in jaspar], axis=1)
+    rng = np.random.default_rng(seed)
+    half = CALIBRATION // 2
+    own = np.clip(rng.choice(widths, half), MIN_WIDTH, MAX_WIDTH) if widths else np.array([], dtype=int)
+    even = np.linspace(MIN_WIDTH, MAX_WIDTH, CALIBRATION - len(own)).round().astype(int)
+    return [um.create_motif(pool[:, rng.choice(pool.shape[1], int(w))], type="PPM", name=f"random_{k + 1}",
+                            alphabet="DNA") for k, w in enumerate(np.concatenate([own, even]))]
+
+
+def _span(width: int, gap) -> int:
+    """The letters a planted motif covers, with a composite's gap at the
+    middle of its range."""
+    loc, lo, hi = gap
+    return int(width + ((lo + hi) // 2 if loc else 0))
+
+
+def _geometry(z) -> tuple[np.ndarray, np.ndarray]:
+    """The span (as _span()) and total information content of each motif of a
+    prep file, in its order."""
+    offsets = np.concatenate([[0], np.cumsum(z["widths"])])
+    span, ic = [], []
+    for i in range(len(z["widths"])):
+        p = z["matrices"][offsets[i]:offsets[i + 1]].astype(float)
+        span.append(_span(int(z["widths"][i]), tuple(z["gap"][i])))
+        ic.append(float((2 + (p * np.log2(p)).sum(1)).sum()))
+    return np.array(span), np.array(ic)
 
 
 def _backgrounds(um, pl, work, row, genome, seed):
@@ -243,7 +298,7 @@ def run(args):
 
     work = pathlib.Path(args.work)
     models_dir = pathlib.Path(args.models_dir) if args.models_dir else work / "models"
-    files = sorted((work / "insertion").glob("*.npz"))
+    files = sorted((work / "insertion").glob("*.npz")) + sorted((work / "insertion" / "random").glob("*.npz"))
     if args.models:
         import re
 
@@ -298,15 +353,21 @@ def collect(args):
     import polars as pl
 
     work = pathlib.Path(args.work)
-    parts = []
-    for f in sorted((work / "insertion").glob("*.tsv")):
-        model, head = f.name[:-4].rsplit(".", 1)
-        parts.append(pl.read_csv(f, separator="\t", infer_schema_length=None)
-                     .with_columns(model=pl.lit(model), head=pl.lit(head)))
-    df = pl.concat(parts)
     (work / "checks").mkdir(exist_ok=True)
-    df.write_csv(work / "checks" / "insertion.tsv", separator="\t")
-    print(f"{df.height} rows in {work / 'checks' / 'insertion.tsv'}", file=sys.stderr)
+    for d, name in [(work / "insertion", "insertion.tsv"), (work / "insertion" / "random", "insertion_random.tsv")]:
+        parts = []
+        for f in sorted(d.glob("*.tsv")):
+            model, head = f.name[:-4].rsplit(".", 1)
+            part = pl.read_csv(f, separator="\t", infer_schema_length=None)
+            # Rows are in the order of the prep file, which gives each motif's span and information content.
+            span, ic = _geometry(np.load(f.with_suffix(".npz")))
+            if len(span) != part.height:
+                raise ValueError(f"{f} and its prep file disagree; rerun insertion.py run for it")
+            parts.append(part.with_columns(model=pl.lit(model), head=pl.lit(head), width=pl.Series(span),
+                                           ic=pl.Series(ic)))
+        df = pl.concat(parts)
+        df.write_csv(work / "checks" / name, separator="\t")
+        print(f"{df.height} rows in {work / 'checks' / name}", file=sys.stderr)
 
 
 def main():

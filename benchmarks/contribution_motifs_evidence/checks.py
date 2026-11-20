@@ -10,8 +10,10 @@ kinds of evidence: conservation at its hits (phyloP), and more ChIP-seq
 peaks of the factor it is named after, in the same cell line, than
 expected. Its hits are matches to its PPM (P < 1e-4) overlapping a positive
 seqlet by 5 letters or more, in all of a model's windows. evidence adds the
-model's response from insertion.py, and writes work/checks/evidence.tsv (per
-motif), evidence_runs.tsv (per run) and evidence_tables.md.
+model's response from insertion.py, which counts when it is significant and
+larger than that of nearly all random motifs of about its width, and
+writes work/checks/evidence.tsv (per motif), evidence_runs.tsv (per run)
+and evidence_tables.md.
 """
 
 from __future__ import annotations
@@ -208,7 +210,9 @@ def _seqlet_hits(um, ppms: list, strs: list[str], seqlets: pl.DataFrame, pad: in
     hits = hits.with_columns(sequence_i=pl.Series(si[k]), start=pl.Series(hits["start"].to_numpy() + lo[k]),
                              end=pl.Series(hits["end"].to_numpy() + lo[k]), s0=pl.Series(s0[k]), e0=pl.Series(e0[k]))
     hits = hits.filter(pl.min_horizontal("end", "e0") - pl.max_horizontal("start", "s0") >= 5)
-    return hits.unique(["motif_i", "sequence_i", "start", "strand"]).drop("s0", "e0", "sequence")
+    # Sorted, since unique() keeps no order and the conservation test samples these hits.
+    return (hits.unique(["motif_i", "sequence_i", "start", "strand"]).drop("s0", "e0", "sequence")
+            .sort("motif_i", "sequence_i", "start", "strand"))
 
 
 def _best_pvalues(ppms: list) -> list[float]:
@@ -356,6 +360,12 @@ PHYLOP_MIN_DIFF = 0.1      # phyloP over the flanks, beyond that of random sites
 CHIP_MIN_LOG2 = np.log2(1.5)
 CHIP_MIN_HITS = 20
 USED_Q = 0.01              # insertion.py's test of the model's response
+# How large a motif's effect must be, besides significant: past this quantile of the effects of the head's
+# random motifs (insertion.py) of about its width, those within WIDTH_WINDOW letters of it, the window
+# widened until it holds MIN_MATCHED of them. As a check of that choice, the same quantile of the
+# IC_MATCHED random motifs nearest in total information content gives a second verdict.
+USED_QUANTILE = 0.99
+WIDTH_WINDOW, MIN_MATCHED, IC_MATCHED = 3, 30, 50
 # CWM similarity at which two motifs of one run are one motif, and at which motifs of different runs
 # are the same motif.
 SAME_IN_RUN, SAME_ACROSS = 0.9, 0.8
@@ -450,7 +460,7 @@ def evidence(args):
     """Per motif and per run: outside support (support) and the model's
     response (insertion.py). A motif with neither is the closest these checks
     come to calling it noise. Also writes the three tables of the benchmarks
-    page, as Markdown."""
+    page as Markdown, with the first again under the IC-matched rule."""
     work = pathlib.Path(args.work)
     df = support_flags(pl.read_csv(work / "checks" / "support.tsv", separator="\t", infer_schema_length=None))
     key = ["model", "head", "method", "motif"]
@@ -458,9 +468,50 @@ def evidence(args):
     # A run can name two motifs alike (TF-MoDISco's patterns of both signs, say); the first is kept.
     ins = ins.unique(key, keep="first", maintain_order=True)
     ins = ins.with_columns(insertion_q=pl.Series(_bh(ins["pvalue"].cast(pl.Float64).fill_null(np.nan))).fill_nan(None))
-    ins = ins.select(*key, insertion_effect="effect", used=(pl.col("insertion_q") < USED_Q) & (pl.col("effect") > 0))
+    cal = pl.read_csv(work / "checks" / "insertion_random.tsv", separator="\t", infer_schema_length=None)
+    ins = _bars(ins, cal)
+    sig = pl.col("insertion_q") < USED_Q
+    ins = ins.select(*key, "bar_width", "bar_ic", insertion_effect="effect",
+                     used=sig & (pl.col("effect") > pl.col("bar_width")),
+                     used_ic=sig & (pl.col("effect") > pl.col("bar_ic")))
     df = df.join(ins, on=key, how="left")
     df.write_csv(work / "checks" / "evidence.tsv", separator="\t")
+    runs = _runs(work, df, "used", args.jobs)
+    runs_ic = _runs(work, df, "used_ic", args.jobs)
+    runs.write_csv(work / "checks" / "evidence_runs.tsv", separator="\t")
+    runs_ic.write_csv(work / "checks" / "evidence_runs_ic.tsv", separator="\t")
+    tables = _tables(runs, runs_ic)
+    (work / "checks" / "evidence_tables.md").write_text(tables)
+    print(tables)
+
+
+def _bars(ins: pl.DataFrame, cal: pl.DataFrame) -> pl.DataFrame:
+    """Each motif's bars: USED_QUANTILE of the effects of its head's random
+    motifs of about its width (bar_width) and of about its information
+    content (bar_ic)."""
+    parts = []
+    for (model, head), g in ins.group_by("model", "head", maintain_order=True):
+        c = cal.filter((pl.col("model") == model) & (pl.col("head") == head))
+        if not c.height:
+            raise ValueError(f"{model} {head} has no random motifs; rerun insertion.py prep, run and collect")
+        e, cw, ci = c["effect"].to_numpy(), c["width"].to_numpy(), c["ic"].to_numpy()
+        by_width, by_ic = [], []
+        for w, i in zip(g["width"].to_numpy(), g["ic"].to_numpy()):
+            k = WIDTH_WINDOW
+            while (np.abs(cw - w) <= k).sum() < MIN_MATCHED:
+                k += 1
+            by_width.append(np.quantile(e[np.abs(cw - w) <= k], USED_QUANTILE))
+            by_ic.append(np.quantile(e[np.argsort(np.abs(ci - i))[:IC_MATCHED]], USED_QUANTILE))
+        parts.append(g.with_columns(bar_width=pl.Series(by_width), bar_ic=pl.Series(by_ic)))
+    return pl.concat(parts)
+
+
+def _runs(work: pathlib.Path, df: pl.DataFrame, used: str, jobs: int) -> pl.DataFrame:
+    """One row per run (model, head and method), with the model's response
+    judged by the column used: its motifs with each kind of evidence, and its
+    distinct motifs with any, merged within the run at SAME_IN_RUN and across
+    the runs of each model and head at SAME_ACROSS."""
+    df = df.with_columns(used=pl.col(used))
     runs = (df.with_columns(fam=pl.col("kind") + "_" + pl.col("head"))
             .group_by("fam", "model", "head", "method")
             .agg(pl.len().alias("motifs"), pl.col("used").is_null().sum().alias("no_insertion"),
@@ -468,51 +519,78 @@ def evidence(args):
                  (pl.col("used") & ~pl.col("supported")).sum().alias("used_only"),
                  (~pl.col("used") & pl.col("supported")).sum().alias("supported_only"),
                  (~pl.col("used") & ~pl.col("supported")).sum().alias("neither")))
-    # Distinct motifs with any evidence (used, or supported), merged within each run at SAME_IN_RUN,
-    # and across the runs of each model and head at SAME_ACROSS.
     either = df.with_columns(supported=pl.col("supported") | pl.col("used").fill_null(False))
     heads = either.select("model", "head").unique().sort("model", "head").rows()
     tasks = [(str(work), m, h, either.filter((pl.col("model") == m) & (pl.col("head") == h))) for m, h in heads]
-    distinct = pl.DataFrame(_pool(_summary_one, tasks, args.jobs), infer_schema_length=None).select(
+    distinct = pl.DataFrame(_pool(_summary_one, tasks, jobs), infer_schema_length=None).select(
         "model", "head", "method", distinct_evidenced="distinct_supported", found="found", union="union")
-    runs = runs.join(distinct, on=["model", "head", "method"], how="left").with_columns(
-        share_of_union=pl.col("found") / pl.col("union")).sort("fam", "model", "method")
-    runs.write_csv(work / "checks" / "evidence_runs.tsv", separator="\t")
-    tables = _tables(runs)
-    (work / "checks" / "evidence_tables.md").write_text(tables)
-    print(tables)
+    return runs.join(distinct, on=["model", "head", "method"], how="left").with_columns(
+        share_of_union=pl.when(pl.col("union") > 0).then(pl.col("found") / pl.col("union"))).sort("fam", "model", "method")
 
 
-def _tables(runs: pl.DataFrame) -> str:
-    """The means per model of each kind of model and head, as three Markdown
-    tables: distinct motifs with evidence and with none, the share of all
-    runs' distinct motifs with evidence each found, and the motifs with
-    outside support and with the model's response only."""
-    agg = runs.group_by("fam", "method").agg(
+def _cells(runs: pl.DataFrame) -> dict:
+    """The means per model of each kind of model and head, by (column,
+    method). Every run of every head counts, those with no motifs as 0."""
+    grid = runs.select("fam", "model", "head").unique().join(runs.select("method").unique(), how="cross")
+    full = grid.join(runs.drop("fam"), on=["model", "head", "method"], how="left")
+    counts = ["distinct_evidenced", "neither", "used_supported", "supported_only", "used_only"]
+    full = full.with_columns(pl.col(counts).fill_null(0))
+    agg = full.group_by("fam", "method").agg(
         pl.col("distinct_evidenced").mean(), pl.col("neither").mean(), pl.col("share_of_union").mean(),
         (pl.col("used_supported") + pl.col("supported_only")).mean().alias("outside"),
         pl.col("used_only").mean().alias("model_only"))
-    cell = {(r["fam"], r["method"]): r for r in agg.iter_rows(named=True)}
+    return {(r["fam"], r["method"]): r for r in agg.iter_rows(named=True)}
+
+
+def _tables(runs: pl.DataFrame, runs_ic: pl.DataFrame) -> str:
+    """Three Markdown tables under the width-matched rule (distinct motifs
+    with evidence and with none; the share of all runs' distinct motifs with
+    evidence each found; the motifs with outside support and with the model's
+    response only), the first again under the IC-matched rule, and under each
+    the cells where the two rules differ by more than 2 motifs (0.02 for
+    shares)."""
+    cell, cell_ic = _cells(runs), _cells(runs_ic)
     fams = [f for f in COLUMNS if any(k[0] == f for k in cell)]
     methods = [m for m in LABELS if any(k[1] == m for k in cell)]
     methods += sorted({k[1] for k in cell} - set(methods))
-    out = []
-    for title, fmt in [
-        ("Distinct motifs with evidence / motifs with none, per model",
-         lambda r: f"{r['distinct_evidenced']:.1f} / {r['neither']:.1f}"),
-        ("Share of all runs' distinct motifs with evidence, merged at a cosine of 0.8",
-         lambda r: f"{r['share_of_union']:.2f}"),
-        ("Motifs with outside support / with the model's response only, per model",
-         lambda r: f"{r['outside']:.1f} / {r['model_only']:.1f}"),
-    ]:
-        out.append(f"{title}:\n")
-        out.append("| Run | " + " | ".join(COLUMNS[f] for f in fams) + " |")
-        out.append("| --- |" + " ---: |" * len(fams))
+
+    def table(title, cells, parts, fmt):
+        out = [f"{title}:\n", "| Run | " + " | ".join(COLUMNS[f] for f in fams) + " |",
+               "| --- |" + " ---: |" * len(fams)]
         for m in methods:
-            vals = [fmt(cell[(f, m)]) if (f, m) in cell else "" for f in fams]
+            vals = []
+            for f in fams:
+                r = cells.get((f, m))
+                vals.append("" if r is None or any(r[p] is None for p in parts) else fmt(*[r[p] for p in parts]))
             out.append(f"| {LABELS.get(m, m)} | " + " | ".join(vals) + " |")
-        out.append("")
-    return "\n".join(out)
+        return out
+
+    def differences(parts, tol):
+        out = []
+        for m in methods:
+            for f in fams:
+                a, b = cell.get((f, m)), cell_ic.get((f, m))
+                if a is None or b is None:
+                    continue
+                for p in parts:
+                    if a[p] is not None and b[p] is not None and abs(a[p] - b[p]) > tol:
+                        out.append(f"{LABELS.get(m, m)}, {COLUMNS[f]}, {p}: {a[p]:.2f} (width) against "
+                                   f"{b[p]:.2f} (information content)")
+        return ["", "Cells that differ under the IC-matched rule: " + ("; ".join(out) if out else "none") + ".", ""]
+
+    two = lambda a, b: f"{a:.1f} / {b:.1f}"
+    out = table("Distinct motifs with evidence / motifs with none, per model", cell,
+                ["distinct_evidenced", "neither"], two)
+    out += differences(["distinct_evidenced", "neither"], 2)
+    out += table("Share of all runs' distinct motifs with evidence, merged at a cosine of 0.8", cell,
+                 ["share_of_union"], lambda a: f"{a:.2f}")
+    out += differences(["share_of_union"], 0.02)
+    out += table("Motifs with outside support / with the model's response only, per model", cell,
+                 ["outside", "model_only"], two)
+    out += differences(["outside", "model_only"], 2)
+    out += table("Distinct motifs with evidence / motifs with none, per model, under the IC-matched rule", cell_ic,
+                 ["distinct_evidenced", "neither"], two)
+    return "\n".join(out) + "\n"
 
 
 def main():

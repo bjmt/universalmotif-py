@@ -16,7 +16,8 @@ is checked for two kinds of evidence:
   it is named after, in the same cell line, than expected.
 - The model's response: a change in the prediction when the motif is
   planted in 128 shuffled sequences, against copies of it with its columns
-  shuffled.
+  shuffled, that is both significant and larger than that of nearly all
+  random motifs of about the same width (see below).
 
 A motif with neither is the closest these checks come to calling it noise,
 though motifs of factors without ChIP-seq data, or whose sites are not
@@ -65,36 +66,87 @@ TF-MoDISco is run as `modisco motifs -s ohe.npy -a hyp.npy -n 50000 -w 500`
 Its patterns, and ENCODE's, are read with
 `read_modisco(trim_threshold=0.3)`, keeping the positive ones.
 
+## The model's response
+
+Any two sequences differ a little in what a model makes of them, so with 128
+backgrounds nearly any motif changes the prediction significantly, random
+ones included (about a fifth to a third of random motifs passed the test of
+significance on its own, in a trial on two heads). The test is
+calibrated on random motifs for this reason. For each head, 200 random
+motifs are planted on the same backgrounds as its real ones, each made of
+columns drawn at random from all of JASPAR's motifs, so that they are as
+informative as real motifs but no model could have learned their sites. Half
+take their widths from the head's own motifs (between 6 and 50 letters), and
+half are spread evenly over 6 to 50 letters.
+
+A random motif's effect grows with its width (the 99th percentile of their
+effects roughly doubles from 6 to 12 letters to 31 to 50), so each motif is
+held to the random motifs of about its own width. A motif counts as used by
+the model when its test is significant (q < 0.01) and its effect is larger
+than the 99th percentile of the effects of the random motifs within 3
+letters of its width, the window being widened until it holds at least 30 of
+them. A composite's width is its span, with the gap at the middle of its
+range.
+
+The effects also grow with a motif's total information content, and the
+choice between the two is a judgement call. As a check, each motif is also
+held to the 99th percentile of the 50 random motifs nearest to it in total
+information content, and `evidence_tables.md` gives the first table again
+under that rule, with the cells where the two rules differ by more than 2
+motifs (or 0.02 in a share) listed under each table. The two rules agree
+closely for the motifs found with positive scores.
+
 ## How the published results were made
 
-The results in `results/` come from an earlier form of these scripts, run
-between 17 and 20 November 2026 in five batches with other names for the
-methods. The scripts here are the same code with the experiments the tables
-do not use taken out, and give the same motifs (checked on one model). The
-packages behind each row were:
+Every row and every check comes from one build of the packages, tagged
+`evidence-1`: universalmotif-py `05cb7a6` and universalmotif-rs `b260179`
+(with Python 3.12.16, NumPy 2.5.5, Polars 2.1.0 and SciPy 1.18.1). The four
+`contribution_motifs()` rows were run with these scripts on 20 November
+2026, as `config.py` gives them, through
 
-| Row | Run as | universalmotif-py | universalmotif-rs |
-| --- | --- | --- | --- |
-| `contribution_motifs()` | `max50k`, 19 Nov | `809b051`, with `max_seqlets=50000` given | `30c4c60` |
-| `max_seqlets=None` | `passes2_later_0.002`, 18 Nov | uncommitted build on `58284e4` | uncommitted build on `30c5e11` |
-| one seqlet pass | `cm`, 18 Nov | the same build | the same build |
-| observed scores only | `observed`, 20 Nov | `314bf4f` | `b260179` |
-| TF-MoDISco, same regions | `modisco`, 17 and 18 Nov | (not used) | (not used) |
+```python
+um.contribution_motifs(obs, strs, hypothetical=hyp, seed=1, nthreads=2, hits=False, **kwargs)
+```
 
-The two rows of 18 November came from work in progress that was later
-committed as `54a56b6` to `e5f9e5f` (and `30c4c60` in the crate), after
-being rebased on newer commits to `gapped_motif_finder()`. The method names
-here give those rows the same settings with the current options. (The
-`max_seqlets=None` row, for instance, set `seqlet_passes=2` and
-`later_min_gain=0.002` by hand, which are now the defaults.)
+with `hyp` left out for observed scores only. Every run found the same
+motifs, with the same hits, as the earlier runs of the same settings behind
+the tables first published on the benchmarks page (some of which were made
+with work in progress).
 
-The checks themselves ran with the universalmotif of the time: `58284e4`
-for the one-pass row, `e5f9e5f` for the defaults, `max_seqlets=None` and
-both TF-MoDISco rows, and `314bf4f` for observed scores only. The three
-tables were made from one pool of these six runs. The share of
-motifs found depends on the runs in the pool, since motifs alike at a
-cosine of 0.8 are merged across all of them, so adding or leaving out a run
-changes every row's share.
+TF-MoDISco itself was not rerun. Its results for the same regions come from
+runs of modisco-lite 3.0.0 on 17 and 18 November 2026, on the same windows and
+hypothetical scores as here (checked window by window), and those and
+ENCODE's results were read again with the `evidence-1` build. Every check,
+including the insertion test (TensorFlow 2.15 and PyTorch 2.5.1, on a GPU),
+was then run on all six rows together on 20 November with these scripts.
+
+To check that the runs and checks can be reproduced, the defaults were run
+a second time on three models (the counts head of the BPNet model of GATA1 in
+K562, that of chromBPNet in K562, and both heads of ProCapNet in K562) and
+checked again. The motifs and their hits came out identical, and so did
+the conservation and ChIP-seq checks. The insertion effects agreed to about
+four significant figures (the GPU's arithmetic is not quite deterministic),
+which changed no motif's verdict under either rule.
+
+The share of motifs found depends on the runs in the pool, since motifs
+alike at a cosine of 0.8 are merged across all of them, so adding or leaving
+out a run changes every row's share.
+
+## Earlier results
+
+The tables first published on the benchmarks page came from earlier forms
+of these scripts, run between 17 and 20 November 2026 in five batches, with
+the model's response counted whenever its test was significant. Under the
+calibrated rule the motifs with the model's response only fall for every
+method, by between a sixth (TF-MoDISco on BPNet) and two thirds
+(`contribution_motifs()` on ProCapNet counts), and the motifs with none rise
+to match. The rest changed little. The motifs and their hits are the same as
+before, but the conservation test's background sites and the insertion
+test's backgrounds were drawn anew: about 4% of the conservation verdicts
+changed (none of the ChIP-seq ones), and the insertion effects agree closely
+with the earlier ones (a Pearson correlation of 0.98), though enough motifs
+sat near the old threshold that some cells moved by up to 3 motifs under the
+old rule.
 
 ## Requirements
 
@@ -135,9 +187,11 @@ out the same.
 
 | File | What it holds |
 | --- | --- |
-| `evidence_tables.md` | The three tables, as on the benchmarks page. |
+| `evidence_tables.md` | The three tables, and the first again under the IC-matched rule. |
 | `evidence_runs.tsv` | One row per run (model, head and method): motifs, those with each kind of evidence, distinct motifs with evidence and the share of the pool found. |
-| `evidence.tsv.gz` | One row per motif, with each test's statistics and verdicts. |
+| `evidence_runs_ic.tsv` | The same, under the IC-matched rule. |
+| `evidence.tsv.gz` | One row per motif, with each test's statistics, the two bars and the verdicts under both rules. |
 | `support.tsv.gz` | The conservation and ChIP-seq checks of every motif. |
-| `insertion.tsv.gz` | The insertion test of every motif. |
-| `runs.tsv` | The windows, time, peak memory and motifs of every run. The times come from four batches on a shared machine, so they are only a rough guide. |
+| `insertion.tsv.gz` | The insertion test of every motif, with its width and total information content. |
+| `insertion_random.tsv.gz` | The insertion test of every random motif. |
+| `runs.tsv` | The windows, time, peak memory and motifs of every run. The times of the `contribution_motifs()` rows come from one batch of 10 runs side by side on a shared machine, and TF-MoDISco's from the earlier batches, so they are only a rough guide. |
