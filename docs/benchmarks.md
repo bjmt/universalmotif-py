@@ -206,6 +206,10 @@ Each cell holds two means per model, separated by a slash: first the
 motifs with outside support, with or without a response from the model,
 then the motifs with the model's response only. These are not merged.
 
+The harness behind these tables, with the per-model results they were
+summarized from and the commits behind each row, is in
+[`benchmarks/contribution_motifs_evidence`](https://github.com/bjmt/universalmotif-py/tree/main/benchmarks/contribution_motifs_evidence).
+
 On scores shuffled across and within regions, with nothing to find,
 `contribution_motifs()` with two seqlet passes gave 2 motifs over 7 heads of
 6 models, where 0.6.0 gave up to 48 per head.
