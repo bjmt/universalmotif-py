@@ -149,10 +149,12 @@ below by as much as 1 motif.
 
 The model's response varies with the sequences drawn: about 10% of motifs
 would get the other verdict from a second set of draws, and bootstrapping
-the draws gives intervals of 1 to 3 motifs for most counts below. The
-conservation test's draws were not resampled.
-Differences between rows that the text calls real lie outside the
-bootstrap interval of their difference.
+the draws gives intervals of 1 to 3 motifs for most counts below. Outside
+support does not depend on these draws, and the conservation test's own
+draws were not resampled. Where the text calls a difference in motifs with
+evidence real, the bootstrap interval of the paired difference excludes
+zero; where it compares motifs without evidence, the intervals of the two
+counts do not overlap.
 
 Each cell of the table holds two means per model: first the distinct motifs
 with evidence of either kind (motifs with CWMs at a cosine of 0.9 or more
