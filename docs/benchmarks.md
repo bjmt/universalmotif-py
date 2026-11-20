@@ -104,7 +104,7 @@ and GM12878 cells, and ProCapNet models of PRO-cap in six cell lines.
 <div class="bench-table" markdown>
 | | `contribution_motifs()` | TF-MoDISco, same regions | TF-MoDISco, ENCODE's results |
 | --- | --- | --- | --- |
-| Version | this package, 0.6.0 development version | modisco-lite 3.0.0 | tfmodisco-lite 2.2.0 |
+| Version | this package at the `evidence-1` tag of both repositories | modisco-lite 3.0.0 | tfmodisco-lite 2.2.0 |
 | Run as | `contribution_motifs()` with its defaults | the `modisco motifs` command with `-n 50000`, and `-w` the width of the regions | the `modisco motifs` command, as ENCODE's archives describe |
 | Settings | its defaults | the command's defaults: 2 Leiden runs per clustering, a seqlet FDR of 0.05, seqlet cores of 20 and flanks of 5 | the command's defaults |
 | Seqlets searched | at most 50,000 of each sign | at most 50,000 of each sign | at most 1,000,000 of each sign |
@@ -134,37 +134,49 @@ method's:
   phyloP of its sites against their flanks, compared with sites of the same
   GC and CpG content) or more ChIP-seq peaks of the factor it is named after,
   in the same cell line, than expected;
-- the model's response, a change in the prediction when the motif is planted
-  in 128 shuffled sequences, against copies of it with its columns shuffled.
+- the model's response: planted in 128 shuffled sequences, the motif must
+  change the prediction more than copies of it with its columns shuffled,
+  and by more than 99% of 200 random motifs of about its width (within 3
+  positions) change it, in the same direction.
 
-Each threshold is a Benjamini-Hochberg q-value of 0.01. Each cell of the
-table holds two means per model: first the distinct motifs with evidence of
-either kind (motifs with CWMs at a cosine of 0.9 or more counted once), then
-the motifs with none.
+Each test is held to a Benjamini-Hochberg q-value of 0.01. The bar from
+random motifs matters: without it, many motifs passed on the model's
+response with effects no larger than a random motif's, and the bar is
+matched to width because wider random motifs move the prediction more.
+Matching the random motifs by information content instead changed no count
+below by more than 2 motifs but one.
+
+Each cell of the table holds two means per model: first the distinct motifs
+with evidence of either kind (motifs with CWMs at a cosine of 0.9 or more
+counted once), then the motifs with none.
 
 <div class="bench-table" markdown>
 | Run | BPNet | chromBPNet | ProCapNet counts | ProCapNet profile |
 | --- | ---: | ---: | ---: | ---: |
-| `contribution_motifs()` | 25.1 / 3.7 | 47.3 / 14.0 | 59.5 / 8.5 | 44.0 / 16.3 |
-| `contribution_motifs()`, `max_seqlets=None` | 28.1 / 4.1 | 52.0 / 12.3 | 60.2 / 8.2 | 40.8 / 18.7 |
-| `contribution_motifs()`, one seqlet pass | 8.4 / 0.7 | 33.0 / 0.7 | 41.3 / 2.8 | 40.7 / 10.5 |
-| `contribution_motifs()`, observed scores only | 25.8 / 3.6 | 45.3 / 11.0 | 50.7 / 5.8 | 41.2 / 12.5 |
-| TF-MoDISco, same regions | 12.4 / 1.4 | 26.7 / 1.0 | 22.2 / 1.8 | 25.5 / 12.8 |
-| TF-MoDISco, ENCODE's results | 10.9 / 0.4 | 46.7 / 2.7 | 28.3 / 2.2 | 24.8 / 13.7 |
+| `contribution_motifs()` | 21.9 / 6.8 | 37.3 / 24.0 | 41.5 / 26.7 | 36.0 / 24.3 |
+| `contribution_motifs()`, `max_seqlets=None` | 24.4 / 7.8 | 42.0 / 22.3 | 40.0 / 28.3 | 35.7 / 23.8 |
+| `contribution_motifs()`, one seqlet pass | 8.4 / 0.7 | 32.0 / 1.7 | 34.2 / 10.0 | 35.8 / 15.3 |
+| `contribution_motifs()`, observed scores only | 22.1 / 7.2 | 36.7 / 19.7 | 35.7 / 20.8 | 34.8 / 18.8 |
+| TF-MoDISco, same regions | 11.4 / 2.4 | 26.7 / 1.0 | 17.5 / 6.5 | 22.2 / 16.2 |
+| TF-MoDISco, ENCODE's results | 10.4 / 1.0 | 45.3 / 4.0 | 24.0 / 6.5 | 22.0 / 16.5 |
 </div>
 
 The `max_seqlets=None` row searched every seqlet. The one-pass row also
-searched every seqlet, and held motifs from the second search to `min_gain`
-itself; both were run with development builds of 18 November, before the
-seqlet cap became the default. The observed-only row was run like the first
-on 20 November, without hypothetical scores.
+searched every seqlet, called seqlets once and held motifs from the second
+search to `min_gain` itself. The observed-only row was run like the first,
+without hypothetical scores.
 
-The search of idealized seqlets helps on chromBPNet and ProCapNet but not
-on BPNet. It added 2 to 3 motifs with evidence per model on chromBPNet and
-ProCapNet's profile heads, and 9 on ProCapNet's counts heads, along with 3
-or 4 more motifs without evidence. With observed scores only,
-`contribution_motifs()` still found more motifs with evidence than
-TF-MoDISco on the same regions, on every kind of model.
+`contribution_motifs()` found more motifs with evidence than TF-MoDISco on
+the same regions, on every kind of model and with either kind of scores. It
+also found more motifs without evidence. Against ENCODE's TF-MoDISco
+results, from all of each model's regions and up to 1,000,000 seqlets, it
+found more on BPNet and ProCapNet but fewer on chromBPNet.
+
+The search of idealized seqlets, which hypothetical scores add, helps most
+on ProCapNet's counts heads, with 5.8 more motifs with evidence per model,
+and little elsewhere, while it adds 4 to 6 more motifs without evidence on
+chromBPNet and ProCapNet. The cap of 50,000 seqlets costs a few motifs on
+BPNet and chromBPNet against searching every seqlet.
 
 `contribution_motifs()` tends to give several spellings of one site, which
 this count favours. Merging the motifs with evidence of the six runs at a
@@ -173,39 +185,46 @@ cosine of 0.8 instead, the share of them each run found is:
 <div class="bench-table" markdown>
 | Run | BPNet | chromBPNet | ProCapNet counts | ProCapNet profile |
 | --- | ---: | ---: | ---: | ---: |
-| `contribution_motifs()` | 0.50 | 0.53 | 0.49 | 0.43 |
-| `contribution_motifs()`, `max_seqlets=None` | 0.54 | 0.55 | 0.48 | 0.44 |
-| `contribution_motifs()`, one seqlet pass | 0.21 | 0.35 | 0.36 | 0.37 |
-| `contribution_motifs()`, observed scores only | 0.52 | 0.46 | 0.45 | 0.43 |
-| TF-MoDISco, same regions | 0.39 | 0.39 | 0.32 | 0.33 |
-| TF-MoDISco, ENCODE's results | 0.34 | 0.57 | 0.38 | 0.34 |
+| `contribution_motifs()` | 0.52 | 0.49 | 0.52 | 0.44 |
+| `contribution_motifs()`, `max_seqlets=None` | 0.54 | 0.56 | 0.53 | 0.50 |
+| `contribution_motifs()`, one seqlet pass | 0.25 | 0.39 | 0.46 | 0.40 |
+| `contribution_motifs()`, observed scores only | 0.50 | 0.46 | 0.49 | 0.46 |
+| TF-MoDISco, same regions | 0.44 | 0.45 | 0.39 | 0.36 |
+| TF-MoDISco, ENCODE's results | 0.40 | 0.64 | 0.49 | 0.37 |
 </div>
 
 The motifs without evidence are an upper bound on noise, since motifs of
 factors without ChIP-seq data, or whose sites are not conserved, land there
-too. Split by the kind of evidence, much of what the second seqlet pass adds
-on chromBPNet and ProCapNet is backed by the model's response alone. Here
-each cell holds first the motifs with outside support, with or without a
-response from the model, then the motifs with the model's response only,
-not merged:
+too. Split by the kind of evidence, the second seqlet pass, compared with
+the one-pass run that also searched every seqlet, adds 5.7 to 7.4 motifs
+with outside support per model on BPNet, chromBPNet and ProCapNet's counts heads,
+and almost none on its profile heads, at the cost of 7 to 21 more motifs
+without evidence. Here each cell holds first the motifs with outside
+support, with or without a response from the model, then the motifs with
+the model's response only, not merged:
 
 <div class="bench-table" markdown>
 | Run | BPNet | chromBPNet | ProCapNet counts | ProCapNet profile |
 | --- | ---: | ---: | ---: | ---: |
-| `contribution_motifs()` | 10.8 / 15.3 | 27.3 / 21.0 | 32.5 / 27.8 | 30.3 / 14.0 |
-| `contribution_motifs()`, `max_seqlets=None` | 11.7 / 17.1 | 26.7 / 25.3 | 30.8 / 30.2 | 28.8 / 12.2 |
-| `contribution_motifs()`, one seqlet pass | 5.0 / 3.9 | 21.7 / 11.7 | 23.7 / 18.3 | 28.5 / 12.2 |
-| `contribution_motifs()`, observed scores only | 10.9 / 16.0 | 25.3 / 20.7 | 26.8 / 24.2 | 29.7 / 11.8 |
-| TF-MoDISco, same regions | 6.4 / 6.1 | 20.0 / 7.0 | 14.3 / 7.8 | 17.2 / 8.3 |
-| TF-MoDISco, ENCODE's results | 5.6 / 5.7 | 29.7 / 18.7 | 19.5 / 9.5 | 20.5 / 4.5 |
+| `contribution_motifs()` | 10.8 / 12.1 | 27.7 / 10.7 | 32.3 / 9.8 | 30.0 / 6.3 |
+| `contribution_motifs()`, `max_seqlets=None` | 11.7 / 13.4 | 26.7 / 15.3 | 31.7 / 9.2 | 29.7 / 6.2 |
+| `contribution_motifs()`, one seqlet pass | 4.9 / 3.9 | 21.0 / 11.3 | 24.3 / 10.5 | 29.0 / 6.8 |
+| `contribution_motifs()`, observed scores only | 10.9 / 12.4 | 25.7 / 11.7 | 27.2 / 8.8 | 30.0 / 5.2 |
+| TF-MoDISco, same regions | 6.5 / 5.1 | 19.3 / 7.7 | 14.7 / 2.8 | 16.7 / 5.5 |
+| TF-MoDISco, ENCODE's results | 5.6 / 5.1 | 30.0 / 17.0 | 19.7 / 5.0 | 19.8 / 2.3 |
 </div>
+
+Only positive motifs are compared. The evidence for negative motifs, almost
+all of it the model's response, depends heavily on how the random motifs
+are matched, so it is left out.
 
 On scores shuffled across and within regions, with nothing to find,
 `contribution_motifs()` with two seqlet passes gave 2 motifs over 7 heads of
 6 models, where 0.6.0 gave up to 48 per head.
 
-The harness behind these tables, with the per-model results they were
-summarized from and the commits behind each row, is in
+Every row was run, and every motif checked, at the `evidence-1` tag, and
+`contribution_motifs()` run again on four heads gave the same verdicts. The harness, with the
+per-model results the tables were summarized from, is in
 [`benchmarks/contribution_motifs_evidence`](https://github.com/bjmt/universalmotif-py/tree/main/benchmarks/contribution_motifs_evidence).
 
 ### Time and memory

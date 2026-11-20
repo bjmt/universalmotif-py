@@ -524,11 +524,13 @@ def contribution_motifs(
     transcription initiation), each motif was checked for evidence of its
     own: conservation at its sites or ChIP-seq of the factor it is named
     after, or a change in the model's prediction when it is planted in
-    shuffled sequences. With the defaults, each BPNet model gave about 25
-    distinct motifs with such evidence, against 12 from TF-MoDISco on the
+    shuffled sequences, larger than random motifs of its width give. With
+    the defaults and hypothetical scores, each BPNet model gave about 22
+    distinct motifs with such evidence, against 11 from TF-MoDISco on the
     same regions (with the same cap on seqlets), and each chromBPNet model
-    about 47, against 27. Motifs with no evidence, an upper bound on noise,
-    numbered about 4 and 14 per model, against 1 and 1. The
+    about 37, against 27 (and 45 in ENCODE's own TF-MoDISco results, from
+    all regions and more seqlets). Motifs with no evidence, an upper bound
+    on noise, numbered about 7 and 24 per model, against 2 and 1. The
     [motifs from contribution scores](../guides/contribution-motifs.ipynb)
     guide gives the full comparison.
 
