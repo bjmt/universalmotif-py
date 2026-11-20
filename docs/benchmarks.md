@@ -94,14 +94,41 @@ them.
 
 ## Motifs from contribution scores
 
-[`contribution_motifs()`][universalmotif.contribution_motifs] was run with
-its defaults on the contribution scores of 25 of ENCODE's models: BPNet
+[`contribution_motifs()`][universalmotif.contribution_motifs] was compared
+with TF-MoDISco on the contribution scores of 25 of ENCODE's models: BPNet
 models of 16 single factors, chromBPNet models of ATAC-seq in K562, HepG2
 and GM12878 cells, and ProCapNet models of PRO-cap in six cell lines.
-TF-MoDISco (modisco-lite 3.0.0, default settings, with at most 50,000
-seqlets of each sign, as `contribution_motifs()` has by default) was run on
-the same regions, and ENCODE's own TF-MoDISco results for each model were
-added beside them.
+
+### How each method was run
+
+Every comparison on this page uses the runs below. "TF-MoDISco, same
+regions" was run on the same regions and scores as `contribution_motifs()`,
+and ENCODE's published TF-MoDISco results for each model were added beside
+them.
+
+<div class="bench-table" markdown>
+| | `contribution_motifs()` | TF-MoDISco, same regions | TF-MoDISco, ENCODE's results |
+| --- | --- | --- | --- |
+| Version | this package, 0.6.0 development version | modisco-lite 3.0.0 | tfmodisco-lite 2.2.0 |
+| Run as | `contribution_motifs()` with its defaults and `hypothetical` | the `modisco motifs` command with `-n 50000`, and `-w` the width of the regions | the `modisco motifs` command, as ENCODE's archives describe |
+| Settings | its defaults | the command's defaults: 2 Leiden clusterings, a seqlet FDR of 0.05, seqlet cores of 20 and flanks of 5 | the command's defaults |
+| Seqlets searched | at most 50,000 of each sign | at most 50,000 of each sign | at most 1,000,000 of each sign |
+| Regions | every peak of each model as a 500 bp window around its summit, with overlapping windows dropped; for ProCapNet, the middle 1,000 bp of every peak | the same windows | all of each model's regions |
+| Scores | observed, and hypothetical for the idealized search | hypothetical | hypothetical |
+| Threads | 2 | 2 | not stated |
+</div>
+
+Both methods were given the same scores: `contribution_motifs()` was given
+the hypothetical scores TF-MoDISco needs, for its search of idealized
+seqlets, as well as the observed scores it always uses. One difference is
+kept on purpose: the modisco command clusters the seqlets twice,
+where its library's `TFMoDISco()` clusters them 50 times by default, with a
+seqlet FDR of 0.2. Run through the library with those two defaults on
+21,000 of the 30,000 regions of the time comparison below, TF-MoDISco took
+about ten times as long as the command. The command is how ENCODE
+and most users run TF-MoDISco, so it is the one compared.
+
+### Evidence
 
 No set of motifs is known to be complete for any of these models, so each
 motif was checked for evidence of its own rather than against another
@@ -128,8 +155,10 @@ Each threshold is a Benjamini-Hochberg q-value of 0.01.
 
 Each cell holds two means per model, separated by a slash: first the
 distinct motifs with evidence of either kind (motifs with CWMs at a cosine
-of 0.9 or more counted once), then the motifs with none. The one-pass row searched every seqlet, and held motifs from the
-second search to `min_gain` itself.
+of 0.9 or more counted once), then the motifs with none. The one-pass row searched every seqlet, and held
+motifs from the second search to `min_gain` itself. It and the
+`max_seqlets=None` row were run with development builds of 18 November,
+from before the seqlet cap became the default.
 
 `contribution_motifs()` tends to give several spellings of one site, which
 this count favours. Merging the motifs with evidence of every run at a
@@ -168,23 +197,41 @@ On scores shuffled across and within regions, with nothing to find,
 `contribution_motifs()` with two seqlet passes gave 2 motifs over 7 heads of
 6 models, where 0.6.0 gave up to 48 per head.
 
+### Time and memory
+
+These runs were on the machine above, each in its own process with 2
+threads, and are single runs. Times and peak memory are those of each
+whole process, from `/usr/bin/time -l`, with the inputs loaded; memory is in
+units of 10<sup>9</sup> bytes, and on the large sets its peak varies by
+about a gigabyte from one run to the next.
+
+On 30,000 regions of 500 bp of the chromBPNet model of K562, with the same
+scores, `contribution_motifs()` took about a ninth of the time of
+TF-MoDISco, both run as described above:
+
+<div class="bench-table" markdown>
+| Run | Time | Memory |
+| --- | ---: | ---: |
+| TF-MoDISco, `modisco motifs -n 50000 -w 500` | 254 s | 3.6 GB |
+| `contribution_motifs()` | 27.1 s | 3.2 GB |
+| `contribution_motifs()`, with `hypothetical` | 38.0 s | 2.7 GB |
+</div>
+
 By default `contribution_motifs()` searches at most 50,000 seqlets of each
-sign, a random sample of them when there are more. On the machine above,
-with 2 threads, the sample made the search 2.7 to 9 times faster on the
-chromBPNet models, whose full sets of regions hold about 200,000 to 700,000
-seqlets, and it used less memory:
+sign, a random sample of them when there are more. On the chromBPNet
+models, whose regions hold about 200,000 to 700,000 seqlets, the sample made
+the search 2.4 to 8 times faster and used less memory:
 
 <div class="bench-table" markdown>
 | Model | Regions | Seqlets searched | Time, sample | Time, every seqlet | Memory, sample | Memory, every seqlet |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| chromBPNet K562, counts | 186,881 | 50,000 of 688,674 | 34.9 s | 302 s | 6.8 GB | 9.4 GB |
-| chromBPNet K562, profile | 186,881 | 50,000 of 193,411 | 30.0 s | 79.6 s | 3.2 GB | 3.7 GB |
-| chromBPNet HepG2, counts | 172,191 | 50,000 of 653,337 | 38.9 s | 287 s | 4.7 GB | 8.3 GB |
-| BPNet NFIC, counts | 13,723 | 50,000 of 63,317 | 26.1 s | 28.8 s | 2.0 GB | 1.9 GB |
+| chromBPNet K562, counts | 186,881 | 50,000 of 688,674 | 40.2 s | 308 s | 7.3 GB | 10.1 GB |
+| chromBPNet K562, profile | 186,881 | 50,000 of 193,411 | 35.5 s | 85.2 s | 3.4 GB | 4.0 GB |
+| chromBPNet HepG2, counts | 172,191 | 50,000 of 653,337 | 44.1 s | 292 s | 5.1 GB | 8.9 GB |
+| BPNet NFIC, counts | 13,723 | 50,000 of 63,317 | 26.7 s | 29.3 s | 2.1 GB | 2.0 GB |
 </div>
 
-Times are of single runs, and memory is the peak of the whole process,
-the scores included. On the large sets the peak varies by about a gigabyte
-from one run to the next. The other BPNet heads tried, of GATA1 and of NFIC's
-profile, had fewer than 50,000 seqlets and so were searched whole either
-way.
+The other BPNet heads tried, of GATA1 and of NFIC's profile, had fewer than
+50,000 seqlets and so were searched whole either way. The scripts for both
+comparisons, which prepare their inputs from ENCODE's files, are in
+[`benchmarks/contribution_motifs`](https://github.com/bjmt/universalmotif-py/tree/main/benchmarks/contribution_motifs).
