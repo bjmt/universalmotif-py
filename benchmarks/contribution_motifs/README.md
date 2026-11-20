@@ -18,14 +18,16 @@ of the documentation, which also says how the motifs found were checked.
 | --- | --- | --- |
 | Version | this package | modisco-lite 3.0.0 |
 | Run as | `contribution_motifs(observed, sequences, seed=1, nthreads=2)`, and with `hypothetical` | `modisco motifs -s ohe.npy -a hyp.npy -n 50000 -w 500` |
-| Settings | its defaults | the command's defaults: 2 Leiden clusterings, a seqlet FDR of 0.05, seqlet cores of 20 and flanks of 5 |
+| Settings | its defaults | the command's defaults: 2 Leiden runs per clustering, a seqlet FDR of 0.05, seqlet cores of 20 and flanks of 5 |
 | Seqlets searched | at most 50,000 of each sign | at most 50,000 of each sign |
 | Scores | observed, plus hypothetical where stated | hypothetical |
 | Threads | 2 | 2 (`NUMBA_NUM_THREADS` and `OMP_NUM_THREADS`) |
 
-The modisco command clusters the seqlets twice, where its library's
-`TFMoDISco()` clusters them 50 times by default and also uses a seqlet FDR of
-0.2. Run through the library with those two defaults on 21,000 of the
+TF-MoDISco clusters the seqlets in two rounds and then subclusters each
+pattern, running each Leiden clustering from several random seeds and
+keeping the best. The modisco command uses 2 seeds, where its library's
+`TFMoDISco()` uses 50 by default and also a seqlet FDR of 0.2. Run
+through the library with those two defaults on 21,000 of the
 30,000 regions below, TF-MoDISco took 40 to 43 minutes, about ten times as
 long as the command. The command is how ENCODE and most users run
 TF-MoDISco, so it is the one compared here.

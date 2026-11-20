@@ -106,7 +106,7 @@ and GM12878 cells, and ProCapNet models of PRO-cap in six cell lines.
 | --- | --- | --- | --- |
 | Version | this package, 0.6.0 development version | modisco-lite 3.0.0 | tfmodisco-lite 2.2.0 |
 | Run as | `contribution_motifs()` with its defaults | the `modisco motifs` command with `-n 50000`, and `-w` the width of the regions | the `modisco motifs` command, as ENCODE's archives describe |
-| Settings | its defaults | the command's defaults: 2 Leiden clusterings, a seqlet FDR of 0.05, seqlet cores of 20 and flanks of 5 | the command's defaults |
+| Settings | its defaults | the command's defaults: 2 Leiden runs per clustering, a seqlet FDR of 0.05, seqlet cores of 20 and flanks of 5 | the command's defaults |
 | Seqlets searched | at most 50,000 of each sign | at most 50,000 of each sign | at most 1,000,000 of each sign |
 | Regions | every peak of each model as a 500 bp window around its summit, with overlapping windows dropped; for ProCapNet, the middle 1,000 bp of every peak | the same windows | all of each model's regions |
 | Scores | observed and hypothetical | hypothetical | hypothetical |
@@ -115,9 +115,11 @@ and GM12878 cells, and ProCapNet models of PRO-cap in six cell lines.
 
 Given hypothetical scores, `contribution_motifs()` adds a search of seqlets
 rewritten in the letters the model prefers; one run below goes without
-them. The modisco command clusters the seqlets twice, where its library's
-`TFMoDISco()` clusters them 50 times by default, with a seqlet FDR of 0.2.
-Run through the library with those two defaults on 21,000 of the 30,000
+them. TF-MoDISco clusters the seqlets in two rounds and then subclusters
+each pattern, running each Leiden clustering from several random seeds and
+keeping the best. The modisco command uses 2 seeds, where its library's
+`TFMoDISco()` uses 50 by default, along with a seqlet FDR of 0.2. Run
+through the library with those two defaults on 21,000 of the 30,000
 regions of the time comparison below, TF-MoDISco took about ten times as
 long. The command is how ENCODE and most users run TF-MoDISco, so it is the
 one compared.
