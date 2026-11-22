@@ -20,6 +20,10 @@ _GAPPED_SCHEMA = {
     "right": pl.Int64,
     "min_gap": pl.Int64,
     "max_gap": pl.Int64,
+    "best_spacer": pl.Int64,
+    "spacer_pairs": pl.Int64,
+    "spacer_fold": pl.Float64,
+    "strong_spacers": pl.List(pl.Int64),
     "k": pl.Int64,
     "seed_pair": pl.String,
     "seqs_pos": pl.Int64,
@@ -186,6 +190,14 @@ def gapped_motif_finder(
         - ``consensus``, which shows the gap as ``[min-max]``.
         - ``left`` and ``right``, the widths of the two parts.
         - ``min_gap`` and ``max_gap``.
+        - ``best_spacer``, the spacer with the most hits beyond those
+          expected, ``spacer_pairs``, the hits there, and ``spacer_fold``,
+          those hits over the number expected. ``strong_spacers`` lists
+          every spacer searched with clearly more hits than expected, by
+          two standard errors, whether or not they are next to each other,
+          so that a second favoured spacer outside the gap shows too. All
+          four come from the sequences the motif was found in, not those
+          held out, and the hits expected are those of its spacing test.
         - ``k`` and ``seed_pair``, the k-mer size and the pair each motif
           grew from.
         - ``seqs_pos`` and ``seqs_neg``, which count sequences with a hit.
@@ -240,6 +252,10 @@ def gapped_motif_finder(
         "right": [m.width - m.gaploc[0] for m in motifs],
         "min_gap": [m.mingap[0] for m in motifs],
         "max_gap": [m.maxgap[0] for m in motifs],
+        "best_spacer": info["best_spacer"],
+        "spacer_pairs": info["spacer_pairs"],
+        "spacer_fold": info["spacer_fold"],
+        "strong_spacers": info["strong_spacers"],
         "k": info["k"],
         "seed_pair": info["seed_pair"],
         "seqs_pos": info["seqs_pos"],

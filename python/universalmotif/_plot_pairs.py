@@ -440,6 +440,169 @@ def pair_spacings(
         pl.when(pl.col("expected") > 0).then(pl.col("observed") / pl.col("expected")).alias("enrichment"))
 
 
+def _average_ranks(x: np.ndarray) -> np.ndarray:
+    """Ranks from 1, with tied values given the mean of their ranks."""
+    order = np.argsort(x, kind="stable")
+    ranks = np.empty(len(x))
+    ranks[order] = np.arange(1, len(x) + 1)
+    _, inverse, counts = np.unique(x, return_inverse=True, return_counts=True)
+    sums = np.bincount(inverse, weights=ranks)
+    return (sums / counts)[inverse]
+
+
+_PERIOD_KINDS = {**{p: "repeat" for p in range(2, 8)}, 10: "helical", 11: "helical"}
+
+
+def spacing_periods(
+    spacings: pl.DataFrame,
+    background: pl.DataFrame | None = None,
+    periods: Sequence[int] = range(2, 13),
+    min_pairs: int = 50,
+) -> pl.DataFrame:
+    """Test whether the counts of pairs at each distance rise and fall with
+    a fixed period.
+
+    Spacings from [`pair_spacings()`][universalmotif.pair_spacings] that
+    favour every second, third or seventh distance usually come from
+    tandem repeats, such as runs of GA or CCCTAAA, where the hits of a
+    motif fall on every repeated unit. A period of 10 or 11 instead
+    suggests sites on the same face of the helix, as the DNA turns once
+    every 10.5 letters or so. This test tells the two apart from a single
+    favoured spacing, which has no period.
+
+    For each arrangement, the counts are first expressed as the log ratio
+    of those observed to those expected, and replaced by their ranks so
+    that one large peak cannot dominate. Distances where no pair was seen
+    or expected, such as those of hits that would overlap, are left out. The test is then a periodogram of
+    the ranks at each period: the P-value comes from the power at that
+    period against the power expected if the ranks were in random order.
+    Genomes have periods of their own. Runs of A and T fall every 10 or so
+    letters along much of a plant or animal genome, and repeats of all
+    kinds are common, so the pairs of hits in any set of genomic regions
+    can show a period that has nothing to do with the motifs' binding.
+    Giving ``background``, the same count in a matched background as from
+    [`match_bkg()`][universalmotif.match_bkg], tests the regions against
+    the background instead, so that only periods beyond the genome's own
+    are found. On the spacings of gapped motifs found in DAP-seq peaks, this
+    kept the helical and telomeric periods of known cases while far fewer
+    motifs without a period passed by chance.
+
+    Each period is tested separately, so take the number of periods and
+    arrangements into account when reading the P-values. The evidence grows
+    with the number of times a period repeats within the distances counted,
+    so a wide ``max_distance`` in ``pair_spacings()`` helps.
+
+    Parameters
+    ----------
+    spacings
+        A table with ``distance``, ``observed`` and ``expected`` columns,
+        and optionally ``arrangement``, as from ``pair_spacings()``. The
+        distances of each arrangement must be consecutive.
+    background
+        The same table for background sequences, whose ``observed`` counts
+        then take the place of those expected. Arrangements and distances
+        missing from it count as none.
+    periods
+        The periods to test, each at least 2 and less than the number of
+        distances.
+    min_pairs
+        Arrangements with fewer pairs than this in all are not tested.
+
+    Returns
+    -------
+    polars.DataFrame
+        One row per arrangement and period, with these columns.
+
+        - ``arrangement`` and ``period``.
+        - ``pairs``, the pairs counted in that arrangement.
+        - ``power``, the test statistic, which follows a chi-squared
+          distribution with 1 degree of freedom for a period of 2 and 2
+          for longer periods.
+        - ``pvalue`` and ``log10_pvalue``.
+        - ``phase``, from 0 to one less than the period, the remainder that
+          the favoured distances leave when divided by the period, so that
+          a phase of 6 for a period of 10 favours distances of 6, 16, 26
+          and so on.
+
+        ``power``, the P-values and ``phase`` are null for arrangements with
+        fewer than ``min_pairs`` pairs.
+
+        - ``kind``, ``"repeat"`` for periods of 2 to 7, ``"helical"`` for
+          10 and 11, and null for the rest. These are the usual readings
+          of such periods, not something the test itself shows.
+
+    Examples
+    --------
+    Runs of the telomeric repeat CCCTAAA, in 30 of 100 random sequences,
+    put the hits of a motif for one unit every seven letters:
+
+    >>> import universalmotif as um
+    >>> seqs = um.create_sequences(seqnum=100, seqlen=300, seed=1)
+    >>> seqs = [um.insert_sites(s, ["CCCTAAA" * 20], positions=[100]) for s in seqs[:30]] + seqs[30:]
+    >>> hits = um.scan_sequences(um.create_motif("CCCTAAA", name="telo"), seqs, pvalue=1e-3)
+    >>> spacings = um.pair_spacings(hits, "telo", max_distance=100, arrangements=False)
+    >>> res = um.spacing_periods(spacings).sort("pvalue")
+    >>> res.select("period", "phase", "kind").row(0), round(res["log10_pvalue"][0], 1)
+    ((7, 0, 'repeat'), -4.4)
+    """
+    for col in ("distance", "observed", "expected"):
+        if col not in spacings.columns:
+            raise ValueError(f"spacings must have a {col!r} column")
+    periods = [int(p) for p in periods]
+    if not periods or any(p < 2 for p in periods):
+        raise ValueError("periods must be 2 or more")
+    if "arrangement" not in spacings.columns:
+        spacings = spacings.with_columns(pl.lit("all").alias("arrangement"))
+    if background is not None:
+        for col in ("distance", "observed"):
+            if col not in background.columns:
+                raise ValueError(f"background must have a {col!r} column")
+        if "arrangement" not in background.columns:
+            background = background.with_columns(pl.lit("all").alias("arrangement"))
+        bkg = background.select(pl.col("arrangement").cast(pl.String), pl.col("distance").cast(pl.Int64),
+                                pl.col("observed").cast(pl.Float64).alias("_bkg"))
+        spacings = (spacings.with_columns(pl.col("arrangement").cast(pl.String), pl.col("distance").cast(pl.Int64))
+                    .join(bkg, on=["arrangement", "distance"], how="left")
+                    .with_columns(pl.col("_bkg").fill_null(0.0).alias("expected")).drop("_bkg"))
+    rows = []
+    for (arr,), g in spacings.sort("distance").group_by("arrangement", maintain_order=True):
+        d = g["distance"].to_numpy()
+        if len(d) > 1 and np.any(np.diff(d) != 1):
+            raise ValueError("the distances of each arrangement must be consecutive")
+        if max(periods) >= len(d):
+            raise ValueError(f"periods must be shorter than the {len(d)} distances counted")
+        obs = g["observed"].to_numpy().astype(float)
+        exp = g["expected"].to_numpy().astype(float)
+        pairs = int(obs.sum())
+        if pairs < min_pairs:
+            rows.extend((arr, p, pairs, None, None, None, None, _PERIOD_KINDS.get(p)) for p in periods)
+            continue
+        # Distances where no pair could fall, such as those of overlapping
+        # hits, say nothing about a period.
+        possible = (exp > 0) | (obs > 0)
+        d, obs, exp = d[possible], obs[possible], exp[possible]
+        n = len(d)
+        x = _average_ranks(np.log2((obs + 0.5) / (exp + 0.5)))
+        x -= x.mean()
+        for p in periods:
+            w = np.exp(2j * np.pi * d / p)
+            total = complex(x @ w)
+            expect = (x @ x) / (n - 1) * float((np.abs(w - w.mean()) ** 2).sum())
+            df = 1 if p == 2 else 2
+            power = df * abs(total) ** 2 / expect if expect > 0 else 0.0
+            if df == 1:
+                pv = math.erfc(math.sqrt(power / 2))
+                log10 = math.log10(pv) if pv > 0 else -power / 2 / math.log(10) - math.log10(math.sqrt(math.pi * power / 2))
+            else:
+                pv = math.exp(-power / 2)
+                log10 = -power / 2 / math.log(10)
+            phase = int(round(math.atan2(total.imag, total.real) * p / (2 * math.pi))) % p
+            rows.append((arr, p, pairs, power, pv, log10, phase, _PERIOD_KINDS.get(p)))
+    return pl.DataFrame(rows, orient="row", schema={
+        "arrangement": pl.String, "period": pl.Int64, "pairs": pl.Int64, "power": pl.Float64,
+        "pvalue": pl.Float64, "log10_pvalue": pl.Float64, "phase": pl.Int64, "kind": pl.String})
+
+
 def _short(name: str, most: int = 24) -> str:
     return name if len(name) <= most else "…" + name[-(most - 1):]
 

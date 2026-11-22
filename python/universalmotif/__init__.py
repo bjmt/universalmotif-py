@@ -116,7 +116,7 @@ from ._hit_contrib import (
     plot_hit_profile,
     scan_contributions,
 )
-from ._plot_pairs import pair_spacings, plot_pair_spacing
+from ._plot_pairs import pair_spacings, plot_pair_spacing, spacing_periods
 from ._plot_variants import plot_variant_effects
 from ._select import refine_motifs, select_motifs
 from ._contribution_motifs import ContributionMotifs, contribution_motifs
@@ -305,6 +305,7 @@ __all__ = [
     "signal_values",
     "site_spacings",
     "slide_fun",
+    "spacing_periods",
     "summarize_motifs",
     "switch_alph",
     "to_biopython",

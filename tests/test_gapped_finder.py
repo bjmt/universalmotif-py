@@ -23,6 +23,8 @@ def test_finds_a_planted_direct_repeat(planted):
     # The background is three shuffles of the sequences by default.
     assert (top["n_pos"], top["n_neg"]) == (400, 1200)
     assert top["log10_spacing_pvalue"] < -3 and top["spacing_pvalue"] < 1e-3
+    assert 1 <= top["best_spacer"] <= 5 and top["spacer_pairs"] >= 5 and top["spacer_fold"] > 2
+    assert top["best_spacer"] in top["strong_spacers"]
     m = top["motif"]
     assert m.isgapped and m.name == "gapped_1" and m.gaploc == [6]
     hits = um.scan_sequences(m, planted, no_overlaps=True)
@@ -36,6 +38,7 @@ def test_columns_and_an_empty_result():
     assert found.columns[:4] == ["name", "consensus", "left", "right"]
     assert found.columns[-1] == "motif"
     assert found.schema["log10_spacing_pvalue"] == pl.Float64
+    assert found.schema["strong_spacers"] == pl.List(pl.Int64)
 
 
 def test_takes_a_background_and_a_mapping(planted):

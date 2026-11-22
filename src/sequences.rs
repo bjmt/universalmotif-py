@@ -413,6 +413,25 @@ fn _gapped_motif_finder<'py>(
             .map(|f| f.log10_spacing_pvalue)
             .collect::<Vec<_>>(),
     )?;
+    d.set_item(
+        "best_spacer",
+        found.iter().map(|f| f.best_spacer).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "spacer_pairs",
+        found.iter().map(|f| f.spacer_pairs).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "spacer_fold",
+        found.iter().map(|f| f.spacer_fold).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "strong_spacers",
+        found
+            .iter()
+            .map(|f| f.strong_spacers.clone())
+            .collect::<Vec<_>>(),
+    )?;
     Ok((
         found.into_iter().map(|f| PyMotif::from(f.motif)).collect(),
         d,

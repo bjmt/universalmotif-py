@@ -766,10 +766,10 @@ def cmd_find_gapped(a):
     if res.height == 0:
         print("no gapped motifs were found", file=sys.stderr)
         return
-    # No motif format keeps gaps, so the motifs are written as their two
-    # parts joined. The table gives each gap.
+    # Formats without gap notation write each motif as its two parts
+    # joined, and the table gives each gap.
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", ".* format cannot preserve gap definitions")
+        warnings.filterwarnings("ignore", ".* format cannot keep the gaps")
         write_motifs(res["motif"].to_list(), a.output, a.to)
 
 

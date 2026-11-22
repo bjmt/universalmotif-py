@@ -364,3 +364,90 @@ def test_long_names_are_cut():
         plot_pair_spacing(hits, 0, names=["a", "b"])
     with pytest.raises(ValueError, match="both motifs"):
         plot_pair_spacing(hits, 0, 1, names="a")
+
+
+def _periodic(period, phase, n=60, peak=40, base=10):
+    d = np.arange(n)
+    if period >= 10:
+        # Sites on one face of the helix favour a few distances in each
+        # turn, not a single one.
+        obs = np.round(base + (peak - base) / 2 * (1 + np.cos(2 * np.pi * (d - phase) / period)))
+    else:
+        obs = np.where(d % period == phase, peak, base)
+    return pl.DataFrame({"distance": d, "observed": obs, "expected": np.full(n, float(base))})
+
+
+@pytest.mark.parametrize(("period", "phase"), [(2, 1), (3, 0), (7, 4), (10, 6), (11, 2)])
+def test_spacing_periods_finds_the_planted_period(period, phase):
+    res = um.spacing_periods(_periodic(period, phase)).sort("pvalue")
+    top = res.row(0, named=True)
+    assert (top["period"], top["phase"], top["arrangement"]) == (period, phase, "all")
+    assert top["pvalue"] < 1e-3
+    assert top["kind"] == ("helical" if period in (10, 11) else "repeat")
+
+
+def test_spacing_periods_without_a_period():
+    rng = np.random.default_rng(1)
+    d = np.arange(60)
+    df = pl.DataFrame({"distance": d, "observed": rng.poisson(20, 60), "expected": np.full(60, 20.0)})
+    res = um.spacing_periods(df)
+    assert res["pvalue"].min() > 0.01
+    # A single favoured spacing has no period either.
+    df = df.with_columns(pl.when(pl.col("distance") == 9).then(500).otherwise(pl.col("observed")).alias("observed"))
+    assert um.spacing_periods(df)["pvalue"].min() > 0.01
+
+
+def test_spacing_periods_per_arrangement_and_too_few_pairs():
+    sp = pl.concat([_periodic(3, 0).with_columns(arrangement=pl.lit("tandem")),
+                    _periodic(3, 0, peak=0, base=0).with_columns(arrangement=pl.lit("convergent"))])
+    res = um.spacing_periods(sp, periods=[3, 10])
+    assert res.columns == ["arrangement", "period", "pairs", "power", "pvalue", "log10_pvalue", "phase", "kind"]
+    assert res.height == 4
+    conv = res.filter(pl.col("arrangement") == "convergent")
+    assert conv["pairs"].to_list() == [0, 0] and conv["pvalue"].null_count() == 2
+    tandem = res.filter(pl.col("arrangement") == "tandem", pl.col("period") == 3).row(0, named=True)
+    assert tandem["pvalue"] < 1e-3
+    assert np.isclose(tandem["log10_pvalue"], np.log10(tandem["pvalue"]))
+
+
+def test_spacing_periods_matches_permutations():
+    # The P-value of the periodogram agrees with shuffling the ranks.
+    rng = np.random.default_rng(2)
+    d = np.arange(41)
+    obs = rng.poisson(30 + 6 * np.cos(2 * np.pi * d / 10), 41)
+    df = pl.DataFrame({"distance": d, "observed": obs, "expected": np.full(41, 30.0)})
+    p = um.spacing_periods(df, periods=[10])["power"][0]
+    x = np.log2((obs + 0.5) / 30.5)
+    r = np.argsort(np.argsort(x)).astype(float)
+    r -= r.mean()
+    w = np.exp(2j * np.pi * d / 10)
+    e = (r @ r) / 40 * (np.abs(w - w.mean()) ** 2).sum()
+    perm = np.array([2 * abs(rng.permutation(r) @ w) ** 2 / e for _ in range(4000)])
+    assert abs((perm >= p).mean() - np.exp(-p / 2)) < 0.02
+
+
+def test_spacing_periods_errors():
+    df = _periodic(3, 0)
+    with pytest.raises(ValueError, match="'expected' column"):
+        um.spacing_periods(df.drop("expected"))
+    with pytest.raises(ValueError, match="2 or more"):
+        um.spacing_periods(df, periods=[1])
+    with pytest.raises(ValueError, match="shorter than"):
+        um.spacing_periods(df, periods=[60])
+    with pytest.raises(ValueError, match="consecutive"):
+        um.spacing_periods(df.filter(pl.col("distance") != 5))
+
+
+def test_spacing_periods_against_a_background():
+    # A period the background shares is not a period of the regions'.
+    shared = _periodic(10, 3, peak=60, base=20)
+    assert um.spacing_periods(shared).filter(pl.col("period") == 10)["pvalue"][0] < 1e-3
+    bkg = shared.select("distance", "observed")
+    res = um.spacing_periods(shared, background=bkg)
+    assert res["pvalue"].min() > 0.01
+    # One of its own stands out against the same background.
+    own = shared.with_columns(pl.col("observed") * np.where(np.arange(60) % 7 == 2, 4, 1))
+    top = um.spacing_periods(own, background=bkg).sort("pvalue").row(0, named=True)
+    assert (top["period"], top["phase"]) == (7, 2) and top["pvalue"] < 1e-3
+    with pytest.raises(ValueError, match="background must have"):
+        um.spacing_periods(shared, background=bkg.drop("observed"))

@@ -32,6 +32,11 @@ Changes in behaviour:
 
 New:
 
+- `gapped_motif_finder()` gives each motif's most favoured spacer and the
+  spacers with clearly more hits than expected (`best_spacer`,
+  `spacer_pairs`, `spacer_fold`, `strong_spacers`).
+- `spacing_periods()` tests the counts from `pair_spacings()` for a
+  period, such as that of a tandem repeat or of the helix.
 - `read_universalmotif()` and `write_universalmotif()` read and write the
   R package's own format (its `read_motifs()` and `write_motifs()`), which
   keeps every field, gaps included; the command line takes it as
