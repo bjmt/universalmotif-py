@@ -430,7 +430,9 @@ def motif_pair_finder(
           arrangement allows. Strands are those of each part as given or
           as found, and ``motif_finder()`` may give a motif on either
           strand, so the arrangement of two parts found de novo depends on
-          how each happens to be written.
+          how each happens to be written. The sites of a part that reads
+          the same on both strands, as many dimers' sites do, are all taken
+          to be on the plus strand.
         - ``arrangement``, ``"tandem"`` for parts on the same strand, and
           ``"convergent"`` or ``"divergent"`` for parts on opposite strands
           pointing towards or away from each other.

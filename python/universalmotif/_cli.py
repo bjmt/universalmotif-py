@@ -773,6 +773,28 @@ def cmd_find_gapped(a):
         write_motifs(res["motif"].to_list(), a.output, a.to)
 
 
+def cmd_find_pairs(a):
+    import universalmotif as um
+
+    targets = _target_sequences(a, "target sequences")
+    bkg = read_sequences(a.bkg) if a.bkg else None
+    motifs = read_motifs(a.motifs, a.format) if a.motifs else None
+    res = um.motif_pair_finder(targets, bkg, motifs=motifs, nmotifs=a.nmotifs, max_gap=a.max_gap,
+                               hit_pvalue=a.hit_pvalue, train_pvalue=a.train_pvalue,
+                               stop_pvalue=a.stop_pvalue, min_pairs=a.min_pairs, min_fold=a.min_fold,
+                               max_window=a.max_window, holdout=a.holdout, merge_overlap=a.merge_overlap,
+                               mask=a.mask, shuffle_k=a.shuffle_k, bkg_shuffles=a.bkg_shuffles, seed=a.seed,
+                               nthreads=a.threads)
+    if a.table:
+        write_table(res, a.table)
+    if res.height == 0:
+        print("no pairs of motifs were found", file=sys.stderr)
+        return
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", ".* format cannot keep the gaps")
+        write_motifs(res["motif"].to_list(), a.output, a.to)
+
+
 def cmd_shuffle(a):
     import universalmotif as um
 
@@ -1321,7 +1343,7 @@ COMMAND_GROUPS = (
     ("Drawing", ("logo", "heatmap")),
     ("Sequences", ("extract", "shuffle", "bkg")),
     ("Scanning and testing", ("scan", "enrich", "posenr", "coocc", "proximity", "matrix", "variants")),
-    ("Discovery", ("find", "find-gapped")),
+    ("Discovery", ("find", "find-gapped", "find-pairs")),
     ("Contribution scores", ("seqlets", "contrib-motifs", "scan-contrib", "modisco", "combine")),
 )
 
@@ -1697,13 +1719,60 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     _progress_arg(p)
     _threads_arg(p)
 
+    p = command("find-pairs", cmd_find_pairs, "discover pairs of motifs that favour a spacing (experimental)",
+                "Discover pairs of motifs whose sites keep a fixed or nearly fixed spacing more "
+                "often than in the background. The parts are the motifs given with -m, followed by "
+                "motifs found in the targets as by the find command. Each spacing is chosen in part "
+                "of the targets and tested in the rest. The pairs are written with -o, each as one "
+                "gapped motif, and a table of results with --table. The command is experimental "
+                "and may change in later releases.")
+    _add_target_args(p, "target sequences")
+    p.add_argument("-b", "--bkg", help="FASTA file of background sequences")
+    p.add_argument("-m", "--motifs", action="append", metavar="FILE",
+                   help="motif file whose motifs are parts, before those found; can be repeated")
+    p.add_argument("-f", "--format", choices=_MOTIF_FORMATS, metavar="FORMAT",
+                   help="the format of the -m files, if it cannot be recognized: " + _FORMAT_LIST)
+    _motif_out_args(p)
+    p.add_argument("--table", help="also write a table of the pairs found")
+    p.add_argument("--nmotifs", type=int, default=8,
+                   help="most motifs found in the targets to add to the parts (default: 8)")
+    p.add_argument("--max-gap", type=int, default=31, help="longest spacer, at most 31 (default: 31)")
+    p.add_argument("--max-window", type=int, default=3,
+                   help="most spacers a spacing may span (default: 3)")
+    p.add_argument("--hit-pvalue", type=float, default=1e-4,
+                   help="P-value of a site counting as a hit; shorter parts are scanned at up to "
+                        "1e-3 (default: 1e-4)")
+    p.add_argument("--train-pvalue", type=float, default=1e-3,
+                   help="P-value a spacing must reach where it is chosen (default: 1e-3)")
+    p.add_argument("--stop-pvalue", type=float, default=1e-3,
+                   help="corrected P-value a spacing must reach in the targets held out "
+                        "(default: 1e-3)")
+    p.add_argument("--min-pairs", type=int, default=5,
+                   help="fewest pairs of sites a spacing needs where it is chosen (default: 5)")
+    p.add_argument("--min-fold", type=float, default=2.0,
+                   help="fewest times more pairs than expected in the targets held out (default: 2)")
+    p.add_argument("--holdout", type=float, default=0.3,
+                   help="share of the targets and background held out (default: 0.3)")
+    p.add_argument("--merge-overlap", type=float, default=0.3,
+                   help="share of shared sites at which two pairs are merged; above 1 keeps them all "
+                        "(default: 0.3)")
+    p.add_argument("--no-mask", dest="mask", action="store_false",
+                   help="leave low-complexity regions unmasked")
+    p.add_argument("--shuffle-k", type=int, default=2,
+                   help="k-mer size kept when shuffling targets for a background (default: 2)")
+    p.add_argument("--bkg-shuffles", type=int, default=3,
+                   help="shuffles of the targets making up the background, without --bkg (default: 3)")
+    _seed_arg(p)
+    _progress_arg(p)
+    _threads_arg(p)
+
     p = command("find-gapped", cmd_find_gapped, "discover gapped motifs de novo (experimental)",
                 "Discover motifs made of two parts with a spacer of varying length. The motifs "
                 "are written with -o and a table of results with --table. Each motif is tested "
-                "in a share of the targets and background held out from the search. No motif "
-                "format keeps gaps, so the motifs are written as their two parts joined, and "
-                "the table gives each gap. The command is experimental and may change in later "
-                "releases.")
+                "in a share of the targets and background held out from the search. MEME, "
+                "JASPAR, TRANSFAC and universalmotif files keep the gaps; other formats write "
+                "each motif as its two parts joined, and the table gives each gap. The command "
+                "is experimental and may change in later releases.")
     _add_target_args(p, "target sequences")
     p.add_argument("-b", "--bkg", help="FASTA file of background sequences")
     _motif_out_args(p)

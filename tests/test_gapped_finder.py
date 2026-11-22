@@ -128,3 +128,17 @@ def test_motif_pair_finder_checks_its_options(pair_planted):
         um.motif_pair_finder(pair_planted, holdout=0)
     with pytest.raises(ValueError, match="not a DNA motif"):
         um.motif_pair_finder(pair_planted, motifs=um.create_motif("ACDEF", alphabet="AA"))
+
+
+def test_find_pairs_command(pair_planted, tmp_path):
+    fa, motifs = tmp_path / "t.fa", tmp_path / "arf.meme"
+    um.write_fasta(pair_planted, fa)
+    um.write_meme([um.create_motif("TGTCGG", name="ARF")], motifs)
+    code = main(["find-pairs", "-s", str(fa), "-m", str(motifs), "--nmotifs", "4", "--seed", "1",
+                 "--table", str(tmp_path / "t.tsv"), "-o", str(tmp_path / "t.meme")])
+    assert code == 0
+    table = pl.read_csv(tmp_path / "t.tsv", separator="\t")
+    assert table["left"][0] == "ARF" and "motif" not in table.columns
+    pairs = um.read_meme(tmp_path / "t.meme")
+    assert len(pairs) == table.height and pairs[0].isgapped
+    assert pairs[0].mingap[0] == table["min_gap"][0]

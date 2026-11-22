@@ -37,8 +37,8 @@ New:
   `spacer_pairs`, `spacer_fold`, `strong_spacers`).
 - `spacing_periods()` tests the counts from `pair_spacings()` for a
   period, such as that of a tandem repeat or of the helix.
-- `motif_pair_finder()` finds pairs of motifs whose sites favour a
-  spacing, from motifs given and motifs found by `motif_finder()`.
+- `motif_pair_finder()` and `find-pairs` find pairs of motifs whose sites
+  favour a spacing, from motifs given and motifs found by `motif_finder()`.
 - `read_universalmotif()` and `write_universalmotif()` read and write the
   R package's own format (its `read_motifs()` and `write_motifs()`), which
   keeps every field, gaps included; the command line takes it as

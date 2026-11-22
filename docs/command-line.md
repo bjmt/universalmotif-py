@@ -73,6 +73,7 @@ Finding new motifs in sequences.
 | --- | --- | --- |
 | `find` | Discover motifs *de novo*. | [`motif_finder()`][universalmotif.motif_finder] |
 | `find-gapped` | Discover gapped motifs *de novo*: two parts with a spacer of varying length (experimental). | [`gapped_motif_finder()`][universalmotif.gapped_motif_finder] |
+| `find-pairs` | Discover pairs of motifs that favour a spacing, from motifs given and motifs found (experimental). | [`motif_pair_finder()`][universalmotif.motif_pair_finder] |
 
 ### Contribution scores
 
@@ -132,8 +133,8 @@ A few conventions hold across the commands.
   `UNIVERSALMOTIF_NTHREADS` environment variable if it is set.
 - **Random numbers** drawn by a command are made reproducible with
   `--seed`.
-- **Progress** of `scan`, `enrich`, `variants`, `find`, `find-gapped` and
-  `shuffle` is shown as a bar on standard error once they have run for a
+- **Progress** of `scan`, `enrich`, `variants`, `find`, `find-gapped`,
+  `find-pairs` and `shuffle` is shown as a bar on standard error once they have run for a
   second, if standard error is a terminal. `--no-progress` turns it off, and
   `--progress` turns it on when writing to a log. Ctrl-C stops the command.
 
@@ -395,6 +396,19 @@ umotif find-gapped -s peaks.fa -b bkg.fa --seed 1 --table gapped.tsv -o gapped.m
 ```
 
 <!-- output: gapped.tsv 2 8 -->
+
+`find-pairs`, also experimental, searches only the spacing between motifs it
+is given with `-m` and motifs it finds in the targets itself. It finds pairs
+in a smaller share of the targets than `find-gapped`, and partners that no
+database holds. Given the example motifs, it finds the same pair of the
+AP-1 site and the G-box, with 21 letters between the motifs' flanking
+columns:
+
+```sh
+umotif find-pairs -s peaks.fa -b bkg.fa -m motifs.meme --seed 1 --table pairs.tsv -o pairs.meme
+```
+
+<!-- output: pairs.tsv 2 10 -->
 
 ### Peaks and their surroundings
 
