@@ -10,6 +10,7 @@ use universalmotif::complexity::{self, ComplexityMethod, ComplexityOptions};
 use universalmotif::finder::{FinderOptions, motif_finder};
 use universalmotif::gapped::{GappedFinderOptions, Mismatch, gapped_motif_finder};
 use universalmotif::kmer::{self, BkgOptions, WindowOptions};
+use universalmotif::pair_finder::{PairFinderOptions, motif_pair_finder};
 use universalmotif::sample::{self, ImplantMode, ImplantOptions};
 use universalmotif::select::{
     RefineOptions, SelectOptions, Selection, Site, StabilityOptions, motif_stability,
@@ -309,6 +310,82 @@ fn _implant_motifs<'py>(
         im.iter().map(|x| x.planted.as_str()).collect::<Vec<_>>(),
     )?;
     Ok((r.sequences, d, r.warnings))
+}
+
+#[pyfunction]
+#[pyo3(signature = (seqs, negatives, motifs, nmotifs, max_gap, hit_pvalue, train_pvalue, stop_pvalue, min_pairs, min_fold, max_window, holdout, merge_overlap, mask, shuffle_k, bkg_shuffles, seed, nthreads))]
+#[allow(clippy::too_many_arguments)]
+fn _motif_pair_finder<'py>(
+    py: Python<'py>,
+    seqs: Vec<PyBackedStr>,
+    negatives: Option<Vec<PyBackedStr>>,
+    motifs: Vec<PyRef<'py, PyMotif>>,
+    nmotifs: usize,
+    max_gap: usize,
+    hit_pvalue: f64,
+    train_pvalue: f64,
+    stop_pvalue: f64,
+    min_pairs: u64,
+    min_fold: f64,
+    max_window: usize,
+    holdout: f64,
+    merge_overlap: f64,
+    mask: bool,
+    shuffle_k: usize,
+    bkg_shuffles: usize,
+    seed: u64,
+    nthreads: usize,
+) -> PyResult<(Vec<PyMotif>, Vec<PyMotif>, Bound<'py, PyDict>)> {
+    let motifs: Vec<Motif> = motifs.iter().map(|m| m.inner.clone()).collect();
+    let opts = PairFinderOptions {
+        nmotifs,
+        max_gap,
+        hit_pvalue,
+        train_pvalue,
+        stop_pvalue,
+        min_pairs,
+        min_fold,
+        max_window,
+        holdout,
+        merge_overlap,
+        mask,
+        shuffle_k,
+        bkg_shuffles,
+        seed,
+        nthreads,
+    };
+    let res = py
+        .detach(|| motif_pair_finder(&seqs, negatives.as_deref(), &motifs, &opts))
+        .map_err(err)?;
+    let p = &res.pairs;
+    let d = PyDict::new(py);
+    d.set_item("left", p.iter().map(|x| x.left).collect::<Vec<_>>())?;
+    d.set_item("right", p.iter().map(|x| x.right).collect::<Vec<_>>())?;
+    d.set_item(
+        "left_strand",
+        p.iter().map(|x| x.left_strand.as_str()).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "right_strand",
+        p.iter().map(|x| x.right_strand.as_str()).collect::<Vec<_>>(),
+    )?;
+    d.set_item(
+        "arrangement",
+        p.iter().map(|x| x.arrangement).collect::<Vec<_>>(),
+    )?;
+    d.set_item("min_gap", p.iter().map(|x| x.min_gap).collect::<Vec<_>>())?;
+    d.set_item("max_gap", p.iter().map(|x| x.max_gap).collect::<Vec<_>>())?;
+    d.set_item("pairs", p.iter().map(|x| x.pairs).collect::<Vec<_>>())?;
+    d.set_item("expected", p.iter().map(|x| x.expected).collect::<Vec<_>>())?;
+    d.set_item("fold", p.iter().map(|x| x.fold).collect::<Vec<_>>())?;
+    d.set_item("pvalue", p.iter().map(|x| x.pvalue).collect::<Vec<_>>())?;
+    d.set_item(
+        "log10_pvalue",
+        p.iter().map(|x| x.log10_pvalue).collect::<Vec<_>>(),
+    )?;
+    d.set_item("repeat", p.iter().map(|x| x.repeat).collect::<Vec<_>>())?;
+    let pairs = res.pairs.iter().map(|x| PyMotif::from(x.motif.clone())).collect();
+    Ok((res.parts.into_iter().map(PyMotif::from).collect(), pairs, d))
 }
 
 #[pyfunction]
@@ -727,5 +804,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_refine_motifs, m)?)?;
     m.add_function(wrap_pyfunction!(_motif_stability, m)?)?;
     m.add_function(wrap_pyfunction!(_gapped_motif_finder, m)?)?;
+    m.add_function(wrap_pyfunction!(_motif_pair_finder, m)?)?;
     Ok(())
 }

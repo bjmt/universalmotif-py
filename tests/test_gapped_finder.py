@@ -1,3 +1,4 @@
+import numpy as np
 import polars as pl
 import pytest
 import universalmotif as um
@@ -80,3 +81,50 @@ def test_find_gapped_command(planted, tmp_path):
     assert table["max_gap"][0] == 5
     motifs = um.read_meme(tmp_path / "t.meme")
     assert len(motifs) == table.height and motifs[0].width == 12
+
+
+@pytest.fixture(scope="module")
+def pair_planted():
+    seqs = um.create_sequences(seqnum=1500, seqlen=200, seed=1)
+    pair = um.add_gap(um.create_motif("TGTCGGTTGACT"), gaploc=6, mingap=7, maxgap=7)
+    seqs[::20] = um.implant_motifs(pair, seqs[::20], seed=1)
+    seqs[1::3] = um.implant_motifs(um.create_motif("TGTCGG"), seqs[1::3], seed=2)
+    seqs[2::6] = um.implant_motifs(um.create_motif("TTGACT"), seqs[2::6], seed=3)
+    return seqs
+
+
+def test_motif_pair_finder_finds_a_planted_pair(pair_planted):
+    arf = um.create_motif("TGTCGG", name="ARF")
+    found = um.motif_pair_finder(pair_planted, motifs=arf, seed=1)
+    assert found.height >= 1
+    top = found.row(0, named=True)
+    assert top["name"] == "pair_1" and top["left"] == "ARF" and top["left_strand"] == "+"
+    assert top["arrangement"] in ("tandem", "convergent")
+    assert top["consensus"].startswith("TGTCGG[") and "TTGACT" in top["consensus"]
+    assert top["log10_pvalue"] < -5 and top["fold"] > 5 and not top["repeat"]
+    assert np.isclose(top["log10_pvalue"], np.log10(top["pvalue"]))
+    m = top["motif"]
+    assert m.isgapped and m.gaploc == [6] and (m.mingap[0], m.maxgap[0]) == (top["min_gap"], top["max_gap"])
+    assert top["left_motif"].name == "ARF" and top["right_motif"].name == top["right"]
+    assert found.columns[-3:] == ["motif", "left_motif", "right_motif"]
+
+
+def test_motif_pair_finder_without_parts_given_and_on_random_sequences(pair_planted):
+    found = um.motif_pair_finder(pair_planted, bkg_sequences=um.shuffle_sequences(pair_planted, k=2, seed=1),
+                                 seed=2, nmotifs=4)
+    assert found.height >= 1
+    seqs = um.create_sequences(seqnum=1500, seqlen=200, seed=3)
+    empty = um.motif_pair_finder(seqs, motifs=um.create_motif("TGTCGG"), seed=1, nmotifs=4)
+    assert empty.height == 0
+    assert empty.schema["repeat"] == pl.Boolean and empty.columns[-1] == "right_motif"
+
+
+def test_motif_pair_finder_checks_its_options(pair_planted):
+    with pytest.raises(ValueError, match="give motifs or set nmotifs"):
+        um.motif_pair_finder(pair_planted, nmotifs=0)
+    with pytest.raises(ValueError, match="max_gap"):
+        um.motif_pair_finder(pair_planted, max_gap=40)
+    with pytest.raises(ValueError, match="holdout"):
+        um.motif_pair_finder(pair_planted, holdout=0)
+    with pytest.raises(ValueError, match="not a DNA motif"):
+        um.motif_pair_finder(pair_planted, motifs=um.create_motif("ACDEF", alphabet="AA"))

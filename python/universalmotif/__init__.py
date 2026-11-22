@@ -100,7 +100,7 @@ from ._io import (
 )
 from ._core import Motif
 from ._enrich import enrich_motifs, motif_coocc, motif_peaks
-from ._gapped_finder import gapped_motif_finder
+from ._gapped_finder import gapped_motif_finder, motif_pair_finder
 from ._genome import Genome, extract_ranges, signal_stats, signal_values
 from ._genomic import match_bkg, motif_proximity
 from ._interactions import interaction_effects, pair_mutagenesis, plot_interactions
@@ -230,6 +230,7 @@ __all__ = [
     "modisco_thresholds",
     "motif_coocc",
     "motif_finder",
+    "motif_pair_finder",
     "motif_peaks",
     "motif_proximity",
     "motif_pvalue",

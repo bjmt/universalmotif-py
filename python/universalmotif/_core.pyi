@@ -565,6 +565,26 @@ def _gapped_motif_finder(
     seed: int,
     nthreads: int,
 ) -> tuple[list[Motif], dict[str, Any]]: ...
+def _motif_pair_finder(
+    seqs: list[str],
+    negatives: list[str] | None,
+    motifs: list[Motif],
+    nmotifs: int,
+    max_gap: int,
+    hit_pvalue: float,
+    train_pvalue: float,
+    stop_pvalue: float,
+    min_pairs: int,
+    min_fold: float,
+    max_window: int,
+    holdout: float,
+    merge_overlap: float,
+    mask: bool,
+    shuffle_k: int,
+    bkg_shuffles: int,
+    seed: int,
+    nthreads: int,
+) -> tuple[list[Motif], list[Motif], dict[str, Any]]: ...
 def _enrich(
     motifs: list[Motif],
     sequences: list[str],

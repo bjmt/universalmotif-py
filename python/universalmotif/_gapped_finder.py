@@ -1,5 +1,5 @@
-"""De novo discovery of gapped motifs: two parts with a spacer of varying
-length between them."""
+"""De novo discovery of gapped motifs, two parts with a spacer of varying
+length between them, and of pairs of motifs that favour a spacing."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import polars as pl
 
 from . import _core, _progress
 from ._analysis import _sequence_pairs
+from ._enrich import _motif_list
 from ._sequences import _seed
 from ._threads import _nthreads
 
@@ -276,7 +277,217 @@ def gapped_motif_finder(
 def _consensus(m) -> str:
     from ._io import _gap_notation
 
-    return _gap_notation(m)
+    return _gap_notation(m) if m.isgapped else m.consensus
 
 
-__all__ = ["gapped_motif_finder"]
+_PAIR_SCHEMA = {
+    "name": pl.String,
+    "consensus": pl.String,
+    "left": pl.String,
+    "right": pl.String,
+    "left_strand": pl.String,
+    "right_strand": pl.String,
+    "arrangement": pl.String,
+    "min_gap": pl.Int64,
+    "max_gap": pl.Int64,
+    "pairs": pl.Int64,
+    "expected": pl.Float64,
+    "fold": pl.Float64,
+    "pvalue": pl.Float64,
+    "log10_pvalue": pl.Float64,
+    "repeat": pl.Boolean,
+}
+
+
+def motif_pair_finder(
+    sequences: Sequence[str] | Mapping[str, str],
+    bkg_sequences: Sequence[str] | Mapping[str, str] | None = None,
+    motifs=None,
+    nmotifs: int = 8,
+    max_gap: int = 31,
+    hit_pvalue: float = 1e-4,
+    train_pvalue: float = 1e-3,
+    stop_pvalue: float = 1e-3,
+    min_pairs: int = 5,
+    min_fold: float = 2.0,
+    max_window: int = 3,
+    holdout: float = 0.3,
+    merge_overlap: float = 0.3,
+    mask: bool = True,
+    shuffle_k: int = 2,
+    bkg_shuffles: int = 3,
+    seed: int | None = None,
+    nthreads: int | None = None,
+    progress: bool | None = None,
+) -> pl.DataFrame:
+    """Find pairs of motifs whose sites favour a spacing.
+
+    The finder is experimental, so its options, its results and the pairs
+    it finds may change in later releases.
+
+    Where [`gapped_motif_finder()`][universalmotif.gapped_motif_finder]
+    builds both parts of a gapped motif from pairs of k-mers, this finder
+    takes its parts as given and searches only their spacing. The parts are
+    the ``motifs`` given, such as a factor's known motif, followed by up to
+    ``nmotifs`` motifs from [`motif_finder()`][universalmotif.motif_finder]
+    run on the same sequences and background, so that a partner no database
+    holds can still be found. A part whose sites in the sequences mostly
+    overlap those of an earlier part is dropped, as ``motif_finder()`` often
+    returns shifted copies of one site. Because the parts are scanned rather
+    than counted as exact k-mers, pairs found in only a few percent of the
+    sequences, or with variable parts, are found far more often than by
+    ``gapped_motif_finder()``.
+
+    Each part is scanned over the sequences and the background on both
+    strands, and every pair of sites up to ``max_gap`` letters apart is
+    counted by arrangement and spacer. A share of the sequences and of the
+    background, ``holdout``, is set aside. In the rest, each arrangement's
+    window of 1 to ``max_window`` spacers with the smallest binomial P-value
+    against the background's spacers is chosen, and those reaching
+    ``train_pvalue`` are tested once in the sequences held out. There the
+    P-value, multiplied by the number of windows tested, must reach
+    ``stop_pvalue``, and the pairs must be at least ``min_fold`` times those
+    expected. Pairs that pass and share most of their sites are merged,
+    keeping the most significant.
+
+    Tandem repeats, such as the telomeric CCCTAAA, put the sites of a motif
+    for one unit at every unit, so they can pass as a pair of that motif
+    with itself. Such pairs are marked in the ``repeat`` column. Masking
+    low-complexity regions removes most of them beforehand.
+
+    Parameters
+    ----------
+    sequences
+        The positive sequences, as a list or a mapping from names to
+        sequences.
+    bkg_sequences
+        The background sequences, given in the same way. Without them, the
+        background is the positives shuffled with
+        [`shuffle_sequences()`][universalmotif.shuffle_sequences], keeping
+        their ``shuffle_k``-mer counts. For genomic sequences, a background
+        drawn from the genome and matched for composition, as from
+        [`match_bkg()`][universalmotif.match_bkg], is far better.
+    motifs
+        A DNA motif or a list of them to use as parts, before those found.
+    nmotifs
+        The most motifs ``motif_finder()`` adds to the parts, from 0.
+    max_gap
+        The longest spacer searched, at most 31.
+    hit_pvalue
+        The P-value a site of a part must reach. Parts too short to reach
+        it are scanned at sixteen times the P-value of a perfect site of
+        their width, up to 1e-3.
+    train_pvalue
+        The P-value a window must reach in the sequences it is chosen in to
+        be tested in those held out.
+    stop_pvalue
+        The P-value a window must reach in the sequences held out, after
+        multiplying by the number of windows tested.
+    min_pairs
+        The fewest pairs of sites a window needs where it is chosen.
+    min_fold
+        The fewest times more pairs than expected a window needs in the
+        sequences held out.
+    max_window
+        The most spacers a window may span.
+    holdout
+        The share of the sequences and of the background held out, above 0
+        and below 0.9.
+    merge_overlap
+        Pairs are merged when this share or more of the pairs of sites of
+        one, the one with fewer, overlap those of the other. Above 1,
+        nothing is merged.
+    mask
+        Mask low-complexity regions with DUST in the sequences and the
+        background before the search.
+    shuffle_k
+        The size of the k-mers whose counts the shuffled background keeps.
+        Only used without ``bkg_sequences``.
+    bkg_shuffles
+        How many shuffles of the sequences make up the background, without
+        ``bkg_sequences``.
+    seed
+        Seed for the background, ``motif_finder()`` and the sequences held
+        out; a fresh one by default.
+    nthreads
+        Threads to use, with 0 for all available; by default the package
+        setting from [`set_nthreads()`][universalmotif.set_nthreads].
+    progress
+        Show a progress bar on stderr once the call has run for a second,
+        and let Ctrl-C stop it; by default the package setting from
+        [`set_progress()`][universalmotif.set_progress].
+
+    Returns
+    -------
+    polars.DataFrame
+        One row per pair, most significant first, with these columns.
+
+        - ``name``. The pairs are named ``pair_1``, ``pair_2`` and so on.
+        - ``consensus``, which shows the spacer as ``[min-max]``.
+        - ``left`` and ``right``, the names of the two parts, and
+          ``left_strand`` and ``right_strand``, their strands. Pairs are
+          read so that the first part is on the plus strand where the
+          arrangement allows. Strands are those of each part as given or
+          as found, and ``motif_finder()`` may give a motif on either
+          strand, so the arrangement of two parts found de novo depends on
+          how each happens to be written.
+        - ``arrangement``, ``"tandem"`` for parts on the same strand, and
+          ``"convergent"`` or ``"divergent"`` for parts on opposite strands
+          pointing towards or away from each other.
+        - ``min_gap`` and ``max_gap``, the spacers of the window.
+        - ``pairs``, the pairs of sites in the window in the sequences held
+          out, ``expected``, those expected from the background, and
+          ``fold``, the ratio of the two.
+        - ``pvalue`` and ``log10_pvalue``, the corrected P-value from the
+          sequences held out.
+        - ``repeat``, described above.
+        - ``motif``, the pair as one motif, gapped over the window (a
+          spacer of 0 is written as a gap of 0 to 1), or ungapped when its
+          parts sit side by side. ``left_motif`` and ``right_motif`` are
+          the parts, as PPMs.
+
+    Examples
+    --------
+    TGTCGG followed by TTGACT seven letters later is planted in a
+    twentieth of 1,500 random sequences, with each site also alone in more
+    of them. Given TGTCGG, the finder finds its partner, here with the
+    letter before it, which ``motif_finder()`` took into its motif:
+
+    >>> import universalmotif as um
+    >>> seqs = um.create_sequences(seqnum=1500, seqlen=200, seed=1)
+    >>> pair = um.add_gap(um.create_motif("TGTCGGTTGACT"), gaploc=6, mingap=7, maxgap=7)
+    >>> seqs[::20] = um.implant_motifs(pair, seqs[::20], seed=1)
+    >>> seqs[1::3] = um.implant_motifs(um.create_motif("TGTCGG"), seqs[1::3], seed=2)
+    >>> seqs[2::6] = um.implant_motifs(um.create_motif("TTGACT"), seqs[2::6], seed=3)
+    >>> found = um.motif_pair_finder(seqs, motifs=um.create_motif("TGTCGG", name="ARF"), seed=1)
+    >>> found.select("consensus", "left").row(0)
+    ('TGTCGG[6-6]GTTGACT', 'ARF')
+    """
+    if _progress.wanted(progress):
+        args = {**locals(), "progress": False}
+        return _progress.run(lambda: motif_pair_finder(**args))
+    _, pos = _sequence_pairs(sequences)
+    neg = None if bkg_sequences is None else list(_sequence_pairs(bkg_sequences)[1])
+    given = [] if motifs is None else _motif_list(motifs)
+    parts, found, info = _core._motif_pair_finder(
+        list(pos), neg, given, nmotifs, max_gap, hit_pvalue, train_pvalue, stop_pvalue, min_pairs, min_fold,
+        max_window, holdout, merge_overlap, mask, shuffle_k, bkg_shuffles, _seed(seed), _nthreads(nthreads),
+    )
+    names = [m.name for m in parts]
+    cols = {
+        "name": [m.name for m in found],
+        "consensus": [_consensus(m) for m in found],
+        "left": [names[i] for i in info["left"]],
+        "right": [names[i] for i in info["right"]],
+        **{k: info[k] for k in ("left_strand", "right_strand", "arrangement", "min_gap", "max_gap", "pairs",
+                                "expected", "fold", "pvalue", "log10_pvalue", "repeat")},
+    }
+    df = pl.DataFrame(cols, schema=_PAIR_SCHEMA)
+    return df.with_columns(
+        pl.Series("motif", list(found), dtype=pl.Object),
+        pl.Series("left_motif", [parts[i] for i in info["left"]], dtype=pl.Object),
+        pl.Series("right_motif", [parts[i] for i in info["right"]], dtype=pl.Object),
+    )
+
+
+__all__ = ["gapped_motif_finder", "motif_pair_finder"]

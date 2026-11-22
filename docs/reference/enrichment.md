@@ -16,6 +16,8 @@ Testing motifs for enrichment, co-occurrence and positional enrichment in a set 
 
 ::: universalmotif.gapped_motif_finder
 
+::: universalmotif.motif_pair_finder
+
 ::: universalmotif.select_motifs
 
 ::: universalmotif.refine_motifs
