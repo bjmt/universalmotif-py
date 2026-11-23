@@ -193,7 +193,8 @@ def select_motifs(
     ms = _motifs_of(motifs)
     names, seqs = _sequence_pairs(sequences)
     min_gains = None
-    if isinstance(min_gain, (int, float)):
+    if np.ndim(min_gain) == 0:
+        min_gain = float(min_gain)
         if not 0 <= min_gain <= 1:
             raise ValueError("min_gain must be between 0 and 1")
     else:

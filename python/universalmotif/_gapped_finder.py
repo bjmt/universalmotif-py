@@ -3,6 +3,7 @@ length between them, and of pairs of motifs that favour a spacing."""
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 
 import numpy as np
@@ -154,7 +155,9 @@ def gapped_motif_finder(
         better but takes several times longer. With ``"auto"``, the
         search runs with exact matches and is run again with mismatches,
         keeping motifs at half of ``stop_pvalue``, only if it finds
-        nothing. Shorter k-mers always match exactly.
+        nothing; together the two report at most half as many false motifs
+        again as one search would. Shorter k-mers always match exactly, so
+        without 6 in ``k`` both ``True`` and ``"auto"`` match exactly.
     mask
         Mask low-complexity regions, such as homopolymers and short tandem
         repeats, with DUST in the sequences and the background before the
@@ -369,14 +372,20 @@ def motif_pair_finder(
         [`match_bkg()`][universalmotif.match_bkg], is far better.
     motifs
         A DNA motif or a list of them to use as parts, before those found.
+        They cannot be gapped; give the parts of a gapped motif as motifs
+        of their own. A motif given that has no sites, or whose sites
+        mostly overlap those of an earlier part, is left out with a
+        warning.
     nmotifs
         The most motifs ``motif_finder()`` adds to the parts, from 0.
     max_gap
         The longest spacer searched, at most 31.
     hit_pvalue
-        The P-value a site of a part must reach. Parts too short to reach
-        it are scanned at sixteen times the P-value of a perfect site of
-        their width, up to 1e-3.
+        The P-value a site of a part must reach, in (0, 1). Each part is
+        scanned at this or at sixteen times the P-value of a perfect site of
+        its width, capped at 1e-3, whichever is larger, so that parts of six
+        to eight letters, whose sites seldom reach 1e-4, still have sites.
+        Parts of four letters or fewer cannot reach 1e-3 and have none.
     train_pvalue
         The P-value a window must reach in the sequences it is chosen in to
         be tested in those held out.
@@ -389,7 +398,7 @@ def motif_pair_finder(
         The fewest times more pairs than expected a window needs in the
         sequences held out.
     max_window
-        The most spacers a window may span.
+        The most spacers a window may span, at most ``max_gap + 1``.
     holdout
         The share of the sequences and of the background held out, above 0
         and below 0.9.
@@ -426,8 +435,8 @@ def motif_pair_finder(
         - ``consensus``, which shows the spacer as ``[min-max]``.
         - ``left`` and ``right``, the names of the two parts, and
           ``left_strand`` and ``right_strand``, their strands. Pairs are
-          read so that the first part is on the plus strand where the
-          arrangement allows. Strands are those of each part as given or
+          read with as few parts on the minus strand as the arrangement
+          allows, and then with the first part on the plus strand. Strands are those of each part as given or
           as found, and ``motif_finder()`` may give a motif on either
           strand, so the arrangement of two parts found de novo depends on
           how each happens to be written. The sites of a part that reads
@@ -443,9 +452,9 @@ def motif_pair_finder(
         - ``pvalue`` and ``log10_pvalue``, the corrected P-value from the
           sequences held out.
         - ``repeat``, described above.
-        - ``motif``, the pair as one motif, gapped over the window (a
-          spacer of 0 is written as a gap of 0 to 1), or ungapped when its
-          parts sit side by side. ``left_motif`` and ``right_motif`` are
+        - ``motif``, the pair as one motif, gapped from ``min_gap`` to
+          ``max_gap``, or ungapped when the window holds only a spacer of
+          0. ``left_motif`` and ``right_motif`` are
           the parts, as PPMs.
 
     Examples
@@ -463,7 +472,7 @@ def motif_pair_finder(
     >>> seqs[2::6] = um.implant_motifs(um.create_motif("TTGACT"), seqs[2::6], seed=3)
     >>> found = um.motif_pair_finder(seqs, motifs=um.create_motif("TGTCGG", name="ARF"), seed=1)
     >>> found.select("consensus", "left").row(0)
-    ('TGTCGG[6-6]GTTGACT', 'ARF')
+    ('TGTCGG[6-6]ATTGACT', 'ARF')
     """
     if _progress.wanted(progress):
         args = {**locals(), "progress": False}
@@ -476,6 +485,11 @@ def motif_pair_finder(
         max_window, holdout, merge_overlap, mask, shuffle_k, bkg_shuffles, _seed(seed), _nthreads(nthreads),
     )
     names = [m.name for m in parts]
+    left_out = [m.name for m, i in zip(given, info["given"]) if i is None]
+    if left_out:
+        warnings.warn(f"motifs left out, with no sites at the scan cutoff or with sites that mostly overlap those "
+                      f"of an earlier part: {', '.join(left_out[:5])}{', ...' if len(left_out) > 5 else ''}",
+                      stacklevel=2)
     cols = {
         "name": [m.name for m in found],
         "consensus": [_consensus(m) for m in found],

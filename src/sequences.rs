@@ -386,6 +386,7 @@ fn _motif_pair_finder<'py>(
         p.iter().map(|x| x.log10_pvalue).collect::<Vec<_>>(),
     )?;
     d.set_item("repeat", p.iter().map(|x| x.repeat).collect::<Vec<_>>())?;
+    d.set_item("given", res.given.clone())?;
     let pairs = res
         .pairs
         .iter()

@@ -1042,6 +1042,10 @@ def _read_scores(a, path: str, sequences: str | None = None) -> _Scores:
             seq_arg, fasta_names = list(fasta.values()), list(fasta)
         else:
             seq_arg = sequences
+    elif getattr(a, "genome", None) and _stem_suffix(path) in (".h5", ".hdf5"):
+        # ENCODE's files of all regions hold no sequences; they are read
+        # from the genome at the file's coordinates.
+        seq_arg = open_genome(a.genome)
     # Large files are read a chunk of sequences at a time, each cut to
     # --centre before the next is read, so that the whole file is never held.
     n = _n_regions(path)
@@ -1099,7 +1103,7 @@ def _n_regions(path: str) -> int | None:
         except ImportError:
             pass
         with h5py.File(path, "r") as f:
-            for key in ("hyp_scores", "shap/seq"):
+            for key in ("hyp_scores", "shap/seq", "attributions/shap"):
                 if key in f:
                     return int(f[key].shape[0])
         return None
@@ -1796,7 +1800,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                         "0 tests them where they were found (default: 0.3)")
     p.add_argument("--mismatch", choices=["off", "on", "auto"], default="auto",
                    help="count pairs of 6-mers with up to one mismatch, for rarer motifs; auto "
-                        "does so only when the exact search finds nothing (default: auto)")
+                        "does so only when the exact search finds nothing, and neither does anything "
+                        "without 6 among -k (default: auto)")
     p.add_argument("--no-mask", dest="mask", action="store_false",
                    help="leave low-complexity regions unmasked")
     p.add_argument("--no-rc", dest="rc", action="store_false", help="search only the forward strand")
@@ -1962,7 +1967,8 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                                       "the ranges given with -g and -r")
         p.add_argument("-s", "--sequences",
                        help="the one-hot sequences of numpy scores (.npy or .npz), or a FASTA file of them")
-        p.add_argument("-g", "--genome", help="genome to read the ranges of a bigWig track from, with -r")
+        p.add_argument("-g", "--genome", help="genome to read the ranges of a bigWig track from, with -r, or "
+                                              "the sequences of an HDF5 file of all regions, which holds none")
         p.add_argument("-r", "--ranges", help="BED file or table of ranges, all of one width, for a "
                                               "bigWig track")
         p.add_argument("--regions", help="narrowPeak file of the regions of a chromBPNet scores file, if "
@@ -2003,6 +2009,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
                    help="times to call seqlets, each after the first with those found so far set to 0 "
                         "(default: 1)")
     _seed_arg(p)
+    _progress_arg(p)
     _threads_arg(p)
 
     p = command("contrib-motifs", cmd_contrib_motifs, "find the motifs a model relies on (experimental)",
@@ -2064,6 +2071,7 @@ def build_parser(prog: str = "universalmotif") -> argparse.ArgumentParser:
     p.add_argument("--pattern-similarity", type=float, default=0.8,
                    help="CWM cosine at which motifs are gathered into one pattern (default: 0.8)")
     _seed_arg(p)
+    _progress_arg(p)
     _threads_arg(p)
 
     p = command("scan-contrib", cmd_scan_contrib, "find where a model used each motif",

@@ -451,3 +451,6 @@ def test_spacing_periods_against_a_background():
     assert (top["period"], top["phase"]) == (7, 2) and top["pvalue"] < 1e-3
     with pytest.raises(ValueError, match="background must have"):
         um.spacing_periods(shared, background=bkg.drop("observed"))
+    split = bkg.with_columns(arrangement=pl.lit("tandem"))
+    with pytest.raises(ValueError, match="no counts for the arrangements"):
+        um.spacing_periods(shared, background=split)

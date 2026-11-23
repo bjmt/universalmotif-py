@@ -1,3 +1,4 @@
+import numpy as np
 import polars as pl
 import pytest
 import universalmotif as um
@@ -149,3 +150,13 @@ def test_refine_gapped_motifs_part_by_part():
     assert refined.isgapped and refined.gaploc == [9]
     assert (refined.mingap, refined.maxgap) == ([3], [6])
     assert refined.consensus == "GCTGACTCAAGATAAGCG"
+
+
+def test_min_gain_takes_numpy_scalars():
+    ms = um.example_motifs()[:4]
+    seqs = um.example_sequences("targets")
+    want = um.select_motifs(ms, seqs, min_gain=0.01)
+    for g in (np.float32(0.01), np.float64(0.01)):
+        got = um.select_motifs(ms, seqs, min_gain=g)
+        assert got["kept"].to_list() == want["kept"].to_list()
+    assert um.select_motifs(ms, seqs, min_gain=np.int64(0)).height == want.height

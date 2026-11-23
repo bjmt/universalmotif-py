@@ -140,6 +140,12 @@ def test_contribution_test_drops_motifs_of_composition_alone():
     # Gains count only the motifs left after the test.
     assert tested.motifs["cumulative"].max() == pytest.approx(tested.motifs["gain"].sum())
     assert len(tested) < len(loose)
+    # Missing scores count as 0 rather than voiding every match after them.
+    gaps = scores.copy()
+    gaps[1::40, 0] = np.nan
+    gaps[3::2, 110:] = np.nan
+    with_gaps = um.contribution_motifs(gaps, seqs, seed=1, gapped=False, hits=False)
+    assert with_gaps.motifs["consensus"][0] == "TGACTCA"
     with pytest.raises(ValueError, match="contribution_test"):
         um.contribution_motifs(scores, seqs, contribution_test=0)
 
@@ -177,6 +183,26 @@ def test_errors(model):
         um.contribution_motifs(model["scores"])
     with pytest.raises(ValueError, match="sequence_i"):
         um.contribution_motifs(model["scores"], model["seqs"], seqlets=pl.DataFrame({"start": [1], "end": [5]}))
+    for bad, match in [({"min_gain": 1.5}, "min_gain must"), ({"seqlet_passes": 0}, "seqlet_passes"),
+                       ({"max_seqlets": 100.0}, "max_seqlets")]:
+        with pytest.raises(ValueError, match=match):
+            um.contribution_motifs(model["scores"], model["seqs"], **bad)
+
+
+def test_motifs_shuffling_cannot_change_are_left_untested():
+    """A motif with one informative column has no shuffled copies that
+    differ from it, so the contribution test cannot judge it."""
+    from universalmotif._contribution_motifs import _contribution_test
+
+    rng = np.random.default_rng(2)
+    seqs = ["".join(rng.choice(list("ACGT"), 100)) for _ in range(400)]
+    scores = rng.normal(0, 0.005, (400, 100))
+    m = um.create_motif(np.array([[0.4, 0.2, 0.2, 0.2], [0.97, 0.01, 0.01, 0.01], [0.4, 0.2, 0.2, 0.2],
+                                  [0.4, 0.2, 0.2, 0.2], [0.4, 0.2, 0.2, 0.2], [0.4, 0.2, 0.2, 0.2]]).T,
+                        type="PPM", name="one", alphabet="DNA")
+    failed = _contribution_test([{"name": "one", "motif": m}], seqs, scores, "+", 0.01,
+                                np.random.default_rng(1), 1)
+    assert "one" not in failed
 
 
 def test_null_scores_set_the_seqlet_cut(model):

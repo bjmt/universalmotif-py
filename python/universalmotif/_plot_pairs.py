@@ -488,7 +488,10 @@ def spacing_periods(
     motifs without a period passed by chance.
 
     Each period is tested separately, so take the number of periods and
-    arrangements into account when reading the P-values. The evidence grows
+    arrangements into account when reading the P-values. A favoured run of
+    several neighbouring spacers, as many gapped motifs have, raises the
+    power at the longest periods a little, so treat a period of 10 to 12
+    found beside such a run with care. The evidence grows
     with the number of times a period repeats within the distances counted,
     so a wide ``max_distance`` in ``pair_spacings()`` helps.
 
@@ -561,6 +564,10 @@ def spacing_periods(
             background = background.with_columns(pl.lit("all").alias("arrangement"))
         bkg = background.select(pl.col("arrangement").cast(pl.String), pl.col("distance").cast(pl.Int64),
                                 pl.col("observed").cast(pl.Float64).alias("_bkg"))
+        missing = set(spacings["arrangement"].cast(pl.String).unique()) - set(bkg["arrangement"].unique())
+        if missing:
+            raise ValueError(f"background has no counts for the arrangements {sorted(missing)}; count both "
+                             "with the same arrangements setting of pair_spacings()")
         spacings = (spacings.with_columns(pl.col("arrangement").cast(pl.String), pl.col("distance").cast(pl.Int64))
                     .join(bkg, on=["arrangement", "distance"], how="left")
                     .with_columns(pl.col("_bkg").fill_null(0.0).alias("expected")).drop("_bkg"))

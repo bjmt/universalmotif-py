@@ -3,6 +3,7 @@ discovery in them, refinement and selection, in one call."""
 
 from __future__ import annotations
 
+import numbers
 import os
 import re
 import warnings
@@ -477,7 +478,10 @@ def contribution_motifs(
        for their composition alone, such as runs of GCs in GC-rich regions,
        and motifs from idealized seqlets that the sequences do not bear
        out: hypothetical scores can spell a factor's motif where the
-       letters there are something else.
+       letters there are something else. Motifs with fewer than 20
+       matches, or fewer than three copies with 20 matches that differ
+       from them, cannot be tested and are kept, so the test does little
+       on small inputs. Missing scores count as 0.
     9. With ``hits``,
        [`scan_contributions()`][universalmotif.scan_contributions] matches
        the motifs' CWMs against all the scores. Each motif's thresholds
@@ -725,6 +729,12 @@ def contribution_motifs(
         return _progress.run(lambda: contribution_motifs(**args))
     if sign not in ("positive", "negative", "both"):
         raise ValueError("sign must be 'positive', 'negative' or 'both'")
+    if not 0 <= min_gain <= 1:
+        raise ValueError("min_gain must be between 0 and 1")
+    if isinstance(seqlet_passes, bool) or not isinstance(seqlet_passes, numbers.Integral) or seqlet_passes < 1:
+        raise ValueError("seqlet_passes must be a whole number, 1 or more")
+    if max_seqlets is not None and (isinstance(max_seqlets, bool) or not isinstance(max_seqlets, numbers.Integral)):
+        raise ValueError("max_seqlets must be a whole number, or None")
     if later_min_gain is None:
         later_min_gain = 0.8 * min_gain
     if not 0 <= later_min_gain <= 1:
@@ -768,6 +778,8 @@ def contribution_motifs(
         if "sign" not in seqlets.columns and sign == "both":
             raise ValueError("seqlets without a 'sign' column can be searched for one sign only; give "
                              "sign='positive' or 'negative', or add a sign column of '+' and '-'")
+    # The background avoids every seqlet, those left out of the sample too.
+    all_seqlets = seqlets
     if max_seqlets is not None:
         seqlets = _sample_seqlets(seqlets, max_seqlets, seed)
     signs = {"positive": ["+"], "negative": ["-"], "both": ["+", "-"]}[sign]
@@ -776,6 +788,7 @@ def contribution_motifs(
     reach_by_motif: dict[str, np.ndarray] = {}
     for sg in signs:
         sub = seqlets.filter(pl.col("sign") == sg) if "sign" in seqlets.columns else seqlets
+        avoid = all_seqlets.filter(pl.col("sign") == sg) if "sign" in all_seqlets.columns else all_seqlets
         sub_ids = (seqlets.with_row_index("_id").filter(pl.col("sign") == sg)["_id"].to_numpy()
                    if "sign" in seqlets.columns else np.arange(seqlets.height))
         label = "pos" if sg == "+" else "neg"
@@ -802,7 +815,7 @@ def contribution_motifs(
                 st.skip(2 * (rounds - round_))
                 break
             st.next(("searching seqlets" if not round_ else "searching the seqlets left") + of)
-            found += _search(part, sub, sources, lengths, label, "r" * round_, min_width, max_width, nmotifs,
+            found += _search(part, avoid, sources, lengths, label, "r" * round_, min_width, max_width, nmotifs,
                              stability, min_stability, rng, nthreads)
             st.next("choosing motifs" + of)
             kept, cand_hits = _choose(found, seqs, sites, observed, sg, refine, (min_gain, later_min_gain),
@@ -812,8 +825,8 @@ def contribution_motifs(
         if gapped:
             st.next("finding composites" + of)
             si = sub["sequence_i"].to_numpy().astype(np.int64)
-            kept += _gapped_pass(seqs, sub, sites, si, lengths, observed, reached, label, sg, max_gap, min_gain,
-                                 max_similarity, refine, rng, nthreads)
+            kept += _gapped_pass(seqs, sub, avoid, sites, si, lengths, observed, reached, label, sg, max_gap,
+                                 min_gain, max_similarity, refine, rng, nthreads)
         if contribution_test is not None:
             st.next("testing contributions" + of)
         if kept and contribution_test is not None:
@@ -876,16 +889,16 @@ def contribution_motifs(
     return ContributionMotifs(table, seqlets, found_hits, reach_by_motif)
 
 
-def _search(part, sub, sources, lengths, label, prefix, min_width, max_width, nmotifs, stability, min_stability,
+def _search(part, avoid, sources, lengths, label, prefix, min_width, max_width, nmotifs, stability, min_stability,
             rng, nthreads) -> list[tuple]:
     """motif_finder() on the seqlets of ``part`` in each source of letters,
-    against windows away from every seqlet of ``sub``."""
+    against windows away from every seqlet of ``avoid``."""
     si = part["sequence_i"].to_numpy().astype(np.int64)
     s, e = _widen(part["start"].to_numpy(), part["end"].to_numpy(), lengths[si])
     found = []
     for source, letters in sources.items():
         targets = [letters[i][a:b] for i, a, b in zip(si, s, e)]
-        back = _background(letters, sub, e - s, np.random.default_rng(rng.integers(2**63)))
+        back = _background(letters, avoid, e - s, np.random.default_rng(rng.integers(2**63)))
         # Sequences with no room beside their seqlets, such as short oligos, fall back to shuffles.
         res = motif_finder(targets, back or None, min_width=min_width, max_width=max_width, nmotifs=nmotifs, rc=True,
                            seed=int(rng.integers(2**63)), nthreads=nthreads, stability=stability, progress=False)
@@ -942,6 +955,8 @@ _GAPPED_MIN_FRACTION = 0.002
 # Windows sampled for the contribution test, shuffled copies of each motif it
 # compares with, and the fewest matches a motif and each copy need for it.
 _TEST_WINDOWS, _TEST_SHUFFLES, _TEST_MIN_HITS = 30000, 10, 20
+# Windows whose cumulative scores the test holds at once.
+_TEST_CHUNK = 2000
 # How many times the copies' contribution a motif's must be, at the least.
 _TEST_MIN_RATIO = 1.1
 
@@ -1000,15 +1015,27 @@ def _contribution_test(rows: list[dict], seqs: list[str], observed: np.ndarray, 
     n = len(seqs)
     take = np.sort(rng.choice(n, min(n, _TEST_WINDOWS), replace=False))
     windows = [seqs[i] for i in take]
-    scores = observed[take] * (1 if sg == "+" else -1)
-    csum = np.concatenate([np.zeros((len(take), 1)), np.cumsum(scores, axis=1)], axis=1)
-    motifs = []
+    motifs, alike = [], []
     for r in rows:
-        motifs += [r["motif"], *_shuffled_copies(r["motif"], _TEST_SHUFFLES, rng)]
+        copies = _shuffled_copies(r["motif"], _TEST_SHUFFLES, rng)
+        motifs += [r["motif"], *copies]
+        alike.append(sum(np.array_equal(np.asarray(c.matrix), np.asarray(r["motif"].matrix)) for c in copies))
     hits = _scan_strings(motifs, windows, 1e-4, nthreads, reachable=True)
     i, a, b = hits["sequence_i"].to_numpy(), hits["start"].to_numpy(), hits["end"].to_numpy()
-    b = np.minimum(b, csum.shape[1] - 1)
-    value = (csum[i, b] - csum[i, a]) / np.maximum(b - a, 1)
+    # Mean scores at the matches, from cumulative sums over a few thousand
+    # windows at a time; missing scores count as 0.
+    value = np.empty(len(i))
+    order = np.argsort(i, kind="stable")
+    edges = np.searchsorted(i[order], np.arange(0, len(take) + _TEST_CHUNK, _TEST_CHUNK))
+    sgn = 1.0 if sg == "+" else -1.0
+    for c, lo in enumerate(range(0, len(take), _TEST_CHUNK)):
+        rows_c = take[lo:lo + _TEST_CHUNK]
+        sc = np.nan_to_num(np.asarray(observed[rows_c], dtype=np.float64)) * sgn
+        csum = np.concatenate([np.zeros((len(rows_c), 1)), np.cumsum(sc, axis=1)], axis=1)
+        sel = order[edges[c]:edges[c + 1]]
+        ii, aa = i[sel] - lo, a[sel]
+        bb = np.minimum(b[sel], csum.shape[1] - 1)
+        value[sel] = (csum[ii, bb] - csum[ii, aa]) / np.maximum(bb - aa, 1)
     which = hits["motif_i"].to_numpy()
     order = np.argsort(which, kind="stable")
     bounds = np.searchsorted(which[order], np.arange(len(motifs) + 1))
@@ -1020,7 +1047,9 @@ def _contribution_test(rows: list[dict], seqs: list[str], observed: np.ndarray, 
     for k in range(len(rows)):
         mine = per[k * step]
         means = [c.mean() for c in per[k * step + 1:(k + 1) * step] if len(c) >= _TEST_MIN_HITS]
-        if len(mine) < _TEST_MIN_HITS or len(means) < 3:
+        # A motif whose columns cannot be told apart by shuffling has no
+        # controls, and is left untested.
+        if len(mine) < _TEST_MIN_HITS or len(means) < 3 or _TEST_SHUFFLES - alike[k] < 3:
             continue
         tested[k] = True
         ctrl = float(np.median(means))
@@ -1241,8 +1270,8 @@ def _narrow(m: Motif, hits: pl.DataFrame) -> Motif | None:
     return add_gap(m, gaploc=m.gaploc, mingap=lo, maxgap=hi).replace(name=m.name)
 
 
-def _gapped_pass(seqs, sub, sites, si, lengths, observed, reached, label, sg, max_gap, min_gain, max_similarity,
-                 refine, rng, nthreads) -> list[dict]:
+def _gapped_pass(seqs, sub, avoid, sites, si, lengths, observed, reached, label, sg, max_gap, min_gain,
+                 max_similarity, refine, rng, nthreads) -> list[dict]:
     """Composite motifs, of two parts at least _MIN_SPACER apart, from
     gapped_motif_finder() on the seqlets widened to fit them. Each must add
     at least ``min_gain`` of the seqlets to those reached already. With
@@ -1253,7 +1282,7 @@ def _gapped_pass(seqs, sub, sites, si, lengths, observed, reached, label, sg, ma
 
     s, e = _widen(sub["start"].to_numpy(), sub["end"].to_numpy(), lengths[si], _MIN_GAPPED_TARGET)
     targets = [seqs[i][a:b] for i, a, b in zip(si, s, e)]
-    bkg = _background(seqs, sub, e - s, np.random.default_rng(rng.integers(2**63)))
+    bkg = _background(seqs, avoid, e - s, np.random.default_rng(rng.integers(2**63)))
     res = gapped_motif_finder(targets, bkg or None, max_gap=max_gap, nmotifs=10, mismatch=False,
                               min_fraction=_GAPPED_MIN_FRACTION, seed=int(rng.integers(2**63)), nthreads=nthreads,
                               progress=False)

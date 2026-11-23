@@ -51,7 +51,8 @@ New:
   so far set to 0.
 - `contrib-motifs` takes `--seqlet-passes`, `--max-seqlets`,
   `--later-min-gain` and `--contribution-test`, and `seqlets` takes
-  `--passes`.
+  `--passes`; both take `--progress`, and read the sequences of ENCODE's
+  all-regions files from a genome given with `-g`.
 
 Other changes:
 

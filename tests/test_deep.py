@@ -288,6 +288,13 @@ def test_read_contributions_encode_all_regions(tmp_path):
     assert strings.sequences == [seqs[1]] and strings.names == ["chr2:0-10"]
     with pytest.raises(ValueError, match="holds no sequences"):
         um.read_contributions(path)
+    # The command line reads the sequences from a genome given with -g.
+    from universalmotif._cli import main
+
+    fa = tmp_path / "genome.fa"
+    um.write_fasta(genome, fa)
+    assert main(["seqlets", str(path), "-g", str(fa), "-o", str(tmp_path / "seqlets.tsv")]) == 0
+    assert (tmp_path / "seqlets.tsv").read_text().startswith("sequence")
 
 
 def test_read_contributions_numpy(tmp_path):

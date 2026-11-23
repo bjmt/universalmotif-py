@@ -142,3 +142,12 @@ def test_find_pairs_command(pair_planted, tmp_path):
     pairs = um.read_meme(tmp_path / "t.meme")
     assert len(pairs) == table.height and pairs[0].isgapped
     assert pairs[0].mingap[0] == table["min_gap"][0]
+
+
+def test_motif_pair_finder_warns_of_motifs_left_out(pair_planted):
+    with pytest.warns(UserWarning, match="left out.*GATA"):
+        um.motif_pair_finder(pair_planted, motifs=[um.create_motif("TGTCGG", name="ARF"),
+                                                   um.create_motif("GATA", name="GATA")], seed=1, nmotifs=0)
+    gapped = um.add_gap(um.create_motif("TGTCGGTTGACT"), gaploc=6, mingap=1, maxgap=2)
+    with pytest.raises(ValueError, match="gapped"):
+        um.motif_pair_finder(pair_planted, motifs=gapped)

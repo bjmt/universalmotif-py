@@ -201,12 +201,15 @@ def call_seqlets(
     null_values, null_lengths = (None, None) if null_scores is None else _observed(null_scores, null_sequences)[:2]
     seed = _seed(seed)
     out = None
-    for _ in range(passes):
+    if passes > 1:
+        # Later passes set the seqlets found so far to 0, in a copy of the
+        # scores given.
+        values = np.array(values, copy=True)
+    for k in range(passes):
         found = _core._call_seqlets(values, lengths, null_values, null_lengths, threshold, min_len, max_len, flank,
                                     fdr, sign, n_bins, seed, _nthreads(nthreads))
-        out = found if out is None else {k: list(out[k]) + list(found[k]) for k in out}
-        if passes > 1:
-            values = np.array(values, copy=True)
+        out = found if out is None else {key: list(out[key]) + list(found[key]) for key in out}
+        if k + 1 < passes:
             for i, a, b in zip(found["sequence_i"], found["start"], found["end"]):
                 values[i, a:b] = 0
     seq_i = np.asarray(out["sequence_i"], dtype=np.int64)
