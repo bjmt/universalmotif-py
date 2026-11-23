@@ -37,8 +37,9 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
   convert between count, probability, weight, information content and
   contribution matrices; trim, round, merge, reverse complement and filter
   them.
-- **Files:** MEME, JASPAR, HOMER, TRANSFAC, CIS-BP, UniPROBE and plain
-  matrices, plus gzipped or plain FASTA for sequences.
+- **Files:** MEME, JASPAR, HOMER, TRANSFAC, CIS-BP, UniPROBE, plain
+  matrices and the R package's own format, plus gzipped or plain FASTA for
+  sequences.
 - **Databases:** motifs fetched from JASPAR, HOCOMOCO and CIS-BP and kept
   in a local cache, and conversion to and from Biopython.
 - **Scanning:** exact P-value thresholds, both strands, any alphabet and
@@ -60,8 +61,8 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
   and trees.
 - **Statistics:** enrichment, co-occurrence, positional enrichment,
   proximity to genomic anchors and composition-matched backgrounds.
-  *De novo* motif discovery, of gapped motifs too, with refinement and
-  selection of the motifs found.
+  *De novo* motif discovery, of gapped motifs and of pairs of motifs that
+  favour a spacing too, with refinement and selection of the motifs found.
 - **Sequences:** shuffling that keeps k-mer counts, random sequences, k-mer
   backgrounds, complexity, masking and sliding windows.
 - **Command line:** `umotif` runs the main functions on files, for shell
@@ -69,6 +70,60 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
 - **Plots:** sequence logos, motif trees, and plots of the results above.
   Motifs are shown with their logos in Jupyter, SVG logos can go in
   reports, and logos can be exported to logomaker.
+
+## Which function for which task
+
+The functions most tasks start from, and a guide that covers each task:
+
+### Motifs
+
+| Task | Functions | Guide |
+|---|---|---|
+| Make a motif from sites, a consensus or a matrix | [`create_motif()`][universalmotif.create_motif] | [Working with motifs](guides/working-with-motifs.ipynb) |
+| Read or write motif files | [`read_meme()`][universalmotif.read_meme], [`write_meme()`][universalmotif.write_meme] and the other readers and writers | [Working with motifs](guides/working-with-motifs.ipynb) |
+| Get motifs from JASPAR, HOCOMOCO or CIS-BP | [`jaspar()`][universalmotif.databases.jaspar], [`hocomoco()`][universalmotif.databases.hocomoco], [`cisbp()`][universalmotif.databases.cisbp] | [Building a motif library](guides/building-a-library.ipynb) |
+| Convert between counts, probabilities and weights | [`convert_type()`][universalmotif.convert_type] | [Sequence motifs](guides/motif-basics.ipynb) |
+| Draw logos | [`view_motifs()`][universalmotif.view_motifs], [`view_logo()`][universalmotif.view_logo] | [Getting started](guides/getting-started.ipynb) |
+| Compare motifs, name them after a database, or merge similar ones | [`compare_motifs()`][universalmotif.compare_motifs], [`name_motifs()`][universalmotif.name_motifs], [`merge_similar()`][universalmotif.merge_similar], [`motif_tree()`][universalmotif.motif_tree] | [Comparing motifs and P-values](guides/comparison-and-pvalues.ipynb) |
+
+### Sequences
+
+| Task | Functions | Guide |
+|---|---|---|
+| Read FASTA files and genomes | [`read_fasta()`][universalmotif.read_fasta], [`Genome`][universalmotif.Genome] | [Working with sequences](guides/sequences.ipynb) |
+| Take the sequences of peaks from a genome | [`extract_ranges()`][universalmotif.extract_ranges], [`resize_ranges()`][universalmotif.resize_ranges] | [A ChIP-seq workflow](guides/chipseq-workflow.ipynb) |
+| Make a background matched for composition | [`match_bkg()`][universalmotif.match_bkg], [`shuffle_sequences()`][universalmotif.shuffle_sequences] | [Choosing a background](guides/background-models.ipynb) |
+
+### Scanning and testing
+
+| Task | Functions | Guide |
+|---|---|---|
+| Find the sites of motifs in sequences or a genome | [`scan_sequences()`][universalmotif.scan_sequences] | [Scanning, enrichment and discovery](guides/scanning-and-enrichment.ipynb), [Scanning large genomes](guides/large-genomes.ipynb) |
+| Choose a score or P-value cutoff | [`motif_pvalue()`][universalmotif.motif_pvalue] | [Comparing motifs and P-values](guides/comparison-and-pvalues.ipynb) |
+| Test which motifs are enriched in a set of sequences | [`enrich_motifs()`][universalmotif.enrich_motifs] | [Scanning, enrichment and discovery](guides/scanning-and-enrichment.ipynb) |
+| Test where in peaks motifs sit, which occur together, or how near anchors such as promoters | [`motif_peaks()`][universalmotif.motif_peaks], [`motif_coocc()`][universalmotif.motif_coocc], [`motif_proximity()`][universalmotif.motif_proximity] | [A ChIP-seq workflow](guides/chipseq-workflow.ipynb), [Scanning large genomes](guides/large-genomes.ipynb) |
+| Look at the spacing of two motifs | [`pair_spacings()`][universalmotif.pair_spacings], [`spacing_periods()`][universalmotif.spacing_periods] | [Gapped motifs](guides/gapped-motifs.ipynb) |
+| Score how variants change motif sites | [`variant_motif_effects()`][universalmotif.variant_motif_effects] | [Variant analysis](guides/variants.ipynb) |
+| Make a sparse matrix of motif matches for single-cell ATAC | [`match_motifs()`][universalmotif.match_motifs] | [Scanning, enrichment and discovery](guides/scanning-and-enrichment.ipynb) |
+
+### Finding new motifs
+
+| Task | Functions | Guide |
+|---|---|---|
+| Find motifs enriched in sequences | [`motif_finder()`][universalmotif.motif_finder] | [Scanning, enrichment and discovery](guides/scanning-and-enrichment.ipynb) |
+| Find motifs of two parts with a spacer of varying length (experimental) | [`gapped_motif_finder()`][universalmotif.gapped_motif_finder] | [Gapped motifs](guides/gapped-motifs.ipynb) |
+| Find pairs of motifs that favour a spacing (experimental) | [`motif_pair_finder()`][universalmotif.motif_pair_finder] | [Gapped motifs](guides/gapped-motifs.ipynb) |
+| Choose and refine the motifs found | [`select_motifs()`][universalmotif.select_motifs], [`refine_motifs()`][universalmotif.refine_motifs] | [A ChIP-seq workflow](guides/chipseq-workflow.ipynb), [Motifs from contribution scores](guides/contribution-motifs.ipynb) |
+
+### Sequence models
+
+| Task | Functions | Guide |
+|---|---|---|
+| Read a model's contribution scores | [`read_contributions()`][universalmotif.read_contributions] | [Motifs and deep learning](guides/deep-learning.ipynb) |
+| Find the motifs a model relies on | [`contribution_motifs()`][universalmotif.contribution_motifs] | [Motifs from contribution scores](guides/contribution-motifs.ipynb) |
+| Read and draw TF-MoDISco results | [`read_modisco()`][universalmotif.read_modisco], [`plot_modisco()`][universalmotif.plot_modisco] | [TF-MoDISco results](guides/tfmodisco.ipynb) |
+| Find where a model used each motif | [`scan_contributions()`][universalmotif.scan_contributions], [`hit_contributions()`][universalmotif.hit_contributions] | [TF-MoDISco results](guides/tfmodisco.ipynb), [Motifs from contribution scores](guides/contribution-motifs.ipynb) |
+| Make inputs for a model, and insert sites or shuffle regions to question it | [`one_hot()`][universalmotif.one_hot], [`insert_sites()`][universalmotif.insert_sites], [`shuffle_region()`][universalmotif.shuffle_region], [`mutagenesis()`][universalmotif.mutagenesis] | [Experiments on a model](guides/model-experiments.ipynb) |
 
 ## Where to go next
 
