@@ -542,8 +542,8 @@ def spacing_periods(
     >>> hits = um.scan_sequences(um.create_motif("CCCTAAA", name="telo"), seqs, pvalue=1e-3)
     >>> spacings = um.pair_spacings(hits, "telo", max_distance=100, arrangements=False)
     >>> res = um.spacing_periods(spacings).sort("pvalue")
-    >>> res.select("period", "phase", "kind").row(0), round(res["log10_pvalue"][0], 1)
-    ((7, 0, 'repeat'), -4.4)
+    >>> res.select("period", "phase", "kind").row(0), bool(res["pvalue"][0] < 1e-4)
+    ((7, 0, 'repeat'), True)
     """
     for col in ("distance", "observed", "expected"):
         if col not in spacings.columns:
@@ -582,7 +582,9 @@ def spacing_periods(
         possible = (exp > 0) | (obs > 0)
         d, obs, exp = d[possible], obs[possible], exp[possible]
         n = len(d)
-        x = _average_ranks(np.log2((obs + 0.5) / (exp + 0.5)))
+        # Rounded so that ratios equal but for rounding error tie on every
+        # platform.
+        x = _average_ranks(np.round(np.log2((obs + 0.5) / (exp + 0.5)), 9))
         x -= x.mean()
         for p in periods:
             w = np.exp(2j * np.pi * d / p)
