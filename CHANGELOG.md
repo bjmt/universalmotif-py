@@ -61,6 +61,9 @@ Other changes:
   `gapped_motif_finder()`, `scan_sequences()`, `scan_contributions()` and
   motif selection are each faster, and selection reuses hits it already
   has.
+- `gapped_motif_finder()` counts pairs with a mismatch about a third
+  faster, so `mismatch="auto"` costs less when the first search finds
+  nothing.
 - The progress bar of `contribution_motifs()` names the step under way,
   as in `step 3/9, choosing motifs`, rather than only the calls within it.
 
