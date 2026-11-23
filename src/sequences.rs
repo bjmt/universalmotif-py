@@ -367,7 +367,9 @@ fn _motif_pair_finder<'py>(
     )?;
     d.set_item(
         "right_strand",
-        p.iter().map(|x| x.right_strand.as_str()).collect::<Vec<_>>(),
+        p.iter()
+            .map(|x| x.right_strand.as_str())
+            .collect::<Vec<_>>(),
     )?;
     d.set_item(
         "arrangement",
@@ -384,7 +386,11 @@ fn _motif_pair_finder<'py>(
         p.iter().map(|x| x.log10_pvalue).collect::<Vec<_>>(),
     )?;
     d.set_item("repeat", p.iter().map(|x| x.repeat).collect::<Vec<_>>())?;
-    let pairs = res.pairs.iter().map(|x| PyMotif::from(x.motif.clone())).collect();
+    let pairs = res
+        .pairs
+        .iter()
+        .map(|x| PyMotif::from(x.motif.clone()))
+        .collect();
     Ok((res.parts.into_iter().map(PyMotif::from).collect(), pairs, d))
 }
 
