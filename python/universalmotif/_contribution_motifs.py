@@ -478,10 +478,12 @@ def contribution_motifs(
        for their composition alone, such as runs of GCs in GC-rich regions,
        and motifs from idealized seqlets that the sequences do not bear
        out: hypothetical scores can spell a factor's motif where the
-       letters there are something else. Motifs with fewer than 20
-       matches, or fewer than three copies with 20 matches that differ
-       from them, cannot be tested and are kept, so the test does little
-       on small inputs. Missing scores count as 0.
+       letters there are something else. Motifs whose letters no shuffle
+       can reorder, such as runs of one letter, have only their composition
+       to show and are left out too. Motifs with fewer than 20 matches, or
+       fewer than three copies with 20 matches, cannot be tested and are
+       kept, so the test does little on small inputs. Missing scores count
+       as 0.
     9. With ``hits``,
        [`scan_contributions()`][universalmotif.scan_contributions] matches
        the motifs' CWMs against all the scores. Each motif's thresholds
@@ -1044,12 +1046,18 @@ def _contribution_test(rows: list[dict], seqs: list[str], observed: np.ndarray, 
     pvalues = np.ones(len(rows))
     tested = np.zeros(len(rows), dtype=bool)
     enough = np.zeros(len(rows), dtype=bool)
+    unordered = set()
     for k in range(len(rows)):
         mine = per[k * step]
+        if len(mine) < _TEST_MIN_HITS:
+            continue
+        # A motif whose letters no shuffle can reorder, such as a run of one
+        # letter, has nothing but its composition to show, so it fails.
+        if _TEST_SHUFFLES - alike[k] < 3:
+            unordered.add(rows[k]["name"])
+            continue
         means = [c.mean() for c in per[k * step + 1:(k + 1) * step] if len(c) >= _TEST_MIN_HITS]
-        # A motif whose columns cannot be told apart by shuffling has no
-        # controls, and is left untested.
-        if len(mine) < _TEST_MIN_HITS or len(means) < 3 or _TEST_SHUFFLES - alike[k] < 3:
+        if len(means) < 3:
             continue
         tested[k] = True
         ctrl = float(np.median(means))
@@ -1058,10 +1066,10 @@ def _contribution_test(rows: list[dict], seqs: list[str], observed: np.ndarray, 
         z = (mine.mean() - ctrl) / (sd / sqrt(len(mine))) if sd > 0 else 0.0
         pvalues[k] = 0.5 * erfc(z / sqrt(2))
     if not tested.any():
-        return set()
+        return unordered
     q = np.ones(len(rows))
     q[tested] = _bh(pvalues[tested])
-    return {rows[k]["name"] for k in range(len(rows)) if tested[k] and (q[k] >= cutoff or not enough[k])}
+    return unordered | {rows[k]["name"] for k in range(len(rows)) if tested[k] and (q[k] >= cutoff or not enough[k])}
 
 
 def _bh(p: np.ndarray) -> np.ndarray:

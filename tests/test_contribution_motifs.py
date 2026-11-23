@@ -189,9 +189,10 @@ def test_errors(model):
             um.contribution_motifs(model["scores"], model["seqs"], **bad)
 
 
-def test_motifs_shuffling_cannot_change_are_left_untested():
+def test_motifs_shuffling_cannot_change_fail():
     """A motif with one informative column has no shuffled copies that
-    differ from it, so the contribution test cannot judge it."""
+    differ from it, so its order cannot be shown to matter and it fails,
+    as a run of one letter does."""
     from universalmotif._contribution_motifs import _contribution_test
 
     rng = np.random.default_rng(2)
@@ -202,7 +203,13 @@ def test_motifs_shuffling_cannot_change_are_left_untested():
                         type="PPM", name="one", alphabet="DNA")
     failed = _contribution_test([{"name": "one", "motif": m}], seqs, scores, "+", 0.01,
                                 np.random.default_rng(1), 1)
-    assert "one" not in failed
+    assert failed == {"one"}
+    run = um.create_motif("AAAAAAA", name="run")
+    seqs = [s[:40] + "AAAAAAA" + s[47:] if i % 2 == 0 else s for i, s in enumerate(seqs)]
+    scores[::2, 40:47] += 0.1
+    failed = _contribution_test([{"name": "run", "motif": run}], seqs, scores, "+", 0.01,
+                                np.random.default_rng(1), 1)
+    assert failed == {"run"}
 
 
 def test_null_scores_set_the_seqlet_cut(model):
