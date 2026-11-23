@@ -1,15 +1,13 @@
----
-hide:
-  - toc
----
-
 # Benchmarks
 
-This page holds two benchmarks: the speed and memory use of this package
-against the [universalmotif](https://bioconductor.org/packages/universalmotif/)
-R package, and [`contribution_motifs()`](#motifs-from-contribution-scores)
-against TF-MoDISco, by evidence for the motifs they find and by time and
-memory.
+This page holds two benchmarks. The first compares the speed and memory use
+of this package with those of the
+[universalmotif](https://bioconductor.org/packages/universalmotif/) R
+package. The second compares
+[`contribution_motifs()`](#motifs-from-contribution-scores) with TF-MoDISco,
+both by the evidence for the motifs they find and by time and memory.
+
+## Against the R package
 
 Both packages were run on the same inputs with matching parameters. The R
 side uses the `_lite` functions where they exist, which run the same
@@ -19,7 +17,7 @@ each motif's comparison with itself out of the correction of its q-values,
 which the R package includes, and so links a few fewer motifs (288 clusters
 to 268).
 
-## Results
+### Results
 
 This package was 5 to 115 times faster, and usually needed less memory.
 Times are medians of five runs, and memory is the peak a task added beyond
@@ -56,7 +54,7 @@ its loaded inputs.
 | Sequence complexity | 100,000 500 bp sequences | 2 | 21.3 s | 0.504 s | 42x | 2,697 MB | 590 MB |
 </div>
 
-## Tasks and inputs
+### Tasks and inputs
 
 | Task | R | Python |
 | --- | --- | --- |
@@ -78,7 +76,7 @@ of the *Arabidopsis thaliana* TAIR10 genome, and the peaks are those of
 [the ChIP-seq guide](guides/chipseq-workflow.ipynb), tested against
 length-matched genomic windows.
 
-## Setup
+### Setup
 
 | | |
 | --- | --- |
@@ -98,6 +96,15 @@ them.
 with TF-MoDISco on the contribution scores of 25 of ENCODE's models: BPNet
 models of 16 single factors, chromBPNet models of ATAC-seq in K562, HepG2
 and GM12878 cells, and ProCapNet models of PRO-cap in six cell lines.
+
+On the same regions, `contribution_motifs()` found more motifs with
+evidence than TF-MoDISco for every kind of model, about twice as many on
+BPNet and on ProCapNet's counts heads, and more motifs without evidence as
+well. ENCODE's own TF-MoDISco runs, on all of each model's regions and up to
+1,000,000 seqlets, found more than it on chromBPNet only. It took a ninth to
+a seventh of TF-MoDISco's time on 30,000 regions, and under a minute at
+every size tried up to 160,000 regions with its default cap on seqlets, with
+less memory at the larger sizes.
 
 ### How each method was run
 
