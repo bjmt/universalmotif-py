@@ -156,13 +156,15 @@ def test_plot_signal_profile(profile_data):
     sm, control = profile_data
     fig = um.plot_signal_profile(sm)
     assert [a.get_title() for a in fig.axes[:4:2]] == ["GATA", "AP1"]
-    assert fig.axes[1].get_ylabel() == "Site, by signal"
+    # No axis or colour bar titles unless asked for.
+    assert [a.get_ylabel() for a in fig.axes] == [""] * len(fig.axes)
     plt.close(fig)
     # A control split by motif, and one shared by every panel.
     fig = um.plot_signal_profile(sm, control=control, groups=["AP1"], max_rows=10, sort_by="score",
-                                 title="ChIP")
+                                 title="ChIP", ylabel="Mean ChIP", heatmap_ylabel="Site, by score",
+                                 legend_title="ChIP")
     assert fig.axes[0].get_title() == "ChIP"
-    assert fig.axes[1].get_ylabel() == "Site, by score"
+    assert [a.get_ylabel() for a in fig.axes] == ["Mean ChIP", "Site, by score", "ChIP"]
     assert fig.axes[1].get_images()[0].get_array().shape == (10, 40)
     # The rows average every site, so the axis runs over all of them.
     assert fig.axes[1].get_ylim() == (30, 0)

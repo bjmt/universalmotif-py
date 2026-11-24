@@ -465,6 +465,9 @@ def plot_signal_profile(
     vmax: float | None = None,
     colours: str | Mapping[str, str] | None = None,
     title: str | None = None,
+    ylabel: str | None = None,
+    heatmap_ylabel: str | None = None,
+    legend_title: str | None = None,
     text_size: float = 9,
     figsize: tuple[float, float] | None = None,
     ax: Axes | None = None,
@@ -538,6 +541,12 @@ def plot_signal_profile(
     title
         The title above the plot. With several groups each panel is also
         named after its group.
+    ylabel, heatmap_ylabel
+        Titles for the y-axes of the mean and of the heatmap, such as
+        ``"Mean ATAC"`` and ``"Sites"``. There are none by default.
+    legend_title
+        A title for the colour bar of the heatmap, such as ``"ATAC"``. There
+        is none by default.
     text_size
         The size of the text, in points.
     figsize
@@ -567,9 +576,9 @@ def plot_signal_profile(
     >>> peak = np.exp(-np.linspace(-3, 3, 40) ** 2)
     >>> sm = um.SignalMatrix(sites, rng.poisson(5 * peak + 1, (50, 40)).astype(float),
     ...                      "chip", 200, 10, "centre")
-    >>> fig = um.plot_signal_profile(sm)
+    >>> fig = um.plot_signal_profile(sm, ylabel="Mean ChIP")
     >>> [a.get_ylabel() for a in fig.axes[:2]]
-    ['Mean chip', 'Site, by signal']
+    ['Mean ChIP', '']
     >>> plt.close(fig)
     """
     from ._hit_contrib import _palette, _relative_ticks
@@ -637,7 +646,6 @@ def plot_signal_profile(
     xlim = (x[0] - half, x[-1] + half)
     where = {"centre": "site centre", "start": "site start", "end": "site end"}[matrix.origin]
     xlabel = f"Position from {where}"
-    ylabel = f"Mean {matrix.track}"
 
     def draw_mean(target, rows, group, label) -> None:
         c = control_of(group)
@@ -680,7 +688,8 @@ def plot_signal_profile(
         ax.axvline(0, color="0.55", linewidth=0.7, linestyle=(0, (1, 2)), zorder=1)
         ax.set_xlim(*xlim)
         ax.set_xlabel(xlabel, fontsize=text_size)
-        ax.set_ylabel(ylabel, fontsize=text_size)
+        if ylabel is not None:
+            ax.set_ylabel(ylabel, fontsize=text_size)
         style(ax)
         if len(found) > 1 or control is not None:
             ax.legend(frameon=False, fontsize=text_size)
@@ -732,7 +741,8 @@ def plot_signal_profile(
         mean_ax = fig.add_subplot(grid[0, j])
         draw_mean(mean_ax, rows, group, label)
         mean_ax.axvline(0, color="0.55", linewidth=0.7, linestyle=(0, (1, 2)), zorder=1)
-        mean_ax.set_ylabel(ylabel if j == 0 else "", fontsize=text_size)
+        if ylabel is not None and j == 0:
+            mean_ax.set_ylabel(ylabel, fontsize=text_size)
         mean_ax.yaxis.set_major_locator(MaxNLocator(nbins=4))
         mean_ax.set_xlim(*xlim)
         style(mean_ax)
@@ -745,8 +755,8 @@ def plot_signal_profile(
                              interpolation="antialiased", interpolation_stage="rgba",
                              extent=(xlim[0], xlim[1], len(rows), 0))
             heat.axvline(0, color="0.25", linewidth=0.6, linestyle=(0, (1, 2)))
-            heat.set_ylabel("Site, by signal" if j == 0 and sort_by is None else
-                            (f"Site, by {sort_by}" if j == 0 else ""), fontsize=text_size)
+            if heatmap_ylabel is not None and j == 0:
+                heat.set_ylabel(heatmap_ylabel, fontsize=text_size)
             heat.yaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
             heat.set_ylim(len(rows), 0)
             style(heat)
@@ -775,7 +785,8 @@ def plot_signal_profile(
         cax = fig.add_axes((pos.x1 + 0.15 / figsize[0], pos.y0, 0.12 / figsize[0],
                             min(pos.height, 1.4 / figsize[1])))
         bar = fig.colorbar(im, cax=cax)
-        bar.set_label(matrix.track or "Signal", fontsize=text_size - 1)
+        if legend_title is not None:
+            bar.set_label(legend_title, fontsize=text_size - 1)
         bar.ax.tick_params(labelsize=text_size - 2)
         bar.outline.set_visible(False)
     return fig
