@@ -520,10 +520,12 @@ def plot_signal_profile(
         their mean signal.
     max_rows
         Draw at most this many rows in each heatmap, or a row for every
-        site with ``None``. With more sites than rows, each row is the mean
-        of a run of sites next to each other in the sorted order, so that
-        every site is shown. This also smooths sparse signal, such as ATAC
-        read base by base, in which most single bases have no reads.
+        site with ``None``. With more sites than this, the sorted sites are
+        split into this many groups of about equal size, in order, and each
+        group is drawn as one row of its average. 2,000 sites drawn in 500
+        rows, for example, give rows of 4 sites each. Every site is then
+        shown, and sparse signal, such as ATAC read base by base in which
+        most bases have no reads, is smoothed.
     vmin, vmax
         The ends of the heatmap's colour scale. By default the scale runs
         from 0 to the 99th percentile of the values drawn, or is centred on
@@ -754,13 +756,8 @@ def plot_signal_profile(
         bottom.set_xticks(ticks)
         bottom.set_xlim(*xlim)
         bottom.set_xlabel(xlabel, fontsize=text_size)
-        count = f"{len(rows):,} sites" if len(rows) != 1 else "1 site"
-        if heatmap and len(shown[j]) < len(rows):
-            count += f", averaged in {len(shown[j]):,} rows"
         heading = label if len(found) > 1 or title is None else title
-        mean_ax.set_title(heading, fontsize=text_size + 1, pad=14)
-        mean_ax.annotate(count, (0.5, 1), xycoords="axes fraction", xytext=(0, 3), textcoords="offset points",
-                         ha="center", va="bottom", fontsize=text_size - 1, color="0.35")
+        mean_ax.set_title(heading, fontsize=text_size + 1)
     if len(means) > 1:
         lo = min(a.get_ylim()[0] for a in means)
         hi = max(a.get_ylim()[1] for a in means)
