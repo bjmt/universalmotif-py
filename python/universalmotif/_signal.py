@@ -106,16 +106,17 @@ class SignalMatrix:
         return SignalMatrix(self.sites[rows], self.values[rows], self.track, self.flank, self.bin_size,
                             self.origin)
 
-    def clip(self, upper: float | None = 0.99, lower: float | None = None, quantile: bool = True) -> SignalMatrix:
+    def clip(self, upper: float | None = None, lower: float | None = None, quantile: bool = True) -> SignalMatrix:
         """The same sites with their extreme values capped, so that a few
         sites with far more signal than the rest, such as artefacts of
         repeats, do not pull the mean around.
 
-        By default ``upper`` and ``lower`` are quantiles of every value in
-        the matrix, and values above the ``upper`` quantile or below the
-        ``lower`` one are set to it. With ``quantile=False`` they are the
-        limits themselves. Either can be ``None`` to leave that end alone.
-        NaN stays NaN. The matrix itself is left as it is.
+        ``upper`` and ``lower`` are quantiles of every value in the matrix,
+        such as 0.99 and 0.01, and values above the ``upper`` quantile or
+        below the ``lower`` one are set to it. With ``quantile=False`` they
+        are the limits themselves. At least one must be given, and an end
+        left as ``None`` is not capped. NaN stays NaN. The matrix itself is
+        left as it is.
 
         Examples
         --------

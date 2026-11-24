@@ -219,14 +219,14 @@ def test_clip():
     assert np.isnan(capped.values[1, 1]) and capped.values.dtype == np.float32
     # The original is untouched, and the sites and settings carry over.
     assert sm.values[1, 2] == 100 and capped.sites.equals(sites) and capped.track == "x"
-    top = sm.clip()
+    top = sm.clip(upper=0.99)
     assert top.values[1, 2] == pytest.approx(np.quantile([0, 1, 2, 3, 100], 0.99))
     assert top.values[0].tolist() == [0, 1, 2]
     assert sm.clip(upper=None, lower=0.5).values[0, 0] == 2
     np.testing.assert_array_equal(sm.clip(upper=1).values, sm.values)
     empty = um.SignalMatrix(sites, np.full((2, 3), np.nan), "x", 1, 1, "start")
-    assert np.isnan(empty.clip().values).all()
-    for kw, msg in [({"upper": None}, "upper, lower or both"), ({"upper": 1.5}, "quantile from 0 to 1"),
+    assert np.isnan(empty.clip(upper=0.99).values).all()
+    for kw, msg in [({}, "upper, lower or both"), ({"upper": 1.5}, "quantile from 0 to 1"),
                     ({"upper": float("nan"), "quantile": False}, "NaN"),
                     ({"upper": 0.2, "lower": 0.8}, "lower cannot be above upper")]:
         with pytest.raises(ValueError, match=msg):
