@@ -106,6 +106,47 @@ class SignalMatrix:
         return SignalMatrix(self.sites[rows], self.values[rows], self.track, self.flank, self.bin_size,
                             self.origin)
 
+    def clip(self, upper: float | None = 0.99, lower: float | None = None, quantile: bool = True) -> SignalMatrix:
+        """The same sites with their extreme values capped, so that a few
+        sites with far more signal than the rest, such as artefacts of
+        repeats, do not pull the mean around.
+
+        By default ``upper`` and ``lower`` are quantiles of every value in
+        the matrix, and values above the ``upper`` quantile or below the
+        ``lower`` one are set to it. With ``quantile=False`` they are the
+        limits themselves. Either can be ``None`` to leave that end alone.
+        NaN stays NaN. The matrix itself is left as it is.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> import polars as pl
+        >>> import universalmotif as um
+        >>> sites = pl.DataFrame({"chrom": "chr1", "start": [100, 200], "end": [106, 206]})
+        >>> sm = um.SignalMatrix(sites, np.array([[1.0, 2.0], [3.0, 50.0]]), "atac", 1, 1, "start")
+        >>> sm.clip(upper=5, quantile=False).values.tolist()
+        [[1.0, 2.0], [3.0, 5.0]]
+        >>> sm.clip(upper=0.5, lower=0.25).values.tolist()
+        [[1.75, 2.0], [2.5, 2.5]]
+        """
+        if upper is None and lower is None:
+            raise ValueError("give upper, lower or both")
+        for what, v in (("upper", upper), ("lower", lower)):
+            if v is not None and (np.isnan(v) or (quantile and not 0 <= v <= 1)):
+                raise ValueError(f"{what} must be a quantile from 0 to 1" if quantile else f"{what} cannot be NaN")
+        if upper is not None and lower is not None and lower > upper:
+            raise ValueError("lower cannot be above upper")
+        values = self.values
+        hi, lo = upper, lower
+        if quantile:
+            finite = values[np.isfinite(values)].astype(np.float64)
+            if finite.size == 0:
+                return SignalMatrix(self.sites, values.copy(), self.track, self.flank, self.bin_size, self.origin)
+            hi = None if upper is None else float(np.quantile(finite, upper))
+            lo = None if lower is None else float(np.quantile(finite, lower))
+        clipped = np.clip(values, lo, hi).astype(values.dtype, copy=False)
+        return SignalMatrix(self.sites, clipped, self.track, self.flank, self.bin_size, self.origin)
+
     def profile(self, by: str | None = "motif") -> pl.DataFrame:
         """The mean signal in each bin, with its standard error and the
         number of sites with a value there.
@@ -431,6 +472,12 @@ def plot_signal_profile(
     Tn5 enzyme, which can look like the footprint of a bound factor. When
     the control's sites have the ``by`` column too, each panel gets the
     control of its own group, and otherwise every panel gets all of it.
+
+    The line and band use the values as they are, so a few sites with far
+    more signal than the rest can pull them around. Capping the values
+    first with [`SignalMatrix.clip()`][universalmotif.SignalMatrix.clip]
+    keeps them in check, while ``vmin`` and ``vmax`` only set the colours
+    of the heatmap.
 
     Needs the ``plot`` extra.
 

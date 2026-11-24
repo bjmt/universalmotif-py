@@ -19,4 +19,4 @@ Ranges can be given as DataFrames or tuples, as for
 
 ::: universalmotif.SignalMatrix
     options:
-      members: [positions, profile]
+      members: [positions, clip, profile]
