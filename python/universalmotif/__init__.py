@@ -102,7 +102,7 @@ from ._core import Motif
 from ._enrich import enrich_motifs, motif_coocc, motif_peaks
 from ._gapped_finder import gapped_motif_finder, motif_pair_finder
 from ._genome import Genome, extract_ranges, signal_stats, signal_values
-from ._signal import SignalMatrix, plot_signal_profile, signal_matrix
+from ._signal import SignalMatrix, plot_signal_profile, signal_matrix, site_matrix
 from ._genomic import match_bkg, motif_proximity
 from ._interactions import interaction_effects, pair_mutagenesis, plot_interactions
 from ._intervals import drop_overlaps, genomic_hits, read_bed, resize_ranges, to_polars_bio, to_pyranges, write_bed
@@ -308,6 +308,7 @@ __all__ = [
     "signal_matrix",
     "signal_stats",
     "signal_values",
+    "site_matrix",
     "site_spacings",
     "slide_fun",
     "spacing_periods",

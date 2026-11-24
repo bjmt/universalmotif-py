@@ -1,7 +1,8 @@
 # Genomes and signal
 
 Genomes read from disk a piece at a time, the sequences of genomic ranges,
-and bigWig signal over them and around motif sites. Positions count from 0 and leave the end out.
+bigWig signal over them and around motif sites, and motif sites around
+anchors. Positions count from 0 and leave the end out.
 Ranges can be given as DataFrames or tuples, as for
 [genomic intervals](genomic.md).
 
@@ -16,6 +17,8 @@ Ranges can be given as DataFrames or tuples, as for
 ::: universalmotif.signal_values
 
 ::: universalmotif.signal_matrix
+
+::: universalmotif.site_matrix
 
 ::: universalmotif.SignalMatrix
     options:

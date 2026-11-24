@@ -165,6 +165,7 @@ def test_plot_signal_profile(profile_data):
                                  legend_title="ChIP")
     assert fig.axes[0].get_title() == "ChIP"
     assert [a.get_ylabel() for a in fig.axes] == ["Mean ChIP", "Site, by score", "ChIP"]
+    assert fig.axes[1].get_xlabel() == "Position from centre"
     assert fig.axes[1].get_images()[0].get_array().shape == (10, 40)
     # The rows average every site, so the axis runs over all of them.
     assert fig.axes[1].get_ylim() == (30, 0)
@@ -177,6 +178,7 @@ def test_plot_signal_profile(profile_data):
     # Ratios below 0 get a scale centred on 0.
     ratios = um.SignalMatrix(sm.sites, sm.values - 3, "log2", 200, 10, "centre")
     fig = um.plot_signal_profile(ratios, by=None)
+    assert um.plot_signal_profile(ratios, by=None, heatmap=False, xlabel="Distance").axes[0].get_xlabel() == "Distance"
     lo, hi = fig.axes[1].get_images()[0].get_clim()
     assert lo == pytest.approx(-hi)
     plt.close(fig)
@@ -244,3 +246,87 @@ def test_heatmap_rows_average_runs_of_sites():
     np.testing.assert_allclose(_block_means(x, 2), [[2.0, np.nan], [7.0, 4.0]])
     assert _block_means(x, 5) is x and _block_means(x, None) is x
     assert _block_means(x, 1).tolist() == [[5.0, 4.0]]
+
+
+def _brute_sites(hits, anchors, flank, bin_size, count="centre", strand="both", value=None):
+    """site_matrix() for one motif, one anchor and hit at a time."""
+    nbins = 2 * flank // bin_size
+    out = np.zeros((len(anchors), nbins))
+    for i, (c, s, e, st) in enumerate(anchors):
+        minus = st == "-"
+        a = (s + e + 1) // 2 if minus else (s + e) // 2
+        lo = a - flank
+        for row in hits.iter_rows(named=True):
+            if row["chrom"] != c:
+                continue
+            hminus = row["strand"] == "-"
+            if strand == "same" and hminus != minus or strand == "opposite" and hminus == minus:
+                continue
+            w = 1.0 if value is None else row[value]
+            if count == "centre":
+                bases = [(row["start"] + row["end"] + 1) // 2 - 1 if hminus else (row["start"] + row["end"]) // 2]
+            else:
+                bases = range(row["start"], row["end"])
+            for p in bases:
+                k = lo + 2 * flank - 1 - p if minus else p - lo
+                if 0 <= k < 2 * flank:
+                    out[i, k // bin_size] += w / (bin_size if count == "coverage" else 1)
+    return out
+
+
+def test_site_matrix_matches_counting_by_hand():
+    rng = np.random.default_rng(4)
+    n = 300
+    start = rng.integers(0, 5000, n)
+    hits = pl.DataFrame({"chrom": rng.choice(["chr1", "chr2"], n), "start": start,
+                         "end": start + rng.integers(4, 12, n), "strand": rng.choice(["+", "-"], n),
+                         "score": rng.normal(size=n)})
+    anchors = [(c, int(s), int(s) + int(w), st) for c, s, w, st in
+               zip(rng.choice(["chr1", "chr2", "chr3"], 25), rng.integers(200, 4800, 25),
+                   rng.integers(1, 30, 25), rng.choice(["+", "-", "*"], 25))]
+    for kw in [{}, {"strand": "same"}, {"strand": "opposite"}, {"count": "coverage"}, {"value": "score"},
+               {"count": "coverage", "strand": "same", "value": "score"}]:
+        sm = um.site_matrix(hits, anchors, flank=150, bin_size=10, **kw)
+        np.testing.assert_allclose(sm.values, _brute_sites(hits, anchors, 150, 10, **kw), atol=1e-5)
+    single = um.site_matrix(hits, anchors, flank=20, bin_size=1)
+    np.testing.assert_allclose(single.values, _brute_sites(hits, anchors, 20, 1))
+
+
+def test_site_matrix_motifs_and_edges():
+    hits = pl.DataFrame({"motif": ["b", "a", "b"], "motif_i": [1, 0, 1], "chrom": "chr1",
+                         "start": [10, 12, 30], "end": [14, 16, 34], "strand": "+"})
+    anchors = pl.DataFrame({"chrom": ["chr1", "chr1"], "start": [12, 50], "end": [13, 51], "peak": ["p1", "p2"]})
+    sm = um.site_matrix(hits, anchors, flank=20, bin_size=20)
+    assert sm.sites.columns == ["motif", "motif_i", "chrom", "start", "end", "peak"]
+    assert sm.sites["motif"].to_list() == ["a", "a", "b", "b"]
+    # Windows are [-8, 32) and [30, 70); the hit centred on 32 is in the second only.
+    assert sm.values.tolist() == [[0, 1], [0, 0], [0, 1], [1, 0]]
+    assert [g for g in sm.profile()["motif"].unique(maintain_order=True)] == ["a", "b"]
+    plain = um.site_matrix(hits.drop("motif", "motif_i"), anchors, flank=20, bin_size=20)
+    assert plain.sites.columns == anchors.columns and plain.values.tolist() == [[0, 2], [1, 0]]
+    # Only bins wholly off the chromosome are NaN.
+    edge = um.site_matrix(hits.drop("motif"), [("chr1", 5, 6), ("chr1", 50, 51)], flank=20, bin_size=10,
+                          chrom_lengths={"chr1": 60})
+    assert np.isnan(edge.values[0, 0]) and edge.values[0, 1:].tolist() == [0, 2, 0]
+    assert np.isnan(edge.values[1, 3]) and edge.values[1, :3].tolist() == [1, 0, 0]
+    assert um.site_matrix(hits, [("chr9", 10, 11)], flank=20, bin_size=20).values.tolist() == [[0, 0], [0, 0]]
+    assert um.site_matrix(hits[:0], anchors, flank=20, bin_size=20).values.tolist() == [[0, 0], [0, 0]]
+    with pytest.raises(ValueError, match="chrom_lengths has no length for 'chr1'"):
+        um.site_matrix(hits, anchors, flank=20, bin_size=20, chrom_lengths={"chr2": 5})
+    for kw, msg in [({"count": "middle"}, "count"), ({"strand": "plus"}, "strand"),
+                    ({"value": "score"}, "no 'score' column"), ({"value": "motif"}, "numeric"),
+                    ({"flank": 15, "bin_size": 10}, "multiple of bin_size")]:
+        with pytest.raises(ValueError, match=msg):
+            um.site_matrix(hits, anchors, **kw)
+    with pytest.raises(TypeError):
+        um.site_matrix([("chr1", 1, 2)], anchors)
+    with pytest.raises(ValueError, match="rename it"):
+        um.site_matrix(hits, anchors.with_columns(motif=pl.lit("x")))
+    scanned = pl.DataFrame({"motif": "a", "sequence": "chr1:0-100", "start": [5], "end": [9], "strand": "+"})
+    with pytest.raises(ValueError, match="genomic_hits"):
+        um.site_matrix(scanned, anchors)
+    pytest.importorskip("matplotlib")
+    import matplotlib.pyplot as plt
+
+    control = um.site_matrix(hits, anchors, flank=20, bin_size=20)
+    plt.close(um.plot_signal_profile(sm, control=control))

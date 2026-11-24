@@ -216,6 +216,54 @@ def _groups(sites: pl.DataFrame, by: str | None, optional: bool) -> list[tuple[A
     return [(v, np.asarray(index[v], dtype=np.int64)) for v in order]
 
 
+def _check_window(flank: int, bin_size: int, origin: str) -> tuple[int, int, str]:
+    flank, bin_size = int(flank), int(bin_size)
+    if bin_size < 1:
+        raise ValueError("bin_size must be 1 or more")
+    if flank < 1 or flank % bin_size:
+        raise ValueError("flank must be 1 or more and a multiple of bin_size")
+    if origin == "center":
+        origin = "centre"
+    if origin not in _ORIGINS:
+        raise ValueError('origin must be "centre", "start" or "end"')
+    return flank, bin_size, origin
+
+
+def _genomic_table(x, what: str) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Ranges in genomic positions as given, with their columns, and as a
+    range table, refusing hits still in positions within the sequences
+    scanned."""
+    from ._genomic import _range_table, _ranges_frame
+    from ._intervals import _REGION
+
+    frame = _ranges_frame(x)
+    if isinstance(frame, pl.DataFrame) and frame.height and "sequence" in frame.columns \
+            and not any(c in frame.columns for c in ("chrom", "seqnames", "chr", "chromosome")) \
+            and _REGION.match(str(frame["sequence"][0])):
+        raise ValueError(f"the {what} are in positions within the sequences scanned; move them to the "
+                         "genome with genomic_hits() first")
+    table = _range_table(frame, what)
+    if (table["end"] < table["start"]).any():
+        raise ValueError(f"all {what} must have start <= end")
+    return (frame if isinstance(frame, pl.DataFrame) else table), table
+
+
+def _anchors(table: pl.DataFrame, origin: str) -> tuple[np.ndarray, np.ndarray]:
+    """The boundary each window is centred on, in genomic positions, and
+    whether it is read backwards from it, on the minus strand."""
+    start = table["start"].to_numpy()
+    end = table["end"].to_numpy()
+    minus = (table["strand"] == "-").to_numpy()
+    total = start + end
+    if origin == "centre":
+        anchor = np.where(minus, (total + 1) // 2, total // 2)
+    elif origin == "start":
+        anchor = np.where(minus, end, start)
+    else:
+        anchor = np.where(minus, start, end)
+    return anchor.astype(np.int64), minus
+
+
 def signal_matrix(
     bigwig: str | os.PathLike[str],
     sites,
@@ -319,48 +367,16 @@ def signal_matrix(
             "reading bigWig files needs pybigtools; install it with `pip install "
             "'universalmotif[bigwig]'`"
         ) from e
-    from ._genomic import _range_table, _ranges_frame
-    from ._intervals import _REGION
-
-    flank, bin_size = int(flank), int(bin_size)
-    if bin_size < 1:
-        raise ValueError("bin_size must be 1 or more")
-    if flank < 1 or flank % bin_size:
-        raise ValueError("flank must be 1 or more and a multiple of bin_size")
-    if origin == "center":
-        origin = "centre"
-    if origin not in _ORIGINS:
-        raise ValueError('origin must be "centre", "start" or "end"')
+    flank, bin_size, origin = _check_window(flank, bin_size, origin)
     if stat not in _STATS:
         raise ValueError('stat must be "mean", "max", "min" or "sum"')
     if max_sites is not None and max_sites < 1:
         raise ValueError("max_sites must be 1 or more, or None for every site")
-    frame = _ranges_frame(sites)
-    if isinstance(frame, pl.DataFrame) and frame.height and "sequence" in frame.columns \
-            and not any(c in frame.columns for c in ("chrom", "seqnames", "chr", "chromosome")) \
-            and _REGION.match(str(frame["sequence"][0])):
-        raise ValueError("the hits are in positions within the sequences scanned; move them to the "
-                         "genome with genomic_hits() first")
-    table = _range_table(frame, "sites")
-    kept = frame if isinstance(frame, pl.DataFrame) else table
+    kept, table = _genomic_table(sites, "sites")
     if max_sites is not None:
         rows = _sample(kept, max_sites, seed)
         kept, table = kept[rows], table[rows]
-    if (table["end"] < table["start"]).any():
-        raise ValueError("all sites must have start <= end")
-
-    start = table["start"].to_numpy()
-    end = table["end"].to_numpy()
-    minus = (table["strand"] == "-").to_numpy()
-    total = start + end
-    # The boundary the window is centred on, in genomic positions. On the
-    # minus strand the window is read backwards from it.
-    if origin == "centre":
-        anchor = np.where(minus, (total + 1) // 2, total // 2)
-    elif origin == "start":
-        anchor = np.where(minus, end, start)
-    else:
-        anchor = np.where(minus, start, end)
+    anchor, minus = _anchors(table, origin)
     width = 2 * flank
     nbins = width // bin_size
     path = os.fspath(bigwig)
@@ -401,6 +417,191 @@ def signal_matrix(
                 name = name[: -len(ext)]
                 break
     return SignalMatrix(kept, values, str(name), flank, bin_size, origin)
+
+
+def site_matrix(
+    hits: pl.DataFrame,
+    anchors,
+    flank: int = 1000,
+    bin_size: int = 10,
+    origin: str = "centre",
+    count: str = "centre",
+    value: str | None = None,
+    strand: str = "both",
+    chrom_lengths: Mapping[str, int] | None = None,
+    name: str = "sites",
+) -> SignalMatrix:
+    """Motif hits in bins around anchors, such as peak summits or TSSs.
+
+    This is the counterpart of
+    [`signal_matrix()`][universalmotif.signal_matrix] with motif hits as the
+    signal. Each anchor gets a window of ``flank`` bases on either side of
+    its ``origin``, split into bins of ``bin_size`` bases, and each bin
+    counts the hits in it. The result is a
+    [`SignalMatrix`][universalmotif.SignalMatrix] like any other, so it can
+    be drawn with
+    [`plot_signal_profile()`][universalmotif.plot_signal_profile], whose
+    mean is then the number of hits per anchor in each bin. Hits of a
+    shuffled motif counted the same way make a control.
+
+    With a ``motif`` column in the hits, there is one row for each anchor
+    and motif, the anchors of the first motif first, and a ``motif`` column
+    is added to the anchors so that each motif is drawn in its own panel.
+    Windows are read along the strand of their anchor, so that upstream of
+    a TSS is always on the left, and anchors without a strand are read as
+    on the plus strand.
+
+    Only the hits given are counted. When they come from scanning regions
+    such as peaks, rather than whole chromosomes, the windows should lie
+    within those regions, since a window reaching beyond them counts no
+    hits there whether or not the genome has sites.
+
+    Parameters
+    ----------
+    hits
+        Hits in genomic positions, from
+        [`genomic_hits()`][universalmotif.genomic_hits], from
+        ``scan_sequences(ranges=)`` or from scanning whole chromosomes.
+    anchors
+        The anchors, as a range table or (chrom, start, end[, strand])
+        tuples, as for [`extract_ranges()`][universalmotif.extract_ranges].
+        The columns of a table are kept.
+    flank, bin_size, origin
+        As for [`signal_matrix()`][universalmotif.signal_matrix].
+    count
+        Count each hit once, in the bin of its middle letter, with
+        ``"centre"``, or count every base it covers with ``"coverage"``,
+        which gives the mean number of hits over each base of a bin.
+    value
+        A numeric column of the hits, such as ``"score"``, to add up in
+        place of counting each hit as 1.
+    strand
+        Count every hit with ``"both"``, or only those on the same strand
+        as their anchor with ``"same"``, or on the other with
+        ``"opposite"``. Hits without a strand count as on the plus strand.
+    chrom_lengths
+        The length of each chromosome, so that bins beyond the end of one
+        are NaN rather than 0, such as ``genome.lengths`` of a
+        [`Genome`][universalmotif.Genome].
+    name
+        The name of the matrix's track.
+
+    Returns
+    -------
+    SignalMatrix
+        The anchors and the hits in each bin around them.
+
+    Examples
+    --------
+    >>> import polars as pl
+    >>> import universalmotif as um
+    >>> hits = pl.DataFrame({"motif": "TATA", "chrom": "chr1", "start": [95, 110, 290],
+    ...                      "end": [101, 116, 296], "strand": ["+", "+", "-"]})
+    >>> tss = [("chr1", 120, 121, "+"), ("chr1", 280, 281, "-")]
+    >>> sm = um.site_matrix(hits, tss, flank=30, bin_size=10)
+    >>> sm.positions.tolist()
+    [-25.5, -15.5, -5.5, 4.5, 14.5, 24.5]
+    >>> sm.values.tolist()
+    [[1.0, 0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0]]
+    >>> sm.profile().select("position", "mean").rows()[:3]
+    [(-25.5, 0.5), (-15.5, 0.5), (-5.5, 0.5)]
+    """
+    flank, bin_size, origin = _check_window(flank, bin_size, origin)
+    if count not in ("centre", "center", "coverage"):
+        raise ValueError('count must be "centre" or "coverage"')
+    if strand not in ("both", "same", "opposite"):
+        raise ValueError('strand must be "both", "same" or "opposite"')
+    if not isinstance(hits, pl.DataFrame):
+        raise TypeError("hits must be a polars DataFrame of hits in genomic positions")
+    if value is not None:
+        if value not in hits.columns:
+            raise ValueError(f"the hits have no {value!r} column")
+        if not hits[value].dtype.is_numeric():
+            raise ValueError(f"value needs a numeric column, and {value!r} is not")
+    kept, table = _genomic_table(anchors, "anchors")
+    if "motif" in kept.columns and "motif" in hits.columns:
+        raise ValueError("the anchors have a motif column, which would clash with the motif of the "
+                         "hits; rename it first")
+    _, hit_table = _genomic_table(hits, "hits")
+    anchor, minus = _anchors(table, origin)
+    width = 2 * flank
+    nbins = width // bin_size
+    lo = anchor - flank
+
+    hit_start = hit_table["start"].to_numpy()
+    hit_end = hit_table["end"].to_numpy()
+    hit_minus = (hit_table["strand"] == "-").to_numpy()
+    weight = (np.ones(hits.height) if value is None
+              else hits[value].cast(pl.Float64).fill_null(0.0).fill_nan(0.0).to_numpy())
+    groups = _groups(hits, "motif", True)
+    names = [g for g, _ in groups] or [None]
+    anchor_chroms = table["chrom"].to_list()
+    known, anchor_code = np.unique(np.asarray(anchor_chroms, dtype=object), return_inverse=True)
+    code_of = {c: i for i, c in enumerate(known.tolist())}
+    hit_code = np.fromiter((code_of.get(c, -1) for c in hit_table["chrom"].to_list()), dtype=np.int64,
+                           count=hit_table.height)
+    chrom_rows = [np.flatnonzero(anchor_code == i) for i in range(len(known))]
+
+    values = np.zeros((len(names) * table.height, nbins), dtype=np.float64)
+    for g, (_, rows) in enumerate(groups):
+        for c, arows in enumerate(chrom_rows):
+            h = rows[hit_code[rows] == c]
+            if len(h) == 0:
+                continue
+            if count == "coverage":
+                lens = hit_end[h] - hit_start[h]
+                hit_of = np.repeat(h, lens)
+                pos = hit_start[hit_of] + (np.arange(lens.sum()) - np.repeat(np.cumsum(lens) - lens, lens))
+            else:
+                hit_of = h
+                pos = np.where(hit_minus[h], (hit_start[h] + hit_end[h] + 1) // 2 - 1,
+                               (hit_start[h] + hit_end[h]) // 2)
+            order = np.argsort(pos, kind="stable")
+            pos, hit_of = pos[order], hit_of[order]
+            a_lo = lo[arows]
+            first = np.searchsorted(pos, a_lo, side="left")
+            last = np.searchsorted(pos, a_lo + width, side="left")
+            n = last - first
+            if n.sum() == 0:
+                continue
+            row = np.repeat(arows, n)
+            idx = np.repeat(first, n) + (np.arange(n.sum()) - np.repeat(np.cumsum(n) - n, n))
+            p, hh = pos[idx], hit_of[idx]
+            flip = minus[row]
+            k = np.where(flip, lo[row] + width - 1 - p, p - lo[row])
+            if strand != "both":
+                same = hit_minus[hh] == flip
+                keep = same if strand == "same" else ~same
+                row, k, hh = row[keep], k[keep], hh[keep]
+            np.add.at(values, (g * table.height + row, k // bin_size), weight[hh])
+    if count == "coverage":
+        values /= bin_size
+    if chrom_lengths is not None:
+        size = np.array([chrom_lengths.get(c, -1) for c in anchor_chroms], dtype=np.int64)
+        if (size < 0).any():
+            missing = anchor_chroms[int(np.flatnonzero(size < 0)[0])]
+            raise ValueError(f"chrom_lengths has no length for {missing!r}")
+        # The bases of each bin in genomic positions, and whether any lies on
+        # the chromosome.
+        k = np.arange(nbins)
+        base_lo = np.where(minus[:, None], lo[:, None] + width - (k + 1) * bin_size, lo[:, None] + k * bin_size)
+        off = (base_lo + bin_size <= 0) | (base_lo >= size[:, None])
+        values[np.tile(off, (len(names), 1))] = np.nan
+    if names == [None]:
+        sites = kept
+    else:
+        order_i = None
+        if "motif_i" in hits.columns:
+            pairs = hits.select(pl.col("motif").cast(pl.String), "motif_i").unique("motif", keep="first")
+            order_i = dict(pairs.iter_rows())
+        parts = []
+        for nm in names:
+            extra = [pl.lit(nm, dtype=pl.String).alias("motif")]
+            if order_i is not None:
+                extra.append(pl.lit(order_i[nm]).alias("motif_i"))
+            parts.append(kept.select(*extra, pl.all()))
+        sites = pl.concat(parts)
+    return SignalMatrix(sites, values.astype(np.float32), str(name), flank, bin_size, origin)
 
 
 def _bin(windows: np.ndarray, nbins: int, bin_size: int, stat: str) -> np.ndarray:
@@ -465,6 +666,7 @@ def plot_signal_profile(
     vmax: float | None = None,
     colours: str | Mapping[str, str] | None = None,
     title: str | None = None,
+    xlabel: str | None = None,
     ylabel: str | None = None,
     heatmap_ylabel: str | None = None,
     legend_title: str | None = None,
@@ -541,6 +743,9 @@ def plot_signal_profile(
     title
         The title above the plot. With several groups each panel is also
         named after its group.
+    xlabel
+        The title of the x-axis, by default ``"Position from centre"``, or
+        from the start or end, after the origin of the matrix.
     ylabel, heatmap_ylabel
         Titles for the y-axes of the mean and of the heatmap, such as
         ``"Mean ATAC"`` and ``"Sites"``. There are none by default.
@@ -644,8 +849,8 @@ def plot_signal_profile(
     x = matrix.positions
     half = matrix.bin_size / 2
     xlim = (x[0] - half, x[-1] + half)
-    where = {"centre": "site centre", "start": "site start", "end": "site end"}[matrix.origin]
-    xlabel = f"Position from {where}"
+    if xlabel is None:
+        xlabel = f"Position from {matrix.origin}"
 
     def draw_mean(target, rows, group, label) -> None:
         c = control_of(group)
@@ -792,4 +997,4 @@ def plot_signal_profile(
     return fig
 
 
-__all__ = ["SignalMatrix", "plot_signal_profile", "signal_matrix"]
+__all__ = ["SignalMatrix", "plot_signal_profile", "signal_matrix", "site_matrix"]

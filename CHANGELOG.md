@@ -8,6 +8,8 @@ New:
   sites, read along their strands, and `plot_signal_profile()` draws its
   mean with a heatmap of the sites, against a control if given;
   `SignalMatrix.clip()` caps extreme values first.
+- `site_matrix()` counts motif hits in bins around anchors such as summits
+  or TSSs, for drawing with `plot_signal_profile()`.
 
 ## 0.7.0 (2026-11-23)
 
