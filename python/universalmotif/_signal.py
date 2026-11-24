@@ -662,6 +662,7 @@ def plot_signal_profile(
     heatmap: bool = True,
     sort_by: str | None = None,
     max_rows: int | None = 500,
+    drop_empty: bool = False,
     vmin: float | None = None,
     vmax: float | None = None,
     colours: str | Mapping[str, str] | None = None,
@@ -731,6 +732,14 @@ def plot_signal_profile(
         rows, for example, give rows of 4 sites each. Every site is then
         shown, and sparse signal, such as ATAC read base by base in which
         most bases have no reads, is smoothed.
+    drop_empty
+        Leave the rows with no signal at all, every value 0 or NaN, out of
+        the heatmap, which then counts only the rows kept. The mean is still
+        made from every row. This suits a
+        [`site_matrix()`][universalmotif.site_matrix], in which most anchors
+        often have no site of a motif in their window and would otherwise
+        fill the bottom of the heatmap with white. It is off by default, so
+        that the heatmap shows every row unless asked not to.
     vmin, vmax
         The ends of the heatmap's colour scale. By default the scale runs
         from 0 to the 99th percentile of the values drawn, or is centred on
@@ -902,9 +911,15 @@ def plot_signal_profile(
             ax.set_title(title, fontsize=text_size + 1)
         return ax
 
-    shown = []
+    shown, heights_of = [], []
     for _, rows in found:
         part = matrix.values[rows]
+        if drop_empty:
+            # Rows with no signal at all, such as anchors without a site.
+            filled = np.nan_to_num(part, nan=0.0) != 0
+            rows = rows[filled.any(axis=1)]
+            part = part[filled.any(axis=1)]
+        heights_of.append(len(rows))
         if sort_by is not None:
             key = matrix.sites[sort_by][rows].cast(pl.Float64).fill_nan(None).fill_null(-np.inf).to_numpy()
         else:
@@ -914,7 +929,7 @@ def plot_signal_profile(
         order = np.argsort(-key, kind="stable")
         shown.append(_block_means(part[order], max_rows))
     if heatmap:
-        drawn = np.concatenate([s.ravel() for s in shown])
+        drawn = np.concatenate([s.ravel() for s in shown]) if shown else np.zeros(0)
         drawn = drawn[~np.isnan(drawn)]
         lo_q, hi_q = (np.percentile(drawn, [1, 99]) if drawn.size else (0.0, 1.0))
         diverging = lo_q < 0 < hi_q and -lo_q > 0.1 * hi_q
@@ -956,14 +971,16 @@ def plot_signal_profile(
         if heatmap:
             heat = fig.add_subplot(grid[1, j], sharex=mean_ax)
             rows_drawn = shown[j]
-            im = heat.imshow(rows_drawn, aspect="auto", cmap=cmap, vmin=lo_v, vmax=hi_v,
-                             interpolation="antialiased", interpolation_stage="rgba",
-                             extent=(xlim[0], xlim[1], len(rows), 0))
+            height = max(heights_of[j], 1)
+            if len(rows_drawn):
+                im = heat.imshow(rows_drawn, aspect="auto", cmap=cmap, vmin=lo_v, vmax=hi_v,
+                                 interpolation="antialiased", interpolation_stage="rgba",
+                                 extent=(xlim[0], xlim[1], height, 0))
             heat.axvline(0, color="0.25", linewidth=0.6, linestyle=(0, (1, 2)))
             if heatmap_ylabel is not None and j == 0:
                 heat.set_ylabel(heatmap_ylabel, fontsize=text_size)
             heat.yaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
-            heat.set_ylim(len(rows), 0)
+            heat.set_ylim(height, 0)
             style(heat)
             mean_ax.tick_params(axis="x", labelbottom=False)
             bottom = heat
@@ -989,6 +1006,8 @@ def plot_signal_profile(
         pos = heat.get_position()
         cax = fig.add_axes((pos.x1 + 0.15 / figsize[0], pos.y0, 0.12 / figsize[0],
                             min(pos.height, 1.4 / figsize[1])))
+        if im is None:
+            im = matplotlib.cm.ScalarMappable(matplotlib.colors.Normalize(lo_v, hi_v), cmap)
         bar = fig.colorbar(im, cax=cax)
         if legend_title is not None:
             bar.set_label(legend_title, fontsize=text_size - 1)

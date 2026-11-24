@@ -330,3 +330,28 @@ def test_site_matrix_motifs_and_edges():
 
     control = um.site_matrix(hits, anchors, flank=20, bin_size=20)
     plt.close(um.plot_signal_profile(sm, control=control))
+
+
+def test_plot_signal_profile_drop_empty():
+    pytest.importorskip("matplotlib")
+    import matplotlib.pyplot as plt
+
+    sites = pl.DataFrame({"motif": ["a"] * 6 + ["b"] * 2, "chrom": "chr1", "start": np.arange(8) * 100,
+                          "end": np.arange(8) * 100 + 1})
+    values = np.zeros((8, 4))
+    values[0, 1] = values[1, 2] = 2.0
+    values[2, 0] = np.nan
+    sm = um.SignalMatrix(sites, values, "x", 20, 10, "centre")
+    fig = um.plot_signal_profile(sm, groups=["a"], drop_empty=True)
+    image = fig.axes[1].get_images()[0]
+    # Only the two rows with signal are drawn, but the mean is over all six.
+    assert image.get_array().shape == (2, 4) and fig.axes[1].get_ylim() == (2, 0)
+    np.testing.assert_allclose(fig.axes[0].get_lines()[0].get_ydata(), [0, 2 / 6, 2 / 6, 0])
+    plt.close(fig)
+    kept = um.plot_signal_profile(sm, groups=["a"])
+    assert kept.axes[1].get_images()[0].get_array().shape == (6, 4)
+    plt.close(kept)
+    # A group with no signal at all leaves its heatmap empty.
+    fig = um.plot_signal_profile(sm, drop_empty=True)
+    assert fig.axes[3].get_images() == []
+    plt.close(fig)
