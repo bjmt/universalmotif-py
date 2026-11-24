@@ -155,15 +155,17 @@ def test_plot_signal_profile(profile_data):
 
     sm, control = profile_data
     fig = um.plot_signal_profile(sm)
-    assert [a.get_title(loc="left") for a in fig.axes[:4:2]] == ["GATA", "AP1"]
+    assert [a.get_title() for a in fig.axes[:4:2]] == ["GATA", "AP1"]
     assert fig.axes[1].get_ylabel() == "Site, by signal"
     plt.close(fig)
     # A control split by motif, and one shared by every panel.
     fig = um.plot_signal_profile(sm, control=control, groups=["AP1"], max_rows=10, sort_by="score",
                                  title="ChIP")
-    assert fig.axes[0].get_title(loc="left") == "ChIP"
+    assert fig.axes[0].get_title() == "ChIP"
     assert fig.axes[1].get_ylabel() == "Site, by score"
     assert fig.axes[1].get_images()[0].get_array().shape == (10, 40)
+    # The rows average every site, so the axis runs over all of them.
+    assert fig.axes[1].get_ylim() == (30, 0)
     assert any(line.get_label() == "Control" for line in fig.axes[0].get_lines())
     plt.close(fig)
     fig = um.plot_signal_profile(sm, control=control.__class__(control.sites.drop("motif"), control.values,
@@ -231,3 +233,12 @@ def test_clip():
                     ({"upper": 0.2, "lower": 0.8}, "lower cannot be above upper")]:
         with pytest.raises(ValueError, match=msg):
             sm.clip(**kw)
+
+
+def test_heatmap_rows_average_runs_of_sites():
+    from universalmotif._signal import _block_means
+
+    x = np.array([[1.0, np.nan], [3.0, np.nan], [5.0, 2.0], [7.0, 4.0], [9.0, 6.0]])
+    np.testing.assert_allclose(_block_means(x, 2), [[2.0, np.nan], [7.0, 4.0]])
+    assert _block_means(x, 5) is x and _block_means(x, None) is x
+    assert _block_means(x, 1).tolist() == [[5.0, 4.0]]

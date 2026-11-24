@@ -429,6 +429,19 @@ def _sample(sites: pl.DataFrame, max_sites: int, seed: int | None) -> np.ndarray
     return np.sort(np.concatenate(keep)) if keep else np.zeros(0, dtype=np.int64)
 
 
+def _block_means(x: np.ndarray, max_rows: int | None) -> np.ndarray:
+    """Rows averaged in runs of consecutive rows, into at most
+    ``max_rows`` rows, ignoring NaN."""
+    n = x.shape[0]
+    if max_rows is None or n <= max_rows:
+        return x
+    starts = np.round(np.linspace(0, n, max_rows + 1)).astype(np.int64)[:-1]
+    sums = np.add.reduceat(np.nan_to_num(x, nan=0.0).astype(np.float64), starts, axis=0)
+    counts = np.add.reduceat((~np.isnan(x)).astype(np.int64), starts, axis=0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(counts > 0, sums / np.maximum(counts, 1), np.nan)
+
+
 def _check_control(matrix: SignalMatrix, control: SignalMatrix) -> None:
     if not isinstance(control, SignalMatrix):
         raise TypeError("control must come from signal_matrix()")
@@ -506,9 +519,11 @@ def plot_signal_profile(
         the largest down, such as ``"score"``. By default they are sorted by
         their mean signal.
     max_rows
-        Draw at most this many rows in each heatmap, or all of them with
-        ``None``. The rows are picked evenly along the sorted sites so that
-        the whole range is shown. The mean is always made from every site.
+        Draw at most this many rows in each heatmap, or a row for every
+        site with ``None``. With more sites than rows, each row is the mean
+        of a run of sites next to each other in the sorted order, so that
+        every site is shown. This also smooths sparse signal, such as ATAC
+        read base by base, in which most single bases have no reads.
     vmin, vmax
         The ends of the heatmap's colour scale. By default the scale runs
         from 0 to the 99th percentile of the values drawn, or is centred on
@@ -527,7 +542,9 @@ def plot_signal_profile(
         The size of the figure in inches, by default sized to the groups.
     ax
         Axes to draw the means into, one line per group, without the
-        heatmap. They are returned, and otherwise a new figure is.
+        heatmap. A control split by group is drawn as a faint line in the
+        colour of its group. The axes are returned, and otherwise a new
+        figure is.
 
     Returns
     -------
@@ -626,7 +643,7 @@ def plot_signal_profile(
             cm, ch = summary(c)
             if ch is not None:
                 target.fill_between(x, cm - ch, cm + ch, color=_CONTROL, alpha=0.18, linewidth=0, zorder=2)
-            target.plot(x, cm, color=_CONTROL, linewidth=1.1, linestyle=(0, (4, 2)), zorder=3,
+            target.plot(x, cm, color=_CONTROL, linewidth=1.2, zorder=3,
                         label="Control")
         mean, h = summary(matrix.values[rows])
         colour = palette[label]
@@ -651,12 +668,13 @@ def plot_signal_profile(
             cm, ch = summary(control.values)
             if ch is not None:
                 ax.fill_between(x, cm - ch, cm + ch, color=_CONTROL, alpha=0.18, linewidth=0)
-            ax.plot(x, cm, color=_CONTROL, linewidth=1.1, linestyle=(0, (4, 2)), label="Control")
+            ax.plot(x, cm, color=_CONTROL, linewidth=1.2, label="Control")
         elif control is not None:
             for (group, _), label in zip(found, labels):
                 c = control_of(group)
                 if c is not None and len(c):
-                    ax.plot(x, summary(c)[0], color=palette[label], linewidth=1.0, linestyle=(0, (4, 2)))
+                    ax.plot(x, summary(c)[0], color=palette[label], linewidth=1.2, alpha=0.4,
+                            label=f"{label} control")
         ax.axvline(0, color="0.55", linewidth=0.7, linestyle=(0, (1, 2)), zorder=1)
         ax.set_xlim(*xlim)
         ax.set_xlabel(xlabel, fontsize=text_size)
@@ -665,7 +683,7 @@ def plot_signal_profile(
         if len(found) > 1 or control is not None:
             ax.legend(frameon=False, fontsize=text_size)
         if title is not None:
-            ax.set_title(title, loc="left", fontsize=text_size + 1)
+            ax.set_title(title, fontsize=text_size + 1)
         return ax
 
     shown = []
@@ -678,9 +696,7 @@ def plot_signal_profile(
                 warnings.simplefilter("ignore", RuntimeWarning)
                 key = np.nan_to_num(np.nanmean(part, axis=1), nan=-np.inf)
         order = np.argsort(-key, kind="stable")
-        if max_rows is not None and len(order) > max_rows:
-            order = order[np.round(np.linspace(0, len(order) - 1, max_rows)).astype(np.int64)]
-        shown.append(part[order])
+        shown.append(_block_means(part[order], max_rows))
     if heatmap:
         drawn = np.concatenate([s.ravel() for s in shown])
         drawn = drawn[~np.isnan(drawn)]
@@ -725,12 +741,12 @@ def plot_signal_profile(
             rows_drawn = shown[j]
             im = heat.imshow(rows_drawn, aspect="auto", cmap=cmap, vmin=lo_v, vmax=hi_v,
                              interpolation="antialiased", interpolation_stage="rgba",
-                             extent=(xlim[0], xlim[1], len(rows_drawn), 0))
+                             extent=(xlim[0], xlim[1], len(rows), 0))
             heat.axvline(0, color="0.25", linewidth=0.6, linestyle=(0, (1, 2)))
             heat.set_ylabel("Site, by signal" if j == 0 and sort_by is None else
                             (f"Site, by {sort_by}" if j == 0 else ""), fontsize=text_size)
             heat.yaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
-            heat.set_ylim(len(rows_drawn), 0)
+            heat.set_ylim(len(rows), 0)
             style(heat)
             mean_ax.tick_params(axis="x", labelbottom=False)
             bottom = heat
@@ -740,11 +756,11 @@ def plot_signal_profile(
         bottom.set_xlabel(xlabel, fontsize=text_size)
         count = f"{len(rows):,} sites" if len(rows) != 1 else "1 site"
         if heatmap and len(shown[j]) < len(rows):
-            count += f", {len(shown[j]):,} drawn"
+            count += f", averaged in {len(shown[j]):,} rows"
         heading = label if len(found) > 1 or title is None else title
-        mean_ax.set_title(heading, loc="left", fontsize=text_size + 1, pad=14)
-        mean_ax.annotate(count, (0, 1), xycoords="axes fraction", xytext=(0, 3), textcoords="offset points",
-                         ha="left", va="bottom", fontsize=text_size - 1, color="0.35")
+        mean_ax.set_title(heading, fontsize=text_size + 1, pad=14)
+        mean_ax.annotate(count, (0.5, 1), xycoords="axes fraction", xytext=(0, 3), textcoords="offset points",
+                         ha="center", va="bottom", fontsize=text_size - 1, color="0.35")
     if len(means) > 1:
         lo = min(a.get_ylim()[0] for a in means)
         hi = max(a.get_ylim()[1] for a in means)
@@ -753,7 +769,7 @@ def plot_signal_profile(
     if control is not None:
         means[-1].legend(frameon=False, fontsize=text_size - 1, loc="upper right")
     if len(found) > 1 and title is not None:
-        fig.suptitle(title, x=0.02, ha="left", fontsize=text_size + 2)
+        fig.suptitle(title, fontsize=text_size + 2)
     fig.subplots_adjust(left=0.75 / figsize[0], right=1 - (0.85 if heatmap else 0.25) / figsize[0],
                         top=1 - (0.6 if len(found) > 1 and title else 0.45) / figsize[1],
                         bottom=0.5 / figsize[1])
