@@ -665,6 +665,7 @@ def plot_signal_profile(
     drop_empty: bool = False,
     vmin: float | None = None,
     vmax: float | None = None,
+    cmap: str | None = None,
     colours: str | Mapping[str, str] | None = None,
     title: str | None = None,
     xlabel: str | None = None,
@@ -745,6 +746,13 @@ def plot_signal_profile(
         from 0 to the 99th percentile of the values drawn, or is centred on
         0 when there are clearly negative values, such as in a track of
         ratios.
+    cmap
+        The name of a matplotlib colour map for every heatmap, such as
+        ``"viridis"``. By default each heatmap runs from white to the
+        colour of its line, or from blue through white to red when there
+        are clearly negative values. With panels of several colours, the
+        colour bar has a strip in the colours of each, on the one scale they
+        share.
     colours
         One colour for the lines, or a mapping from groups to colours. By
         default a single group is drawn in blue, and motifs in the colours
@@ -937,14 +945,23 @@ def plot_signal_profile(
             top = max(abs(lo_q), abs(hi_q)) if vmax is None else vmax
             lo_v = -top if vmin is None else vmin
             hi_v = top
-            cmap = matplotlib.colormaps["RdBu_r"]
         else:
             lo_v = (min(0.0, float(lo_q)) if vmin is None else vmin)
             hi_v = (float(hi_q) if vmax is None else vmax)
-            cmap = matplotlib.colormaps["Blues"]
         if not hi_v > lo_v:
             hi_v = lo_v + 1.0
-        cmap = cmap.with_extremes(bad="#E6E6E6")
+        # Each panel's heatmap runs from white to the colour of its line,
+        # unless a colour map is given or the values run below 0.
+        if cmap is not None:
+            cmaps = [matplotlib.colormaps[cmap]] * len(found)
+        elif diverging:
+            cmaps = [matplotlib.colormaps["RdBu_r"]] * len(found)
+        else:
+            from matplotlib.colors import LinearSegmentedColormap
+
+            cmaps = [LinearSegmentedColormap.from_list(f"to {palette[x]}", ["#FFFFFF", palette[x]])
+                     for x in labels]
+        cmaps = [c.with_extremes(bad="#E6E6E6") for c in cmaps]
 
     rows_of = ["mean", "heat"] if heatmap else ["mean"]
     heights = {"mean": 1.6, "heat": 3.2}
@@ -956,7 +973,7 @@ def plot_signal_profile(
     grid = fig.add_gridspec(len(rows_of), len(found), height_ratios=[heights[r] for r in rows_of],
                             wspace=0.25, hspace=0.1)
     means = []
-    heat = im = None
+    heat = None
     for j, ((group, rows), label) in enumerate(zip(found, labels)):
         mean_ax = fig.add_subplot(grid[0, j])
         draw_mean(mean_ax, rows, group, label)
@@ -973,7 +990,7 @@ def plot_signal_profile(
             rows_drawn = shown[j]
             height = max(heights_of[j], 1)
             if len(rows_drawn):
-                im = heat.imshow(rows_drawn, aspect="auto", cmap=cmap, vmin=lo_v, vmax=hi_v,
+                heat.imshow(rows_drawn, aspect="auto", cmap=cmaps[j], vmin=lo_v, vmax=hi_v,
                                  interpolation="antialiased", interpolation_stage="rgba",
                                  extent=(xlim[0], xlim[1], height, 0))
             heat.axvline(0, color="0.25", linewidth=0.6, linestyle=(0, (1, 2)))
@@ -1004,15 +1021,34 @@ def plot_signal_profile(
                         bottom=0.5 / figsize[1])
     if heatmap:
         pos = heat.get_position()
-        cax = fig.add_axes((pos.x1 + 0.15 / figsize[0], pos.y0, 0.12 / figsize[0],
+        distinct = list({c.name: c for c in cmaps}.values())
+        bar_width = max(0.12, 0.07 * len(distinct))
+        cax = fig.add_axes((pos.x1 + 0.15 / figsize[0], pos.y0, bar_width / figsize[0],
                             min(pos.height, 1.4 / figsize[1])))
-        if im is None:
-            im = matplotlib.cm.ScalarMappable(matplotlib.colors.Normalize(lo_v, hi_v), cmap)
-        bar = fig.colorbar(im, cax=cax)
+        if len(distinct) == 1:
+            bar = fig.colorbar(matplotlib.cm.ScalarMappable(matplotlib.colors.Normalize(lo_v, hi_v), distinct[0]),
+                               cax=cax)
+            bar.outline.set_visible(False)
+            bar_ax = bar.ax
+        else:
+            # One strip for the colours of each panel, side by side on one
+            # scale.
+            ramp = np.linspace(lo_v, hi_v, 256)[:, None]
+            for k, c in enumerate(distinct):
+                cax.imshow(ramp, aspect="auto", cmap=c, vmin=lo_v, vmax=hi_v, origin="lower",
+                           extent=(k, k + 1, lo_v, hi_v))
+            cax.set_xlim(0, len(distinct))
+            cax.set_ylim(lo_v, hi_v)
+            cax.set_xticks([])
+            cax.yaxis.tick_right()
+            cax.yaxis.set_label_position("right")
+            cax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+            for side in cax.spines.values():
+                side.set_visible(False)
+            bar_ax = cax
         if legend_title is not None:
-            bar.set_label(legend_title, fontsize=text_size - 1)
-        bar.ax.tick_params(labelsize=text_size - 2)
-        bar.outline.set_visible(False)
+            bar_ax.set_ylabel(legend_title, fontsize=text_size - 1)
+        bar_ax.tick_params(labelsize=text_size - 2)
     return fig
 
 

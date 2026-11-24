@@ -355,3 +355,26 @@ def test_plot_signal_profile_drop_empty():
     fig = um.plot_signal_profile(sm, drop_empty=True)
     assert fig.axes[3].get_images() == []
     plt.close(fig)
+
+
+def test_heatmap_colours_follow_the_lines(profile_data):
+    pytest.importorskip("matplotlib")
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import to_hex
+
+    sm, control = profile_data
+    fig = um.plot_signal_profile(sm)
+    for mean_ax, heat in [(fig.axes[0], fig.axes[1]), (fig.axes[2], fig.axes[3])]:
+        line = mean_ax.get_lines()[0].get_color()
+        cmap = heat.get_images()[0].get_cmap()
+        assert to_hex(cmap(1.0)) == to_hex(line) and to_hex(cmap(0.0)) == "#ffffff"
+    # The colour bar has a strip for each panel's colours.
+    assert len(fig.axes[4].get_images()) == 2
+    plt.close(fig)
+    fig = um.plot_signal_profile(sm, cmap="viridis")
+    assert fig.axes[1].get_images()[0].get_cmap().name.startswith("viridis")
+    assert fig.axes[4].get_images() == []
+    plt.close(fig)
+    fig = um.plot_signal_profile(sm, colours="black", by=None)
+    assert to_hex(fig.axes[1].get_images()[0].get_cmap()(1.0)) == "#000000"
+    plt.close(fig)
