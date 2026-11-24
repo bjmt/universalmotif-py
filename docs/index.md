@@ -46,7 +46,8 @@ um.view_motifs(motifs[:4]).savefig("logos.png")
   gapped motifs. Whole genomes are scanned straight from a FASTA file in a
   few hundred MB.
 - **Genomes:** FASTA, bgzip and 2bit genomes read a piece at a time,
-  sequences of peaks, and bigWig signal over them to match backgrounds on.
+  sequences of peaks, and bigWig signal over them to match backgrounds on
+  or to average around motif sites.
 - **Genomic intervals:** hits moved back to genomic coordinates, and ranges
   exchanged with PyRanges and polars-bio.
 - **Single-cell ATAC:** sparse peak by motif match matrices, ready for
@@ -103,6 +104,7 @@ The functions most tasks start from, and a guide that covers each task:
 | Test which motifs are enriched in a set of sequences | [`enrich_motifs()`][universalmotif.enrich_motifs] | [Scanning, enrichment and discovery](guides/scanning-and-enrichment.ipynb) |
 | Test where in peaks motifs sit, which occur together, or how near anchors such as promoters | [`motif_peaks()`][universalmotif.motif_peaks], [`motif_coocc()`][universalmotif.motif_coocc], [`motif_proximity()`][universalmotif.motif_proximity] | [A ChIP-seq workflow](guides/chipseq-workflow.ipynb), [Scanning large genomes](guides/large-genomes.ipynb) |
 | Look at the spacing of two motifs | [`pair_spacings()`][universalmotif.pair_spacings], [`spacing_periods()`][universalmotif.spacing_periods] | [Gapped motifs](guides/gapped-motifs.ipynb) |
+| Average bigWig signal, such as ChIP or ATAC, around motif sites | [`signal_matrix()`][universalmotif.signal_matrix], [`plot_signal_profile()`][universalmotif.plot_signal_profile] | [Scanning large genomes](guides/large-genomes.ipynb) |
 | Score how variants change motif sites | [`variant_motif_effects()`][universalmotif.variant_motif_effects] | [Variant analysis](guides/variants.ipynb) |
 | Make a sparse matrix of motif matches for single-cell ATAC | [`match_motifs()`][universalmotif.match_motifs] | [Scanning, enrichment and discovery](guides/scanning-and-enrichment.ipynb) |
 

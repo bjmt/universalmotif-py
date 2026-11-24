@@ -28,6 +28,8 @@ matplotlib figure or axes, so plots can be adjusted before they are saved.
 
 ::: universalmotif.plot_hit_contributions
 
+::: universalmotif.plot_signal_profile
+
 ::: universalmotif.plot_spacing
 
 ::: universalmotif.plot_marginalization

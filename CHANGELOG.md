@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+New:
+
+- `signal_matrix()` reads bigWig signal in bins around motif hits or other
+  sites, read along their strands, and `plot_signal_profile()` draws its
+  mean with a heatmap of the sites, against a control if given.
+
 ## 0.7.0 (2026-11-23)
 
 Changes in behaviour:

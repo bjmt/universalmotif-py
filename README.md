@@ -93,7 +93,8 @@ found = um.motif_finder(targets, controls, seed=1)
   *De novo* motif discovery, of gapped motifs too, with refinement and
   selection of the motifs found.
 - **Genomes:** FASTA, bgzip and 2bit genomes read a piece at a time, the
-  sequences of peaks, and bigWig signal over them. Hits can be moved back
+  sequences of peaks, and bigWig signal over them or averaged around motif
+  sites. Hits can be moved back
   to genomic coordinates, and ranges exchanged with PyRanges and polars-bio.
 - **Single-cell ATAC and deep learning:**
     - sparse peak by motif matrices for AnnData and pychromVAR
