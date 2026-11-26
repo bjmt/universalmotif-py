@@ -44,7 +44,7 @@ def _genome() -> tuple[dict[str, str], pl.DataFrame]:
     rng = np.random.default_rng(3)
     genome = {c: "".join(rng.choice(list("ACGT"), size=n)) for c, n in _SIZES.items()}
     rows = []
-    for chrom, size in _SIZES.items():
+    for chrom in _SIZES:
         n = {"chr1": 90, "chr2": 80, "chr3": 70}[chrom]
         gaps = rng.integers(3_500, 5_000, n)
         for pos in 1_000 + np.cumsum(gaps):
