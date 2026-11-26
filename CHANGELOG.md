@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+Changes in behaviour:
+
+- `merge_similar()` warns about a cluster holding over a quarter of the
+  motifs only when there are at least ten of them.
+
 New:
 
 - `signal_matrix()` reads bigWig signal in bins around motif hits or other

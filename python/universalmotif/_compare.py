@@ -585,9 +585,9 @@ def merge_similar(
     motifs in a cluster is linked. The clusters come from complete-linkage
     clustering of the q-values cut at ``qvalue``. This joins the closest
     clusters first and breaks ties by input order, so the result does not
-    depend on chance. A cluster of more than two motifs that holds over a
-    quarter of them is named in a warning, as a sign that unlike motifs
-    were joined.
+    depend on chance. Among ten motifs or more, a cluster of more than two
+    that holds over a quarter of them is named in a warning, as a sign that
+    unlike motifs were joined.
 
     When every motif is a CWM, they are linked instead when their similarity
     reaches ``min_score``, and ``qvalue`` and ``null`` are not used. The
